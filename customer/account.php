@@ -21,7 +21,14 @@ if (!isset($_SESSION['customer_id'])) {
 
 <p>You are successfully logged in.</p>
 
-<p>Customer ID: <?= htmlspecialchars((string) $_SESSION['customer_id']) ?></p>
+<p>
+    Customer ID:
+    <?= htmlspecialchars((string) $_SESSION['customer_id']) ?>
+</p>
+
+<p>
+    <a href="logout.php">Logout</a>
+</p>
 
 </body>
 </html>

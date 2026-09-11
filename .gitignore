@@ -13,3 +13,5 @@ Thumbs.db
 
 # Composer dependencies
 /vendor/
+
+clothing_shop_backup.sql
