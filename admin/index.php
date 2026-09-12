@@ -24,6 +24,9 @@ $adminName = $_SESSION['admin_name'] ?? 'Admin';
     <p>Welcome, <?= htmlspecialchars($adminName) ?>!</p>
 
     <p>You are logged in as an administrator.</p>
+    <p>
+    <a href="products.php">Manage Products</a>
+</p>
 
     <a href="logout.php">Logout</a>
 
