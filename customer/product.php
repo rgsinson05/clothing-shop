@@ -84,17 +84,17 @@ $productNotFound = ($product === false || $product === null);
         }
 
         .add-to-cart {
-            display: inline-block;
             padding: 12px 24px;
             font-size: 1rem;
-            background: #eee;
-            border: 2px solid #999;
-            color: #666;
-            cursor: not-allowed;
+            background: #fff;
+            border: 2px solid #333;
+            color: #333;
+            cursor: pointer;
         }
 
-        .coming-soon-note {
-            color: #666;
+        .add-to-cart:hover {
+            background: #333;
+            color: #fff;
         }
     </style>
 </head>
@@ -199,13 +199,10 @@ $productNotFound = ($product === false || $product === null);
 
         <hr>
 
-        <div>
-            <span class="add-to-cart">Add to Cart</span>
-
-            <p class="coming-soon-note">
-                Cart functionality is coming soon.
-            </p>
-        </div>
+        <form method="POST" action="cart-add.php">
+            <input type="hidden" name="product_id" value="<?= $productId ?>">
+            <button type="submit" class="add-to-cart">Add to Cart</button>
+        </form>
 
     <?php endif; ?>
 
