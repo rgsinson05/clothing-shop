@@ -347,9 +347,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         }
 
                         $pdo->commit();
-                        $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
-                        $csrfToken = $_SESSION['csrf_token'];
-                        $message = 'Your COD order was created successfully.';
+
+                        header('Location: order-confirmation.php?id=' . $orderId);
+                        exit;
                     }
                 }
             }
