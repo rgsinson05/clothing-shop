@@ -97,6 +97,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 
+    $fieldLimits = [
+        'shipping_name' => 150,
+        'shipping_phone' => 30,
+        'province' => 100,
+        'city_municipality' => 100,
+        'barangay' => 100,
+        'house_unit_building' => 150,
+        'street' => 150
+    ];
+
+    foreach ($fieldLimits as $field => $maxLength) {
+        if (strlen($formValues[$field]) > $maxLength) {
+            $errors[] = ucfirst(str_replace('_', ' ', $field)) . ' is too long.';
+        }
+    }
+
     if (!in_array($formValues['area'], $areas, true)) {
         $errors[] = 'Please select a valid area.';
     }
@@ -106,7 +122,244 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     if (count($errors) === 0) {
-        $message = 'Checkout details are valid and ready. Actual order placement will be connected in Part 3.';
+        try {
+            $pdo->beginTransaction();
+
+            /* Re-fetch the cart from the authenticated customer, never from POST data. */
+            $transactionCartStmt = $pdo->prepare(
+                'SELECT id
+                 FROM carts
+                 WHERE customer_id = :customer_id
+                 LIMIT 1'
+            );
+            $transactionCartStmt->execute([':customer_id' => $customerId]);
+            $transactionCart = $transactionCartStmt->fetch();
+
+            if ($transactionCart === false) {
+                $pdo->rollBack();
+                $errors[] = 'Your cart is empty. Please add an item before checking out.';
+            } else {
+                /* Lock every product in the cart before checking availability or pricing. */
+                $lockedItemsStmt = $pdo->prepare(
+                    'SELECT p.id AS product_id, p.name, p.size, p.color, p.price, p.status
+                     FROM cart_items ci
+                     INNER JOIN products p ON p.id = ci.product_id
+                     WHERE ci.cart_id = :cart_id
+                     ORDER BY ci.created_at ASC, ci.id ASC
+                     FOR UPDATE'
+                );
+                $lockedItemsStmt->execute([':cart_id' => (int) $transactionCart['id']]);
+                $lockedItems = $lockedItemsStmt->fetchAll();
+
+                if (count($lockedItems) === 0) {
+                    $pdo->rollBack();
+                    $errors[] = 'Your cart is empty. Please add an item before checking out.';
+                } else {
+                    $unavailable = false;
+
+                    foreach ($lockedItems as $lockedItem) {
+                        if ($lockedItem['status'] !== 'AVAILABLE') {
+                            $unavailable = true;
+                            break;
+                        }
+                    }
+
+                    if ($unavailable) {
+                        $pdo->rollBack();
+                        $errors[] = 'One or more items in your cart are no longer available. Please return to your cart and review the items.';
+                    } else {
+                        $subtotalCents = 0;
+
+                        foreach ($lockedItems as $lockedItem) {
+                            $subtotalCents += (int) round((float) $lockedItem['price'] * 100);
+                        }
+
+                        $subtotalAmount = number_format($subtotalCents / 100, 2, '.', '');
+                        $shippingFee = '0.00';
+                        $totalAmount = number_format($subtotalCents / 100, 2, '.', '');
+                        $shippingAddress = implode(', ', [
+                            $formValues['area'],
+                            $formValues['province'],
+                            $formValues['city_municipality'],
+                            $formValues['barangay'],
+                            $formValues['house_unit_building'],
+                            $formValues['street']
+                        ]);
+
+                        $orderStmt = $pdo->prepare(
+                            'INSERT INTO orders (
+                                customer_id,
+                                status,
+                                cancellation_status,
+                                subtotal,
+                                shipping_fee,
+                                total_amount,
+                                shipping_name,
+                                shipping_phone,
+                                shipping_address
+                             ) VALUES (
+                                :customer_id,
+                                :status,
+                                :cancellation_status,
+                                :subtotal,
+                                :shipping_fee,
+                                :total_amount,
+                                :shipping_name,
+                                :shipping_phone,
+                                :shipping_address
+                             )'
+                        );
+                        $orderStmt->execute([
+                            ':customer_id' => $customerId,
+                            ':status' => 'PENDING',
+                            ':cancellation_status' => 'NONE',
+                            ':subtotal' => $subtotalAmount,
+                            ':shipping_fee' => $shippingFee,
+                            ':total_amount' => $totalAmount,
+                            ':shipping_name' => $formValues['shipping_name'],
+                            ':shipping_phone' => $formValues['shipping_phone'],
+                            ':shipping_address' => $shippingAddress
+                        ]);
+                        $orderId = (int) $pdo->lastInsertId();
+
+                        $orderItemStmt = $pdo->prepare(
+                            'INSERT INTO order_items (
+                                order_id,
+                                product_id,
+                                product_name,
+                                size,
+                                color,
+                                unit_price,
+                                quantity,
+                                subtotal
+                             ) VALUES (
+                                :order_id,
+                                :product_id,
+                                :product_name,
+                                :size,
+                                :color,
+                                :unit_price,
+                                :quantity,
+                                :subtotal
+                             )'
+                        );
+
+                        foreach ($lockedItems as $lockedItem) {
+                            $unitPrice = number_format((float) $lockedItem['price'], 2, '.', '');
+                            $orderItemStmt->execute([
+                                ':order_id' => $orderId,
+                                ':product_id' => (int) $lockedItem['product_id'],
+                                ':product_name' => $lockedItem['name'],
+                                ':size' => $lockedItem['size'],
+                                ':color' => $lockedItem['color'],
+                                ':unit_price' => $unitPrice,
+                                ':quantity' => 1,
+                                ':subtotal' => $unitPrice
+                            ]);
+                        }
+
+                        $paymentStmt = $pdo->prepare(
+                            'INSERT INTO payments (
+                                order_id,
+                                payment_method,
+                                payment_status
+                             ) VALUES (
+                                :order_id,
+                                :payment_method,
+                                :payment_status
+                             )'
+                        );
+                        $paymentStmt->execute([
+                            ':order_id' => $orderId,
+                            ':payment_method' => 'COD',
+                            ':payment_status' => 'PENDING'
+                        ]);
+
+                        $shipmentStmt = $pdo->prepare(
+                            'INSERT INTO shipments (
+                                order_id,
+                                shipment_status,
+                                tracking_number,
+                                shipped_at,
+                                delivered_at
+                             ) VALUES (
+                                :order_id,
+                                :shipment_status,
+                                NULL,
+                                NULL,
+                                NULL
+                             )'
+                        );
+                        $shipmentStmt->execute([
+                            ':order_id' => $orderId,
+                            ':shipment_status' => 'NOT_SHIPPED'
+                        ]);
+
+                        $productIds = array_map(static function (array $item): int {
+                            return (int) $item['product_id'];
+                        }, $lockedItems);
+                        $productPlaceholders = implode(',', array_fill(0, count($productIds), '?'));
+                        $soldProductsStmt = $pdo->prepare(
+                            'UPDATE products
+                             SET status = ?
+                             WHERE status = ?
+                               AND id IN (' . $productPlaceholders . ')'
+                        );
+                        $soldProductsStmt->execute(array_merge(
+                            ['SOLD', 'AVAILABLE'],
+                            $productIds
+                        ));
+
+                        if ($soldProductsStmt->rowCount() !== count($productIds)) {
+                            throw new RuntimeException('The ordered products could not be updated.');
+                        }
+
+                        $cartItemIdsStmt = $pdo->prepare(
+                            'SELECT ci.id
+                             FROM cart_items ci
+                             WHERE ci.cart_id = ?
+                               AND ci.product_id IN (' . $productPlaceholders . ')
+                             FOR UPDATE'
+                        );
+                        $cartItemIdsStmt->execute(array_merge(
+                            [$transactionCart['id']],
+                            $productIds
+                        ));
+                        $cartItemIds = $cartItemIdsStmt->fetchAll(PDO::FETCH_COLUMN);
+
+                        if (count($cartItemIds) !== count($productIds)) {
+                            throw new RuntimeException('The ordered cart items could not be found.');
+                        }
+
+                        $cartItemPlaceholders = implode(',', array_fill(0, count($cartItemIds), '?'));
+                        $removeCartItemsStmt = $pdo->prepare(
+                            'DELETE FROM cart_items
+                             WHERE cart_id = ?
+                               AND id IN (' . $cartItemPlaceholders . ')'
+                        );
+                        $removeCartItemsStmt->execute(array_merge(
+                            [$transactionCart['id']],
+                            $cartItemIds
+                        ));
+
+                        if ($removeCartItemsStmt->rowCount() !== count($cartItemIds)) {
+                            throw new RuntimeException('The ordered cart items could not be removed.');
+                        }
+
+                        $pdo->commit();
+                        $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+                        $csrfToken = $_SESSION['csrf_token'];
+                        $message = 'Your COD order was created successfully.';
+                    }
+                }
+            }
+        } catch (Throwable $e) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+
+            $errors[] = 'We could not place your order right now. Please try again.';
+        }
     }
 }
 
@@ -346,6 +599,17 @@ function checkoutValue(array $values, string $field): string
 
     <h2>Checkout</h2>
 
+    <?php if (count($errors) > 0): ?>
+        <div class="notice notice-error" role="alert">
+            <strong>Please correct the following:</strong>
+            <ul class="errors">
+                <?php foreach ($errors as $error): ?>
+                    <li><?= htmlspecialchars($error, ENT_QUOTES, 'UTF-8') ?></li>
+                <?php endforeach; ?>
+            </ul>
+        </div>
+    <?php endif; ?>
+
     <?php if (count($cartItems) === 0): ?>
 
         <p>Your cart is empty. Add an item before continuing to checkout.</p>
@@ -358,16 +622,7 @@ function checkoutValue(array $values, string $field): string
 
     <?php else: ?>
 
-        <?php if (count($errors) > 0): ?>
-            <div class="notice notice-error" role="alert">
-                <strong>Please correct the following:</strong>
-                <ul class="errors">
-                    <?php foreach ($errors as $error): ?>
-                        <li><?= htmlspecialchars($error, ENT_QUOTES, 'UTF-8') ?></li>
-                    <?php endforeach; ?>
-                </ul>
-            </div>
-        <?php elseif ($message !== ''): ?>
+        <?php if ($message !== ''): ?>
             <p class="notice notice-success" role="status">
                 <?= htmlspecialchars($message, ENT_QUOTES, 'UTF-8') ?>
             </p>
@@ -409,7 +664,7 @@ function checkoutValue(array $values, string $field): string
 
                 <section class="checkout-section" aria-labelledby="delivery-address-heading">
                     <h3 id="delivery-address-heading">Delivery Address</h3>
-                    <p>Provide enough detail for delivery. The address will be saved as one text value when order placement is implemented.</p>
+                    <p>Provide enough detail for delivery. The address will be saved as one text value with the order.</p>
 
                     <div class="field-grid">
                         <div class="field">
