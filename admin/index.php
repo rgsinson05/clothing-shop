@@ -26,7 +26,11 @@ $adminName = $_SESSION['admin_name'] ?? 'Admin';
     <p>You are logged in as an administrator.</p>
     <p>
     <a href="products.php">Manage Products</a>
-</p>
+    </p>
+
+    <p>
+    <a href="orders.php">Manage Orders</a>
+    </p>
 
     <a href="logout.php">Logout</a>
 
