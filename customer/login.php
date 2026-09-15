@@ -30,6 +30,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $customer = $stmt->fetch();
 
         if ($customer && password_verify($password, $customer['password_hash'])) {
+            session_regenerate_id(true);
+
             $_SESSION['customer_id'] = $customer['id'];
             $_SESSION['customer_name'] = $customer['first_name'];
 
