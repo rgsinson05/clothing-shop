@@ -68,6 +68,7 @@ $requestedOrderId = filter_input(INPUT_GET, 'id', FILTER_VALIDATE_INT);
 $order = false;
 $orderItems = [];
 $payment = false;
+$trackingNumber = '';
 
 if ($requestedOrderId !== null && $requestedOrderId !== false && $requestedOrderId > 0) {
     /*
@@ -121,6 +122,28 @@ if ($requestedOrderId !== null && $requestedOrderId !== false && $requestedOrder
         $paymentStmt->execute([':order_id' => $orderId]);
 
         $payment = $paymentStmt->fetch();
+
+        /*
+         * Fetch the tracking number for display only. The order is
+         * already ownership-verified above, so the shipment lookup
+         * is scoped to that same validated $orderId. A missing row
+         * or NULL tracking number simply means nothing is shown.
+         */
+
+        $shipmentStmt = $pdo->prepare(
+            'SELECT tracking_number
+             FROM shipments
+             WHERE order_id = :order_id
+             LIMIT 1'
+        );
+
+        $shipmentStmt->execute([':order_id' => $orderId]);
+
+        $shipment = $shipmentStmt->fetch();
+
+        $trackingNumber = $shipment !== false
+            ? trim($shipment['tracking_number'] ?? '')
+            : '';
     }
 }
 
@@ -375,6 +398,13 @@ $showCancelInfo = (
 
                 <dt>Address:</dt>
                 <dd><?= htmlspecialchars($order['shipping_address'], ENT_QUOTES, 'UTF-8') ?></dd>
+
+                <?php if ($trackingNumber !== ''): ?>
+
+                    <dt>Tracking Number:</dt>
+                    <dd><?= htmlspecialchars($trackingNumber, ENT_QUOTES, 'UTF-8') ?></dd>
+
+                <?php endif; ?>
             </dl>
         </section>
 
