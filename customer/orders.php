@@ -28,13 +28,20 @@ $orderStatusLabels = [
     'CANCELLED' => 'Cancelled'
 ];
 
+$cancellationStatusLabels = [
+    'NONE' => 'No Request',
+    'REQUESTED' => 'Cancellation Requested',
+    'APPROVED' => 'Cancellation Approved',
+    'REJECTED' => 'Cancellation Rejected'
+];
+
 /*
  * Retrieve only the orders belonging to the authenticated
  * customer, newest first.
  */
 
 $ordersStmt = $pdo->prepare(
-    'SELECT id, status, total_amount, created_at
+    'SELECT id, status, cancellation_status, total_amount, created_at
      FROM orders
      WHERE customer_id = :customer_id
      ORDER BY created_at DESC, id DESC'
@@ -103,6 +110,7 @@ $orders = $ordersStmt->fetchAll();
                 <tr>
                     <th scope="col">Order Number</th>
                     <th scope="col">Status</th>
+                    <th scope="col">Cancellation</th>
                     <th scope="col" class="amount">Total</th>
                     <th scope="col">Placed On</th>
                     <th scope="col">Actions</th>
@@ -112,11 +120,13 @@ $orders = $ordersStmt->fetchAll();
                 <?php foreach ($orders as $order): ?>
                     <?php
                     $statusLabel = $orderStatusLabels[$order['status']] ?? $order['status'];
+                    $cancellationLabel = $cancellationStatusLabels[$order['cancellation_status']] ?? $order['cancellation_status'];
                     $viewUrl = 'order-confirmation.php?id=' . (int) $order['id'];
                     ?>
                     <tr>
                         <td>#<?= htmlspecialchars((string) $order['id'], ENT_QUOTES, 'UTF-8') ?></td>
                         <td><?= htmlspecialchars($statusLabel, ENT_QUOTES, 'UTF-8') ?></td>
+                        <td><?= htmlspecialchars($cancellationLabel, ENT_QUOTES, 'UTF-8') ?></td>
                         <td class="amount">₱<?= number_format((float) $order['total_amount'], 2) ?></td>
                         <td><?= htmlspecialchars(date('M j, Y g:i A', strtotime($order['created_at'])), ENT_QUOTES, 'UTF-8') ?></td>
                         <td><a href="<?= htmlspecialchars($viewUrl, ENT_QUOTES, 'UTF-8') ?>">View Order</a></td>

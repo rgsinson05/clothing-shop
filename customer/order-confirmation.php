@@ -16,6 +16,16 @@ if (!isset($_SESSION['customer_id'])) {
 $customerId = (int) $_SESSION['customer_id'];
 
 /*
+ * Ensure a CSRF token exists for the cancellation request form.
+ */
+
+if (empty($_SESSION['csrf_token'])) {
+    $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+}
+
+$csrfToken = $_SESSION['csrf_token'];
+
+/*
  * Customer-friendly labels. The database values remain unchanged.
  */
 
@@ -41,6 +51,13 @@ $paymentStatusLabels = [
     'REFUNDED' => 'Refunded'
 ];
 
+$cancellationStatusLabels = [
+    'NONE' => 'No cancellation request',
+    'REQUESTED' => 'Cancellation Requested',
+    'APPROVED' => 'Cancellation Approved',
+    'REJECTED' => 'Cancellation Rejected'
+];
+
 /*
  * Validate the requested order ID. Anything that is not a
  * positive integer is treated the same as an unknown order.
@@ -60,7 +77,7 @@ if ($requestedOrderId !== null && $requestedOrderId !== false && $requestedOrder
      */
 
     $orderStmt = $pdo->prepare(
-        'SELECT id, status, subtotal, shipping_fee, total_amount,
+        'SELECT id, status, cancellation_status, subtotal, shipping_fee, total_amount,
                 shipping_name, shipping_phone, shipping_address, created_at
          FROM orders
          WHERE id = :order_id
@@ -118,6 +135,48 @@ $paymentMethodLabel = ($payment !== false && $payment['payment_method'] !== null
 $paymentStatusLabel = ($payment !== false && $payment['payment_status'] !== null)
     ? ($paymentStatusLabels[$payment['payment_status']] ?? $payment['payment_status'])
     : '';
+
+/*
+ * The cancellation status shown on the page always comes from
+ * the database, never from GET or POST.
+ */
+
+$cancellationStatus = $order !== false ? (string) $order['cancellation_status'] : '';
+
+$cancellationStatusLabel = $order !== false
+    ? ($cancellationStatusLabels[$cancellationStatus] ?? $cancellationStatus)
+    : '';
+
+/*
+ * PRG flags from the cancellation request endpoint. The flags
+ * only control messaging; they are not treated as proof that a
+ * mutation happened.
+ */
+
+$cancelRequestedFlag = isset($_GET['cancel_requested']);
+$cancelErrorFlag = isset($_GET['cancel_error']);
+
+/*
+ * The cancellation request form is only offered while the order
+ * is still PENDING and no request exists yet. Informational
+ * messages are shown for the other cancellation states.
+ */
+
+$showCancelForm = (
+    $order !== false
+    && $order['status'] === 'PENDING'
+    && $cancellationStatus === 'NONE'
+);
+
+$showCancelInfo = (
+    !$showCancelForm
+    && (
+        $cancellationStatus === 'REQUESTED'
+        || $cancellationStatus === 'REJECTED'
+        || $cancellationStatus === 'APPROVED'
+        || ($order !== false && $order['status'] === 'CANCELLED')
+    )
+);
 
 ?>
 <!DOCTYPE html>
@@ -233,6 +292,20 @@ $paymentStatusLabel = ($payment !== false && $payment['payment_status'] !== null
             Your order has been placed successfully.
         </p>
 
+        <?php if ($cancelRequestedFlag): ?>
+
+            <p class="notice notice-success" role="status">
+                Your cancellation request has been submitted and is waiting for admin review.
+            </p>
+
+        <?php elseif ($cancelErrorFlag): ?>
+
+            <p class="notice" role="alert">
+                The cancellation request could not be submitted. Please review the order and try again.
+            </p>
+
+        <?php endif; ?>
+
         <section class="confirmation-section" aria-labelledby="order-details-heading">
             <h3 id="order-details-heading">Order Details</h3>
 
@@ -242,6 +315,9 @@ $paymentStatusLabel = ($payment !== false && $payment['payment_status'] !== null
 
                 <dt>Status:</dt>
                 <dd><?= htmlspecialchars($orderStatusLabel, ENT_QUOTES, 'UTF-8') ?></dd>
+
+                <dt>Cancellation:</dt>
+                <dd><?= htmlspecialchars($cancellationStatusLabel, ENT_QUOTES, 'UTF-8') ?></dd>
 
                 <dt>Placed On:</dt>
                 <dd><?= htmlspecialchars(date('M j, Y g:i A', strtotime($order['created_at'])), ENT_QUOTES, 'UTF-8') ?></dd>
@@ -313,6 +389,49 @@ $paymentStatusLabel = ($payment !== false && $payment['payment_status'] !== null
                 <dd><?= htmlspecialchars($paymentStatusLabel, ENT_QUOTES, 'UTF-8') ?></dd>
             </dl>
         </section>
+
+        <?php if ($showCancelForm || $showCancelInfo): ?>
+
+            <section class="confirmation-section" aria-labelledby="order-actions-heading">
+                <h3 id="order-actions-heading">Order Actions</h3>
+
+                <?php if ($showCancelForm): ?>
+
+                    <p>
+                        This order is still pending. You may request a cancellation;
+                        an administrator will review it before the order is cancelled.
+                    </p>
+
+                    <form method="POST" action="order-cancel-request.php"
+                          onsubmit="return confirm('Are you sure you want to request cancellation for this order?');">
+                        <input type="hidden" name="order_id" value="<?= (int) $order['id'] ?>">
+                        <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken, ENT_QUOTES, 'UTF-8') ?>">
+                        <button type="submit">Request Cancellation</button>
+                    </form>
+
+                <?php elseif ($cancellationStatus === 'REQUESTED'): ?>
+
+                    <p role="status">
+                        Your cancellation request is waiting for admin review.
+                    </p>
+
+                <?php elseif ($cancellationStatus === 'REJECTED'): ?>
+
+                    <p role="status">
+                        Your cancellation request was rejected.
+                    </p>
+
+                <?php else: ?>
+
+                    <p role="status">
+                        Your cancellation request was approved. This order has been cancelled.
+                    </p>
+
+                <?php endif; ?>
+
+            </section>
+
+        <?php endif; ?>
 
         <div class="confirmation-actions">
             <p>
