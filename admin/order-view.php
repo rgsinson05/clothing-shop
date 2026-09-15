@@ -24,6 +24,16 @@ if (empty($_SESSION['admin_csrf_token'])) {
 $adminCsrfToken = $_SESSION['admin_csrf_token'];
 
 /*
+ * Marker exception for intentional, admin-facing validation
+ * messages. It deliberately does NOT extend PDOException, so
+ * database failures can never surface their raw SQL messages.
+ */
+
+class OrderActionException extends RuntimeException
+{
+}
+
+/*
  * Friendly labels. The database values remain unchanged.
  */
 
@@ -96,6 +106,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     $allowedActions = [
         'advance_status',
+        'save_tracking_number',
         'approve_cancellation',
         'reject_cancellation'
     ];
@@ -116,6 +127,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         try {
 
+            $submittedTrackingNumber = null;
+
+            /*
+             * Tracking input is validated server-side before any
+             * database work starts. Only trimming and a length
+             * limit are applied; no courier-specific pattern is
+             * enforced, and an empty value is always rejected.
+             */
+
+            if ($postedAction === 'save_tracking_number') {
+                $submittedTrackingNumber = $_POST['tracking_number'] ?? null;
+
+                if (!is_string($submittedTrackingNumber) || trim($submittedTrackingNumber) === '') {
+                    throw new OrderActionException('Enter a tracking number.');
+                }
+
+                $submittedTrackingNumber = trim($submittedTrackingNumber);
+
+                if (strlen($submittedTrackingNumber) > 100) {
+                    throw new OrderActionException('The tracking number must be 100 characters or fewer.');
+                }
+            }
+
             $pdo->beginTransaction();
 
             /*
@@ -125,7 +159,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
              */
 
             $lockStmt = $pdo->prepare(
-                'SELECT status, cancellation_status
+                'SELECT id, status, cancellation_status
                  FROM orders
                  WHERE id = :order_id
                  LIMIT 1
@@ -139,20 +173,52 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $lockedOrder = $lockStmt->fetch();
 
             if ($lockedOrder === false) {
-                throw new RuntimeException('The order no longer exists.');
+                throw new OrderActionException('The order no longer exists.');
             }
+
+            $lockedOrderId = (int) $lockedOrder['id'];
 
             if ($postedAction === 'advance_status') {
 
                 if ($lockedOrder['cancellation_status'] === 'REQUESTED') {
-                    throw new RuntimeException('A cancellation request is pending for this order.');
+                    throw new OrderActionException('A cancellation request is pending for this order.');
                 }
 
                 if (!isset($orderStatusFlow[$lockedOrder['status']])) {
-                    throw new RuntimeException('This order status has no next status.');
+                    throw new OrderActionException('This order status has no next status.');
                 }
 
                 $targetStatus = $orderStatusFlow[$lockedOrder['status']];
+
+                /*
+                 * PACKED can only become SHIPPED once the shipment
+                 * carries a tracking number. The check runs on the
+                 * locked rows so a manually crafted POST cannot
+                 * bypass it.
+                 */
+
+                if ($targetStatus === 'SHIPPED') {
+                    $shipmentLockStmt = $pdo->prepare(
+                        'SELECT tracking_number
+                         FROM shipments
+                         WHERE order_id = :order_id
+                         LIMIT 1
+                         FOR UPDATE'
+                    );
+
+                    $shipmentLockStmt->execute([
+                        ':order_id' => $lockedOrderId
+                    ]);
+
+                    $lockedShipment = $shipmentLockStmt->fetch();
+
+                    if (
+                        $lockedShipment === false
+                        || trim($lockedShipment['tracking_number'] ?? '') === ''
+                    ) {
+                        throw new OrderActionException('Enter a tracking number before marking this order as shipped.');
+                    }
+                }
 
                 $advanceStmt = $pdo->prepare(
                     'UPDATE orders
@@ -169,7 +235,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 ]);
 
                 if ($advanceStmt->rowCount() !== 1) {
-                    throw new RuntimeException('The order status could not be advanced.');
+                    throw new OrderActionException('The order status could not be advanced.');
                 }
 
                 /*
@@ -189,11 +255,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     );
 
                     $shipmentUpdateStmt->execute([
-                        ':order_id' => $postedOrderId
+                        ':order_id' => $lockedOrderId
                     ]);
 
                     if ($shipmentUpdateStmt->rowCount() !== 1) {
-                        throw new RuntimeException('The shipment record could not be updated.');
+                        throw new OrderActionException('The shipment record could not be updated.');
                     }
                 }
 
@@ -206,11 +272,71 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     );
 
                     $shipmentUpdateStmt->execute([
-                        ':order_id' => $postedOrderId
+                        ':order_id' => $lockedOrderId
                     ]);
 
                     if ($shipmentUpdateStmt->rowCount() !== 1) {
-                        throw new RuntimeException('The shipment record could not be updated.');
+                        throw new OrderActionException('The shipment record could not be updated.');
+                    }
+                }
+
+            } elseif ($postedAction === 'save_tracking_number') {
+
+                /*
+                 * Tracking entry is only allowed once the order is
+                 * confirmed and while no cancellation request is
+                 * pending. Saving a tracking number never changes
+                 * the order status or the cancellation status.
+                 */
+
+                if (
+                    !in_array($lockedOrder['status'], ['CONFIRMED', 'PACKED', 'SHIPPED', 'DELIVERED'], true)
+                    || $lockedOrder['cancellation_status'] === 'REQUESTED'
+                ) {
+                    throw new OrderActionException('Tracking management is not available for this order.');
+                }
+
+                $shipmentLockStmt = $pdo->prepare(
+                    'SELECT tracking_number
+                     FROM shipments
+                     WHERE order_id = :order_id
+                     LIMIT 1
+                     FOR UPDATE'
+                );
+
+                $shipmentLockStmt->execute([
+                    ':order_id' => $lockedOrderId
+                ]);
+
+                $lockedShipment = $shipmentLockStmt->fetch();
+
+                if ($lockedShipment === false) {
+                    throw new OrderActionException('The shipment record could not be found.');
+                }
+
+                /*
+                 * MySQL reports rowCount() === 0 when a column is
+                 * set to its current value, so the locked row is
+                 * compared first and an identical value is treated
+                 * as a successful no-op save.
+                 */
+
+                $currentTrackingNumber = trim($lockedShipment['tracking_number'] ?? '');
+
+                if ($currentTrackingNumber !== $submittedTrackingNumber) {
+                    $trackingUpdateStmt = $pdo->prepare(
+                        'UPDATE shipments
+                         SET tracking_number = :tracking_number
+                         WHERE order_id = :order_id'
+                    );
+
+                    $trackingUpdateStmt->execute([
+                        ':tracking_number' => $submittedTrackingNumber,
+                        ':order_id' => $lockedOrderId
+                    ]);
+
+                    if ($trackingUpdateStmt->rowCount() !== 1) {
+                        throw new OrderActionException('The tracking number could not be saved.');
                     }
                 }
 
@@ -220,7 +346,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $lockedOrder['status'] !== 'PENDING'
                     || $lockedOrder['cancellation_status'] !== 'REQUESTED'
                 ) {
-                    throw new RuntimeException('This order has no pending cancellation request.');
+                    throw new OrderActionException('This order has no pending cancellation request.');
                 }
 
                 /*
@@ -266,7 +392,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 ]);
 
                 if ($cancelStmt->rowCount() !== 1) {
-                    throw new RuntimeException('The order could not be cancelled.');
+                    throw new OrderActionException('The order could not be cancelled.');
                 }
 
                 if (count($soldProductIds) > 0) {
@@ -283,7 +409,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $restoreProductsStmt->execute($soldProductIds);
 
                     if ($restoreProductsStmt->rowCount() !== count($soldProductIds)) {
-                        throw new RuntimeException('The ordered products could not be restored.');
+                        throw new OrderActionException('The ordered products could not be restored.');
                     }
                 }
 
@@ -293,7 +419,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $lockedOrder['status'] !== 'PENDING'
                     || $lockedOrder['cancellation_status'] !== 'REQUESTED'
                 ) {
-                    throw new RuntimeException('This order has no pending cancellation request.');
+                    throw new OrderActionException('This order has no pending cancellation request.');
                 }
 
                 /*
@@ -314,7 +440,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 ]);
 
                 if ($rejectStmt->rowCount() !== 1) {
-                    throw new RuntimeException('The cancellation request could not be rejected.');
+                    throw new OrderActionException('The cancellation request could not be rejected.');
                 }
             }
 
@@ -327,6 +453,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             header('Location: order-view.php?id=' . $postedOrderId . '&updated=1');
             exit;
 
+        } catch (OrderActionException $e) {
+
+            /*
+             * Every OrderActionException thrown above carries an
+             * intentional, admin-facing validation message that is
+             * safe to display.
+             */
+
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+
+            $actionError = $e->getMessage();
         } catch (Throwable $e) {
 
             if ($pdo->inTransaction()) {
@@ -513,6 +652,19 @@ $showCancellationActions = $order !== false
     && $order['status'] === 'PENDING'
     && $order['cancellation_status'] === 'REQUESTED';
 
+/*
+ * Tracking-number management needs an existing shipment record.
+ * It is available from CONFIRMED onwards and is never available
+ * for a CANCELLED order, a PENDING order, or while a cancellation
+ * request is pending. The server re-checks these conditions when
+ * the form is submitted.
+ */
+
+$showTrackingForm = $order !== false
+    && $shipment !== false
+    && in_array($order['status'], ['CONFIRMED', 'PACKED', 'SHIPPED', 'DELIVERED'], true)
+    && $order['cancellation_status'] !== 'REQUESTED';
+
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -695,6 +847,27 @@ $showCancellationActions = $order !== false
                 <dt>Delivered At:</dt>
                 <dd><?= $deliveredAtDisplay !== '' ? htmlspecialchars($deliveredAtDisplay, ENT_QUOTES, 'UTF-8') : '&mdash;' ?></dd>
             </dl>
+
+            <?php if ($showTrackingForm): ?>
+
+                <form method="POST" action="order-view.php?id=<?= (int) $order['id'] ?>">
+                    <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($adminCsrfToken, ENT_QUOTES, 'UTF-8') ?>">
+                    <input type="hidden" name="order_id" value="<?= (int) $order['id'] ?>">
+                    <input type="hidden" name="action" value="save_tracking_number">
+
+                    <label for="tracking-number-input">Tracking Number</label>
+                    <input
+                        type="text"
+                        id="tracking-number-input"
+                        name="tracking_number"
+                        maxlength="100"
+                        value="<?= htmlspecialchars($trackingNumber, ENT_QUOTES, 'UTF-8') ?>"
+                    >
+
+                    <button type="submit">Save Tracking Number</button>
+                </form>
+
+            <?php endif; ?>
         </section>
 
         <section aria-labelledby="order-actions-heading">
