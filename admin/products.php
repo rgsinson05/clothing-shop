@@ -9,13 +9,65 @@ if (!isset($_SESSION['admin_id'])) {
 
 require_once __DIR__ . '/../includes/database.php';
 
-$stmt = $pdo->query(
-    'SELECT id, name, category, price, size, color, condition_label, status, created_at
-     FROM products
-     ORDER BY created_at DESC'
-);
+$validStatuses = ['AVAILABLE', 'SOLD'];
+$validCategories = ['SHIRTS', 'PANTS', 'SHORTS'];
 
-$products = $stmt->fetchAll();
+$filterStatus = $_GET['status'] ?? '';
+if (!in_array($filterStatus, $validStatuses, true)) {
+    $filterStatus = '';
+}
+
+$filterCategory = $_GET['category'] ?? '';
+if (!in_array($filterCategory, $validCategories, true)) {
+    $filterCategory = '';
+}
+
+$filterName = trim($_GET['name'] ?? '');
+if ($filterName === '') {
+    $filterName = '';
+}
+
+$hasFilters = ($filterStatus !== '' || $filterCategory !== '' || $filterName !== '');
+
+$products = [];
+$queryError = false;
+
+try {
+    $where = [];
+    $params = [];
+
+    if ($filterStatus !== '') {
+        $where[] = 'status = :status';
+        $params[':status'] = $filterStatus;
+    }
+
+    if ($filterCategory !== '') {
+        $where[] = 'category = :category';
+        $params[':category'] = $filterCategory;
+    }
+
+    if ($filterName !== '') {
+        $where[] = 'name LIKE :name';
+        $params[':name'] = '%' . $filterName . '%';
+    }
+
+    $sql = 'SELECT id, name, category, price, size, color, condition_label, status, created_at
+         FROM products';
+
+    if ($where) {
+        $sql .= ' WHERE ' . implode(' AND ', $where);
+    }
+
+    $sql .= ' ORDER BY created_at DESC';
+
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute($params);
+
+    $products = $stmt->fetchAll();
+} catch (Exception $e) {
+    $queryError = true;
+    $products = [];
+}
 
 $adminName = $_SESSION['admin_name'] ?? 'Admin';
 ?>
@@ -47,9 +99,44 @@ $adminName = $_SESSION['admin_name'] ?? 'Admin';
         <a href="product-create.php">Add Product</a>
     </p>
 
-    <?php if (count($products) === 0): ?>
+    <form method="get" action="products.php">
+        <select name="status">
+            <option value="">All Statuses</option>
+            <option value="AVAILABLE"<?= $filterStatus === 'AVAILABLE' ? ' selected' : '' ?>>AVAILABLE</option>
+            <option value="SOLD"<?= $filterStatus === 'SOLD' ? ' selected' : '' ?>>SOLD</option>
+        </select>
 
-        <p>No products have been added yet.</p>
+        <select name="category">
+            <option value="">All Categories</option>
+            <option value="SHIRTS"<?= $filterCategory === 'SHIRTS' ? ' selected' : '' ?>>SHIRTS</option>
+            <option value="PANTS"<?= $filterCategory === 'PANTS' ? ' selected' : '' ?>>PANTS</option>
+            <option value="SHORTS"<?= $filterCategory === 'SHORTS' ? ' selected' : '' ?>>SHORTS</option>
+        </select>
+
+        <input type="text" name="name" value="<?= htmlspecialchars($filterName) ?>" placeholder="Product name">
+
+        <button type="submit">Filter</button>
+
+        <a href="products.php">Clear Filters</a>
+    </form>
+
+    <hr>
+
+    <?php if ($queryError): ?>
+
+        <p>Products could not be loaded. Please try again later.</p>
+
+    <?php elseif (count($products) === 0): ?>
+
+        <?php if ($hasFilters): ?>
+
+            <p>No products match the selected filters.</p>
+
+        <?php else: ?>
+
+            <p>No products have been added yet.</p>
+
+        <?php endif; ?>
 
     <?php else: ?>
 
