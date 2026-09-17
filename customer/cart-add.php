@@ -16,6 +16,22 @@ if (!isset($_SESSION['customer_id'])) {
 $customerId = (int) $_SESSION['customer_id'];
 
 /*
+ * CSRF token validation.
+ * Uses timing-safe comparison to prevent timing attacks.
+ */
+
+$csrfToken = filter_input(INPUT_POST, 'csrf_token', FILTER_DEFAULT);
+$storedToken = $_SESSION['csrf_token_cart'] ?? '';
+
+if ($csrfToken === false || $storedToken === '' || !hash_equals($storedToken, $csrfToken)) {
+    unset($_SESSION['csrf_token_cart']);
+    header('Location: products.php');
+    exit;
+}
+
+unset($_SESSION['csrf_token_cart']);
+
+/*
  * Validate the submitted product ID as a positive integer.
  */
 
@@ -102,8 +118,21 @@ $addItemStmt->execute([
 ]);
 
 /*
- * Redirect to the cart page.
+ * Redirect to the cart page or return URL.
+ * Only allow local customer pages to prevent open redirects.
  */
 
-header('Location: cart.php');
+$returnTo = filter_input(INPUT_POST, 'return_to', FILTER_SANITIZE_URL);
+
+$allowedReturnPattern = '/^product\.php\?id=[0-9]+(&.*)?$/';
+
+if (
+    $returnTo !== null && $returnTo !== ''
+    && preg_match($allowedReturnPattern, $returnTo) === 1
+) {
+    header('Location: ' . $returnTo . '&cart_success=1', true, 303);
+    exit;
+}
+
+header('Location: cart.php', true, 303);
 exit;

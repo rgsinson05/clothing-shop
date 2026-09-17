@@ -1,10 +1,8 @@
 <?php
 
-require_once __DIR__ . '/../includes/database.php';
+session_start();
 
-/*
- * Validate the product ID from GET.
- */
+require_once __DIR__ . '/../includes/database.php';
 
 $productId = filter_input(INPUT_GET, 'id', FILTER_VALIDATE_INT);
 
@@ -12,25 +10,16 @@ $product = null;
 $images = [];
 
 if ($productId !== false && $productId !== null && $productId > 0) {
-
-    /*
-     * Fetch the product only if it is AVAILABLE.
-     */
-
     $stmt = $pdo->prepare(
         'SELECT id, name, category, description, condition_label, defects,
                 price, size, color, status
          FROM products
-         WHERE id = :id AND status = \'AVAILABLE\''
+         WHERE id = :id'
     );
 
     $stmt->execute([':id' => $productId]);
 
     $product = $stmt->fetch();
-
-    /*
-     * Fetch all images for the product.
-     */
 
     if ($product !== false) {
         $imageStmt = $pdo->prepare(
@@ -48,163 +37,231 @@ if ($productId !== false && $productId !== null && $productId > 0) {
 
 $productNotFound = ($product === false || $product === null);
 
+$isSold = $product !== null && ($product['status'] ?? '') === 'SOLD';
+
+require_once __DIR__ . '/../includes/ui.php';
+
+define('HUPIA_BASE', '..');
+
+$page_title = $productNotFound
+    ? 'Product Not Found - ' . hopia_site_name()
+    : htmlspecialchars($product['name']) . ' - ' . hopia_site_name();
+$page_description = $productNotFound
+    ? 'This product is not available.'
+    : 'Preloved ' . ($product['category'] ?? '') . ' - ' . ($product['name'] ?? '');
+$ui_active = 'products.php';
+$body_class = 'product-page';
+
+require __DIR__ . '/../includes/ui.head.php';
+require __DIR__ . '/../includes/ui.header.php';
+
 ?>
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-    <?php if (!$productNotFound): ?>
-        <title><?= htmlspecialchars($product['name']) ?> - Hopia's Ukay-Ukay</title>
-    <?php else: ?>
-        <title>Product Not Found - Hopia's Ukay-Ukay</title>
-    <?php endif; ?>
+<?php if ($productNotFound): ?>
 
-    <style>
-        .product-images img,
-        .image-placeholder {
-            display: block;
-            width: 100%;
-            max-width: 400px;
-            height: auto;
-            object-fit: cover;
-            border: 1px solid #ccc;
-            margin-bottom: 10px;
-        }
-
-        .image-placeholder {
-            max-width: 400px;
-            height: 300px;
-            background: #f0f0f0;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: #888;
-        }
-
-        .add-to-cart {
-            padding: 12px 24px;
-            font-size: 1rem;
-            background: #fff;
-            border: 2px solid #333;
-            color: #333;
-            cursor: pointer;
-        }
-
-        .add-to-cart:hover {
-            background: #333;
-            color: #fff;
-        }
-    </style>
-</head>
-<body>
-
-    <h1>Hopia's Ukay-Ukay</h1>
-
-    <p>
-        <a href="products.php">&larr; Back to Shop</a>
-    </p>
-
-    <hr>
-
-    <?php if ($productNotFound): ?>
-
+    <div class="empty-state">
         <h2>Product Not Found</h2>
+        <p>This product does not exist or is no longer available.</p>
+        <p><a href="products.php" class="btn btn-primary btn-sm">Back to Shop</a></p>
+    </div>
 
-        <p>
-            This product does not exist, is no longer available, or was
-            already sold.
-        </p>
+<?php else: ?>
 
-        <p>
-            <a href="products.php">Back to Shop</a>
-        </p>
+    <nav class="breadcrumb" aria-label="Breadcrumb">
+        <ol class="breadcrumb__list">
+            <li class="breadcrumb__item"><a href="products.php">Shop</a></li>
+            <li class="breadcrumb__item" aria-hidden="true">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                    <path d="M6 4l4 4-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+            </li>
+            <li class="breadcrumb__item"><?= hopia_e($product['name']) ?></li>
+        </ol>
+    </nav>
 
-    <?php else: ?>
+    <div class="product-layout">
 
-        <?php
-        $size = trim($product['size'] ?? '') !== ''
-            ? htmlspecialchars($product['size'])
-            : '&mdash;';
-
-        $color = trim($product['color'] ?? '') !== ''
-            ? htmlspecialchars($product['color'])
-            : '&mdash;';
-        ?>
-
-        <h2><?= htmlspecialchars($product['name']) ?></h2>
-
-        <div class="product-images">
-
+        <div class="product-gallery">
             <?php if (count($images) > 0): ?>
-
-                <?php foreach ($images as $image): ?>
-
+                <div class="gallery-main">
                     <img
-                        src="<?= htmlspecialchars('../' . ltrim($image['image_path'], '/')) ?>"
-                        alt="<?= htmlspecialchars($product['name']) ?>"
+                        id="gallery-main-image"
+                        src="<?= hopia_e('../' . ltrim($images[0]['image_path'], '/')) ?>"
+                        alt="<?= hopia_e($product['name']) ?>"
+                        class="gallery-main__image"
                     >
+                </div>
 
-                <?php endforeach; ?>
-
+                <?php if (count($images) > 1): ?>
+                    <div class="gallery-thumbs" role="list" aria-label="Product images">
+                        <?php foreach ($images as $index => $image): ?>
+                            <button
+                                type="button"
+                                class="gallery-thumb<?= $index === 0 ? ' is-active' : '' ?>"
+                                data-image="<?= hopia_e('../' . ltrim($image['image_path'], '/')) ?>"
+                                aria-label="View image <?= $index + 1 ?>"
+                                role="listitem"
+                            >
+                                <img
+                                    src="<?= hopia_e('../' . ltrim($image['image_path'], '/')) ?>"
+                                    alt=""
+                                    loading="lazy"
+                                >
+                            </button>
+                        <?php endforeach; ?>
+                    </div>
+                <?php endif; ?>
             <?php else: ?>
-
-                <div class="image-placeholder">No image</div>
-
+                <div class="gallery-placeholder">
+                    <svg width="48" height="48" viewBox="0 0 48 48" fill="none" aria-hidden="true">
+                        <rect x="6" y="10" width="36" height="28" rx="2" stroke="currentColor" stroke-width="2"/>
+                        <circle cx="16" cy="22" r="4" stroke="currentColor" stroke-width="2"/>
+                        <path d="M6 32l10-8 8 6 6-4 12 8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                    <span>No image</span>
+                </div>
             <?php endif; ?>
-
         </div>
 
-        <p class="product-price">
-            <strong>Price:</strong>
-            ₱<?= number_format((float) $product['price'], 2) ?>
-        </p>
+        <div class="product-info">
+            <p class="product-category"><?= hopia_e(ucfirst(strtolower($product['category']))) ?></p>
 
-        <p>
-            <strong>Category:</strong>
-            <?= htmlspecialchars($product['category']) ?>
-        </p>
+            <h1 class="product-name"><?= hopia_e($product['name']) ?></h1>
 
-        <p>
-            <strong>Size:</strong>
-            <?= $size ?>
-        </p>
+            <p class="product-price price">₱<?= number_format((float) $product['price'], 2) ?></p>
 
-        <p>
-            <strong>Color:</strong>
-            <?= $color ?>
-        </p>
+            <div class="product-meta">
+                <?php if (!empty(trim($product['size'] ?? ''))): ?>
+                    <div class="product-meta__item">
+                        <span class="product-meta__label">Size</span>
+                        <span class="product-meta__value"><?= hopia_e($product['size']) ?></span>
+                    </div>
+                <?php endif; ?>
 
-        <p>
-            <strong>Condition:</strong>
-            <?= htmlspecialchars($product['condition_label']) ?>
-        </p>
+                <?php if (!empty(trim($product['color'] ?? ''))): ?>
+                    <div class="product-meta__item">
+                        <span class="product-meta__label">Color</span>
+                        <span class="product-meta__value"><?= hopia_e($product['color']) ?></span>
+                    </div>
+                <?php endif; ?>
 
-        <?php if (trim($product['description'] ?? '') !== ''): ?>
+                <div class="product-meta__item">
+                    <span class="product-meta__label">Condition</span>
+                    <span class="product-meta__value"><?= hopia_e($product['condition_label']) ?></span>
+                </div>
+            </div>
 
-            <h3>Description</h3>
+            <?php if (!empty(trim($product['description'] ?? ''))): ?>
+                <div class="product-section">
+                    <h3 class="product-section__title">Description</h3>
+                    <p class="product-description"><?= nl2br(hopia_e($product['description'])) ?></p>
+                </div>
+            <?php endif; ?>
 
-            <p><?= nl2br(htmlspecialchars($product['description'])) ?></p>
+            <?php if (!empty(trim($product['defects'] ?? ''))): ?>
+                <div class="product-section">
+                    <h3 class="product-section__title">Defects</h3>
+                    <p class="product-defects"><?= nl2br(hopia_e($product['defects'])) ?></p>
+                </div>
+            <?php endif; ?>
 
-        <?php endif; ?>
+            <?php if ($isSold): ?>
+                <div class="product-sold-notice">
+                    <p class="product-sold-notice__text">This piece is no longer available.</p>
+                    <a href="products.php" class="btn btn-secondary btn-block">Continue Shopping</a>
+                </div>
+            <?php else: ?>
+                <?php if (isset($_SESSION['customer_id'])): ?>
+                    <?php $_SESSION['csrf_token_cart'] = $_SESSION['csrf_token_cart'] ?? bin2hex(random_bytes(32)); $csrfToken = $_SESSION['csrf_token_cart']; ?>
+                    <form class="product-form" id="add-to-cart-form" method="POST" action="cart-add.php">
+                        <input type="hidden" name="csrf_token" value="<?= hopia_e($csrfToken) ?>">
+                        <input type="hidden" name="product_id" value="<?= $productId ?>">
+                        <input type="hidden" name="return_to" value="product.php?id=<?= $productId ?>">
+                        <button type="submit" class="btn btn-primary btn-block btn-lg">Add to Cart</button>
+                    </form>
+                <?php else: ?>
+                    <p class="product-auth-notice">
+                        <a href="login.php">Log in</a> to add this piece to your cart.
+                    </p>
+                <?php endif; ?>
+            <?php endif; ?>
+        </div>
+    </div>
 
-        <?php if (trim($product['defects'] ?? '') !== ''): ?>
+<?php endif; ?>
 
-            <h3>Defects</h3>
+<div id="cart-toast" class="toast" role="status" aria-live="polite">
+    <div class="toast__content">
+        <svg class="toast__icon" width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+            <path d="M5 10l4 4 6-7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        <span>Added to cart</span>
+    </div>
+    <a href="cart.php" class="btn btn-sm">View Cart</a>
+    <button type="button" class="toast__close" aria-label="Dismiss">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+            <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+        </svg>
+    </button>
+</div>
 
-            <p><?= nl2br(htmlspecialchars($product['defects'])) ?></p>
+<script>
+(function() {
+    const thumbs = document.querySelectorAll('.gallery-thumb');
+    const mainImage = document.getElementById('gallery-main-image');
 
-        <?php endif; ?>
+    thumbs.forEach(function(thumb) {
+        thumb.addEventListener('click', function() {
+            thumbs.forEach(function(t) { t.classList.remove('is-active'); });
+            this.classList.add('is-active');
+            if (mainImage) {
+                mainImage.src = this.dataset.image;
+            }
+        });
+    });
 
-        <hr>
+    const form = document.getElementById('add-to-cart-form');
+    const toast = document.getElementById('cart-toast');
 
-        <form method="POST" action="cart-add.php">
-            <input type="hidden" name="product_id" value="<?= $productId ?>">
-            <button type="submit" class="add-to-cart">Add to Cart</button>
-        </form>
+    if (form) {
+        form.addEventListener('submit', function(e) {
+            e.preventDefault();
+            const formData = new FormData(form);
 
-    <?php endif; ?>
+            fetch(form.action, {
+                method: 'POST',
+                body: formData
+            })
+            .then(function(response) {
+                if (response.redirected && response.url) {
+                    window.location.href = response.url;
+                    return;
+                }
+                window.location.href = form.action.replace('cart-add.php', 'products.php');
+            })
+            .catch(function() {
+                form.submit();
+            });
+        });
+    }
 
-</body>
-</html>
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('cart_success') === '1' && toast) {
+        toast.classList.add('is-visible');
+        setTimeout(function() {
+            toast.classList.remove('is-visible');
+        }, 5000);
+    }
+
+    if (toast) {
+        const closeBtn = toast.querySelector('.toast__close');
+        if (closeBtn) {
+            closeBtn.addEventListener('click', function() {
+                toast.classList.remove('is-visible');
+            });
+        }
+    }
+})();
+</script>
+
+<?php require __DIR__ . '/../includes/ui.footer.php';
