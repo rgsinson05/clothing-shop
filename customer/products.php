@@ -1,5 +1,7 @@
 <?php
 
+session_start();
+
 require_once __DIR__ . '/../includes/database.php';
 
 $allowedCategories = ['SHIRTS', 'PANTS', 'SHORTS'];
@@ -12,7 +14,7 @@ if (!in_array($category, $allowedCategories, true)) {
     $category = '';
 }
 
-$sql = "SELECT p.id, p.name, p.category, p.price, p.size, p.color, pi.image_path
+$sql = "SELECT p.id, p.name, p.category, p.price, p.size, p.color, p.status, pi.image_path
      FROM products p
      LEFT JOIN product_images pi
          ON pi.id = (
@@ -22,7 +24,7 @@ $sql = "SELECT p.id, p.name, p.category, p.price, p.size, p.color, pi.image_path
              ORDER BY pi2.sort_order ASC, pi2.id ASC
              LIMIT 1
          )
-     WHERE p.status = 'AVAILABLE'";
+     WHERE p.status IN ('AVAILABLE', 'SOLD')";
 
 $params = [];
 
@@ -36,7 +38,7 @@ if ($search !== '') {
     $params[':search'] = '%' . $search . '%';
 }
 
-$sql .= ' ORDER BY p.created_at DESC';
+$sql .= " ORDER BY CASE p.status WHEN 'AVAILABLE' THEN 0 ELSE 1 END, p.created_at DESC";
 
 $stmt = $pdo->prepare($sql);
 
@@ -46,174 +48,165 @@ $products = $stmt->fetchAll();
 
 $hasFilters = ($search !== '' || $category !== '');
 
+$availableCount = 0;
+
+foreach ($products as $product) {
+    if (($product['status'] ?? '') === 'AVAILABLE') {
+        $availableCount++;
+    }
+}
+
+require_once __DIR__ . '/../includes/ui.php';
+
+define('HUPIA_BASE', '..');
+
+$page_title = 'Shop - ' . hopia_site_name();
+$page_description = 'Preloved shirts, pants, and shorts at ' . hopia_site_name() . '.';
+$ui_active = 'products.php';
+$body_class = 'shop-page';
+
+require __DIR__ . '/../includes/ui.head.php';
+require __DIR__ . '/../includes/ui.header.php';
+
 ?>
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Shop - Hopia's Ukay-Ukay</title>
 
-    <style>
-        .product-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-            gap: 16px;
-            margin-top: 16px;
-        }
+<section class="shop-intro">
+    <p class="shop-intro__eyebrow">Preloved &amp; ready to wear</p>
+    <h1>Shop All Finds</h1>
+    <p class="shop-intro__copy">
+        Every piece is one-of-a-kind. Browse what's in store and grab it before it's gone.
+    </p>
+</section>
 
-        .product-card {
-            border: 1px solid #ccc;
-            padding: 12px;
-        }
-
-        .product-card img,
-        .image-placeholder {
-            display: block;
-            width: 100%;
-            height: 220px;
-            object-fit: cover;
-            margin: 0 0 10px 0;
-            background: #f0f0f0;
-        }
-
-        .image-placeholder {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: #888;
-        }
-
-        .product-card h2 {
-            font-size: 1rem;
-            margin: 0 0 8px 0;
-        }
-
-        .product-price {
-            font-weight: bold;
-            margin: 0 0 8px 0;
-        }
-
-        .product-meta {
-            margin: 0 0 10px 0;
-            color: #555;
-        }
-    </style>
-</head>
-<body>
-
-    <h1>Hopia's Ukay-Ukay</h1>
-
-    <h2>Shop</h2>
-
-    <form method="GET">
-
-        <label for="search">Search</label>
+<section class="shop-filters" aria-label="Product filters">
+    <form class="shop-search" method="GET" action="products.php" role="search">
+        <label class="sr-only" for="shop-search">Search pieces</label>
         <input
-            type="text"
-            id="search"
+            type="search"
+            id="shop-search"
             name="search"
-            placeholder="Search by product name"
-            value="<?= htmlspecialchars($search) ?>"
+            placeholder="Search pieces..."
+            value="<?= hopia_e($search) ?>"
         >
-
-        <label for="category">Category</label>
-        <select id="category" name="category">
-            <option value="">All</option>
-
-            <option value="SHIRTS" <?= $category === 'SHIRTS' ? 'selected' : '' ?>>
-                Shirts
-            </option>
-
-            <option value="PANTS" <?= $category === 'PANTS' ? 'selected' : '' ?>>
-                Pants
-            </option>
-
-            <option value="SHORTS" <?= $category === 'SHORTS' ? 'selected' : '' ?>>
-                Shorts
-            </option>
-        </select>
-
-        <button type="submit">Apply</button>
-
+        <?php if ($category !== ''): ?>
+            <input type="hidden" name="category" value="<?= hopia_e($category) ?>">
+        <?php endif; ?>
+        <button type="submit" class="btn btn-primary btn-sm">Search</button>
     </form>
 
-    <?php if (count($products) === 0): ?>
+    <nav class="shop-categories" aria-label="Categories">
+        <a
+            class="shop-category<?= $category === '' ? ' is-active' : '' ?>"
+            href="products.php?search=<?= urlencode($search) ?>"
+            <?= $category === '' ? 'aria-current="page"' : '' ?>
+        >All</a>
 
-        <?php if ($hasFilters): ?>
+        <?php foreach ($allowedCategories as $cat): ?>
+            <a
+                class="shop-category<?= $category === $cat ? ' is-active' : '' ?>"
+                href="products.php?category=<?= $cat ?>&search=<?= urlencode($search) ?>"
+                <?= $category === $cat ? 'aria-current="page"' : '' ?>
+            ><?= hopia_e(ucfirst(strtolower($cat))) ?></a>
+        <?php endforeach; ?>
+    </nav>
+</section>
 
+<?php if (count($products) === 0): ?>
+
+    <?php if ($hasFilters): ?>
+        <div class="empty-state">
             <p>No products found matching your search or filters.</p>
-
-        <?php else: ?>
-
-            <p>No products are available right now. Please check back later.</p>
-
-        <?php endif; ?>
-
-    <?php else: ?>
-
-        <div class="product-grid">
-
-            <?php foreach ($products as $product): ?>
-
-                <?php
-                $productId = (int) $product['id'];
-
-                $imagePath = trim($product['image_path'] ?? '');
-
-                $size = trim($product['size'] ?? '') !== ''
-                    ? htmlspecialchars($product['size'])
-                    : '&mdash;';
-
-                $color = trim($product['color'] ?? '') !== ''
-                    ? htmlspecialchars($product['color'])
-                    : '&mdash;';
-                ?>
-
-                <div class="product-card">
-
-                    <?php if ($imagePath !== ''): ?>
-
-                        <a href="product.php?id=<?= $productId ?>">
-                            <img
-                                src="<?= htmlspecialchars('../' . ltrim($imagePath, '/')) ?>"
-                                alt="<?= htmlspecialchars($product['name']) ?>"
-                            >
-                        </a>
-
-                    <?php else: ?>
-
-                        <div class="image-placeholder">No image</div>
-
-                    <?php endif; ?>
-
-                    <h2>
-                        <a href="product.php?id=<?= $productId ?>">
-                            <?= htmlspecialchars($product['name']) ?>
-                        </a>
-                    </h2>
-
-                    <p class="product-price">
-                        ₱<?= number_format((float) $product['price'], 2) ?>
-                    </p>
-
-                    <p class="product-meta">
-                        Size: <?= $size ?>
-                        <br>
-                        Color: <?= $color ?>
-                        <br>
-                        Category: <?= htmlspecialchars($product['category']) ?>
-                    </p>
-
-                    <a href="product.php?id=<?= $productId ?>">View details</a>
-
-                </div>
-
-            <?php endforeach; ?>
-
+            <p><a class="btn btn-secondary btn-sm" href="products.php">Clear filters</a></p>
         </div>
-
+    <?php else: ?>
+        <div class="empty-state">
+            <p>No products are available right now. Please check back later.</p>
+        </div>
     <?php endif; ?>
 
-</body>
-</html>
+<?php else: ?>
+
+    <p class="shop-count text-small muted">
+        Showing <?= count($products) ?> piece<?= count($products) === 1 ? '' : 's' ?>
+        <?php if ($availableCount !== count($products)): ?>
+            &middot; <?= $availableCount ?> available
+        <?php endif; ?>
+    </p>
+
+    <div class="shop-grid">
+
+        <?php foreach ($products as $product): ?>
+
+            <?php
+            $productId = (int) $product['id'];
+
+            $isSold = ($product['status'] ?? '') === 'SOLD';
+
+            $productUrl = 'product.php?id=' . $productId;
+
+            $imagePath = trim($product['image_path'] ?? '');
+
+            $size = trim($product['size'] ?? '');
+
+            $color = trim($product['color'] ?? '');
+            ?>
+
+            <article class="shop-card<?= $isSold ? ' is-sold' : '' ?>">
+
+                <div class="shop-card__image">
+                    <?php if ($imagePath !== ''): ?>
+                        <?php if (!$isSold): ?>
+                            <a href="<?= hopia_e($productUrl) ?>">
+                        <?php endif; ?>
+                                <img
+                                    src="<?= hopia_e('../' . ltrim($imagePath, '/')) ?>"
+                                    alt="<?= hopia_e($product['name']) ?>"
+                                    loading="lazy"
+                                >
+                        <?php if (!$isSold): ?>
+                            </a>
+                        <?php endif; ?>
+                    <?php else: ?>
+                        <span class="shop-card__placeholder">No image</span>
+                    <?php endif; ?>
+
+                    <?php if ($isSold): ?>
+                        <span class="shop-card__sold-badge">Sold</span>
+                    <?php endif; ?>
+                </div>
+
+                <div class="shop-card__body">
+                    <p class="shop-card__category"><?= hopia_e(ucfirst(strtolower($product['category']))) ?></p>
+
+                    <h2 class="shop-card__name">
+                        <?php if (!$isSold): ?>
+                            <a href="<?= hopia_e($productUrl) ?>"><?= hopia_e($product['name']) ?></a>
+                        <?php else: ?>
+                            <?= hopia_e($product['name']) ?>
+                        <?php endif; ?>
+                    </h2>
+
+                    <?php if ($size !== '' || $color !== ''): ?>
+                        <p class="shop-card__meta">
+                            <?= hopia_e(implode(' &middot; ', array_filter([$size, $color], static function ($value) {
+                                return $value !== '';
+                            }))) ?>
+                        </p>
+                    <?php endif; ?>
+
+                    <p class="price shop-card__price">₱<?= number_format((float) $product['price'], 2) ?></p>
+
+                    <?php if ($isSold): ?>
+                        <span class="shop-card__sold-label">SOLD</span>
+                    <?php endif; ?>
+                </div>
+
+            </article>
+
+        <?php endforeach; ?>
+
+    </div>
+
+<?php endif; ?>
+
+<?php require __DIR__ . '/../includes/ui.footer.php';
