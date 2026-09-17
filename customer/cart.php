@@ -4,10 +4,6 @@ session_start();
 
 require_once __DIR__ . '/../includes/database.php';
 
-/*
- * Require the customer to be logged in.
- */
-
 if (!isset($_SESSION['customer_id'])) {
     header('Location: login.php');
     exit;
@@ -15,19 +11,11 @@ if (!isset($_SESSION['customer_id'])) {
 
 $customerId = (int) $_SESSION['customer_id'];
 
-/*
- * Ensure a CSRF token exists for the removal form.
- */
-
 if (empty($_SESSION['csrf_token'])) {
     $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
 }
 
 $csrfToken = $_SESSION['csrf_token'];
-
-/*
- * Retrieve the customer's cart, if one exists.
- */
 
 $cartStmt = $pdo->prepare(
     'SELECT id
@@ -36,20 +24,14 @@ $cartStmt = $pdo->prepare(
 );
 
 $cartStmt->execute([':customer_id' => $customerId]);
-
 $cart = $cartStmt->fetch();
 
 $cartItems = [];
 $subtotal = 0.0;
 
 if ($cart !== false) {
-    /*
-     * Fetch all cart items joined with products and each
-     * product's first image (sort_order ASC, id ASC).
-     */
-
     $itemsStmt = $pdo->prepare(
-        'SELECT ci.id AS cart_item_id, p.id, p.name, p.size, p.color, p.price, pi.image_path
+        'SELECT ci.id AS cart_item_id, p.id, p.name, p.size, p.category, p.color, p.price, pi.image_path
          FROM cart_items ci
          INNER JOIN products p ON p.id = ci.product_id
          LEFT JOIN product_images pi
@@ -65,187 +47,131 @@ if ($cart !== false) {
     );
 
     $itemsStmt->execute([':cart_id' => (int) $cart['id']]);
-
     $cartItems = $itemsStmt->fetchAll();
-
-    /*
-     * Each item is one unique product, so every quantity is 1.
-     */
 
     foreach ($cartItems as $item) {
         $subtotal += (float) $item['price'];
     }
 }
 
+require_once __DIR__ . '/../includes/ui.php';
+
+$page_title = 'Your Cart - ' . hopia_site_name();
+
+require __DIR__ . '/../includes/ui.head.php';
+require __DIR__ . '/../includes/ui.header.php';
 ?>
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Your Cart - Hopia's Ukay-Ukay</title>
 
-    <style>
-        .cart-table {
-            border-collapse: collapse;
-            width: 100%;
-            margin-top: 16px;
-        }
-
-        .cart-table th,
-        .cart-table td {
-            border: 1px solid #ccc;
-            padding: 8px;
-            text-align: left;
-            vertical-align: top;
-        }
-
-        .cart-table img,
-        .image-placeholder {
-            display: block;
-            width: 100px;
-            height: 120px;
-            object-fit: cover;
-            background: #f0f0f0;
-        }
-
-        .image-placeholder {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: #888;
-        }
-
-        .cart-subtotal {
-            font-weight: bold;
-        }
-
-        .cart-summary {
-            border: 1px solid #ccc;
-            margin-top: 24px;
-            max-width: 420px;
-            padding: 16px;
-        }
-
-        .cart-summary p {
-            margin: 8px 0;
-        }
-
-        .checkout-link {
-            display: inline-block;
-            margin-top: 8px;
-            padding: 10px 16px;
-            border: 2px solid #333;
-            color: #333;
-            text-decoration: none;
-        }
-
-        .checkout-link:hover {
-            background: #333;
-            color: #fff;
-        }
-    </style>
-</head>
-<body>
-
-    <h1>Hopia's Ukay-Ukay</h1>
-
-    <h2>Your Cart</h2>
+<section class="cart-page">
+    <header class="cart-header">
+        <h1>YOUR CART</h1>
+        <?php if (count($cartItems) > 0): ?>
+            <p class="cart-header__count"><?= count($cartItems) ?> <?= count($cartItems) === 1 ? 'item' : 'items' ?></p>
+        <?php endif; ?>
+    </header>
 
     <?php if (count($cartItems) === 0): ?>
 
-        <p>Your cart is empty.</p>
-
-        <p>
-            <a href="products.php">Continue Shopping</a>
-        </p>
+        <div class="cart-empty">
+            <div class="cart-empty__icon" aria-hidden="true">
+                <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"></path>
+                    <line x1="3" y1="6" x2="21" y2="6"></line>
+                    <path d="M16 10a4 4 0 0 1-8 0"></path>
+                </svg>
+            </div>
+            <h2>Your cart is empty</h2>
+            <p>Discover unique pre-loved pieces waiting for a new home.</p>
+            <a class="btn btn-primary btn-block" href="products.php">SHOP ALL FINDS</a>
+        </div>
 
     <?php else: ?>
 
-        <table class="cart-table">
-            <thead>
-                <tr>
-                    <th>Image</th>
-                    <th>Product</th>
-                    <th>Size</th>
-                    <th>Color</th>
-                    <th>Price</th>
-                    <th>Quantity</th>
-                    <th>Action</th>
-                </tr>
-            </thead>
-            <tbody>
-
+        <div class="cart-layout">
+            <div class="cart-items" role="list">
                 <?php foreach ($cartItems as $item): ?>
-
                     <?php
                     $imagePath = trim($item['image_path'] ?? '');
-
-                    $size = trim($item['size'] ?? '') !== ''
-                        ? htmlspecialchars($item['size'])
-                        : '&mdash;';
-
-                    $color = trim($item['color'] ?? '') !== ''
-                        ? htmlspecialchars($item['color'])
-                        : '&mdash;';
+                    $size = trim($item['size'] ?? '');
+                    $color = trim($item['color'] ?? '');
+                    $category = trim($item['category'] ?? '');
                     ?>
-
-                    <tr>
-                        <td>
+                    <article class="cart-item" role="listitem">
+                        <div class="cart-item__image">
                             <?php if ($imagePath !== ''): ?>
-
                                 <img
-                                    src="<?= htmlspecialchars('../' . ltrim($imagePath, '/')) ?>"
-                                    alt="<?= htmlspecialchars($item['name']) ?>"
+                                    src="<?= hopia_e('../' . ltrim($imagePath, '/')) ?>"
+                                    alt="<?= hopia_e($item['name']) ?>"
+                                    loading="lazy"
                                 >
-
                             <?php else: ?>
-
-                                <div class="image-placeholder">No image</div>
-
+                                <div class="cart-item__placeholder">
+                                    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                        <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                                        <circle cx="8.5" cy="8.5" r="1.5"></circle>
+                                        <polyline points="21 15 16 10 5 21"></polyline>
+                                    </svg>
+                                </div>
                             <?php endif; ?>
-                        </td>
-                        <td><?= htmlspecialchars($item['name']) ?></td>
-                        <td><?= $size ?></td>
-                        <td><?= $color ?></td>
-                        <td>₱<?= number_format((float) $item['price'], 2) ?></td>
-                        <td>1</td>
-                        <td>
-                            <form method="POST" action="cart-remove.php">
+                        </div>
+                        <div class="cart-item__details">
+                            <div class="cart-item__header">
+                                <h3 class="cart-item__name"><?= hopia_e($item['name']) ?></h3>
+                                <p class="price cart-item__price">₱<?= number_format((float) $item['price'], 2) ?></p>
+                            </div>
+                            <div class="cart-item__meta">
+                                <?php if ($category !== ''): ?>
+                                    <span class="cart-item__meta-item"><?= hopia_e(ucfirst(strtolower($category))) ?></span>
+                                <?php endif; ?>
+                                <?php if ($size !== ''): ?>
+                                    <span class="cart-item__meta-item">Size: <?= hopia_e($size) ?></span>
+                                <?php endif; ?>
+                                <?php if ($color !== ''): ?>
+                                    <span class="cart-item__meta-item">Color: <?= hopia_e($color) ?></span>
+                                <?php endif; ?>
+                            </div>
+                            <form class="cart-item__actions" method="POST" action="cart-remove.php">
                                 <input type="hidden" name="cart_item_id" value="<?= (int) $item['cart_item_id'] ?>">
-                                <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken) ?>">
-                                <button type="submit">Remove</button>
+                                <input type="hidden" name="csrf_token" value="<?= hopia_e($csrfToken) ?>">
+                                <button type="submit" class="btn btn-ghost btn-sm cart-item__remove">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                        <polyline points="3 6 5 6 21 6"></polyline>
+                                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                                        <line x1="10" y1="11" x2="10" y2="17"></line>
+                                        <line x1="14" y1="11" x2="14" y2="17"></line>
+                                    </svg>
+                                    REMOVE
+                                </button>
                             </form>
-                        </td>
-                    </tr>
-
+                        </div>
+                    </article>
                 <?php endforeach; ?>
+            </div>
 
-            </tbody>
-        </table>
+            <aside class="cart-summary" aria-labelledby="cart-summary-heading">
+                <div class="cart-summary__inner">
+                    <h2 id="cart-summary-heading" class="cart-summary__title">Order Summary</h2>
 
-        <p>
-            <a href="products.php">Continue Shopping</a>
-        </p>
+                    <div class="cart-summary__row">
+                        <span>Order total before shipping</span>
+                        <span class="price">₱<?= number_format($subtotal, 2) ?></span>
+                    </div>
+
+                    <div class="cart-summary__row cart-summary__row--muted">
+                        <span>Shipping</span>
+                        <span>To be confirmed</span>
+                    </div>
+
+                    <hr>
+
+                    <a class="btn btn-primary btn-block" href="checkout.php">PROCEED TO CHECKOUT</a>
+
+                    <a class="btn btn-ghost btn-block" href="products.php">Continue Shopping</a>
+                </div>
+            </aside>
+        </div>
 
     <?php endif; ?>
+</section>
 
-    <section class="cart-summary" aria-labelledby="cart-summary-heading">
-        <h3 id="cart-summary-heading">Cart Summary</h3>
-
-        <p>Items: <?= count($cartItems) ?></p>
-        <p class="cart-subtotal">
-            Subtotal: ₱<?= number_format($subtotal, 2) ?>
-        </p>
-        <p>Shipping: Not calculated yet</p>
-        <p>Total: Not calculated yet</p>
-
-        <?php if (count($cartItems) > 0): ?>
-            <p>
-                <a class="checkout-link" href="checkout.php">Proceed to Checkout</a>
-            </p>
-        <?php endif; ?>
-    </section>
-
-</body>
-</html>
+<?php require __DIR__ . '/../includes/ui.footer.php'; ?>
