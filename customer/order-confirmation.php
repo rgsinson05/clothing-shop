@@ -102,10 +102,19 @@ if ($requestedOrderId !== null && $requestedOrderId !== false && $requestedOrder
          */
 
         $itemsStmt = $pdo->prepare(
-            'SELECT product_name, size, color, unit_price, quantity, subtotal
-             FROM order_items
-             WHERE order_id = :order_id
-             ORDER BY id ASC'
+            'SELECT oi.product_id, oi.product_name, oi.size, oi.color,
+                    oi.unit_price, oi.quantity, oi.subtotal, pi.image_path
+             FROM order_items oi
+             LEFT JOIN product_images pi
+                 ON pi.id = (
+                     SELECT pi2.id
+                     FROM product_images pi2
+                     WHERE pi2.product_id = oi.product_id
+                     ORDER BY pi2.sort_order ASC, pi2.id ASC
+                     LIMIT 1
+                 )
+             WHERE oi.order_id = :order_id
+             ORDER BY oi.id ASC'
         );
 
         $itemsStmt->execute([':order_id' => $orderId]);
@@ -202,276 +211,254 @@ $showCancelInfo = (
 );
 
 ?>
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Order Confirmation - Hopia's Ukay-Ukay</title>
+<?php
 
-    <style>
-        .notice {
-            border: 1px solid #ccc;
-            margin: 16px 0;
-            padding: 12px;
-        }
+require_once __DIR__ . '/../includes/ui.php';
 
-        .notice-success {
-            border-color: #176b2c;
-            color: #176b2c;
-        }
+$page_title = 'Order Confirmation - ' . hopia_site_name();
+$page_description = 'Your order confirmation at ' . hopia_site_name() . '.';
+$ui_active = 'orders.php';
+$body_class = 'confirmation-page-shell';
 
-        .confirmation-section {
-            border: 1px solid #ccc;
-            padding: 16px;
-            margin-top: 16px;
-        }
+require __DIR__ . '/../includes/ui.head.php';
+require __DIR__ . '/../includes/ui.header.php';
 
-        .confirmation-section h3 {
-            margin-top: 0;
-        }
+?>
 
-        .items-table {
-            border-collapse: collapse;
-            width: 100%;
-        }
-
-        .items-table th,
-        .items-table td {
-            border: 1px solid #ccc;
-            padding: 8px;
-            text-align: left;
-            vertical-align: top;
-        }
-
-        .items-table .amount {
-            text-align: right;
-            white-space: nowrap;
-        }
-
-        .totals p {
-            margin: 8px 0;
-        }
-
-        .totals .order-total {
-            border-top: 1px solid #ccc;
-            font-weight: bold;
-            margin-top: 8px;
-            padding-top: 8px;
-        }
-
-        .detail-grid {
-            display: grid;
-            grid-template-columns: 160px minmax(0, 1fr);
-            gap: 8px 16px;
-        }
-
-        .detail-grid dt {
-            font-weight: bold;
-        }
-
-        .detail-grid dd {
-            margin: 0;
-        }
-
-        .confirmation-actions p {
-            margin: 16px 0 0;
-        }
-
-        @media (max-width: 700px) {
-            .detail-grid {
-                grid-template-columns: 1fr;
-            }
-        }
-    </style>
-</head>
-<body>
-
-    <h1>Hopia's Ukay-Ukay</h1>
-
-    <p>
-        <a href="orders.php">&larr; My Orders</a>
-    </p>
-
-    <hr>
-
+<section class="confirmation-page">
     <?php if ($order === false): ?>
 
-        <h2>Order Confirmation</h2>
-
-        <p>Order not found.</p>
-
-        <p>
-            <a href="orders.php">My Orders</a>
-            |
-            <a href="products.php">Continue Shopping</a>
-        </p>
+        <div class="empty-state confirmation-empty">
+            <h1>Order Not Found</h1>
+            <p>This order does not exist or is not available in your account.</p>
+            <div class="confirmation-actions">
+                <a class="btn btn-primary" href="orders.php">VIEW ORDERS</a>
+                <a class="btn btn-secondary" href="products.php">CONTINUE SHOPPING</a>
+            </div>
+        </div>
 
     <?php else: ?>
 
-        <h2>Thank you for your order!</h2>
-
-        <p class="notice notice-success" role="status">
-            Your order has been placed successfully.
-        </p>
+        <header class="confirmation-hero">
+            <div class="confirmation-hero__icon" aria-hidden="true">
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="9"></circle>
+                    <path d="m8 12 2.5 2.5L16 9"></path>
+                </svg>
+            </div>
+            <p class="confirmation-hero__eyebrow">ORDER PLACED</p>
+            <h1>Your order has been received.</h1>
+            <p class="confirmation-hero__number">
+                Order <strong>#<?= hopia_e($order['id']) ?></strong>
+            </p>
+        </header>
 
         <?php if ($cancelRequestedFlag): ?>
 
-            <p class="notice notice-success" role="status">
+            <p class="alert alert-success" role="status">
                 Your cancellation request has been submitted and is waiting for admin review.
             </p>
 
         <?php elseif ($cancelErrorFlag): ?>
 
-            <p class="notice" role="alert">
+            <p class="alert alert-error" role="alert">
                 The cancellation request could not be submitted. Please review the order and try again.
             </p>
 
         <?php endif; ?>
 
-        <section class="confirmation-section" aria-labelledby="order-details-heading">
-            <h3 id="order-details-heading">Order Details</h3>
+        <div class="confirmation-layout">
+            <div class="confirmation-main">
+                <section class="confirmation-card" aria-labelledby="order-details-heading">
+                    <div class="confirmation-card__head">
+                        <div>
+                            <p class="confirmation-card__eyebrow">Your purchase</p>
+                            <h2 id="order-details-heading">Order Details</h2>
+                        </div>
+                        <span class="badge badge-pending"><?= hopia_e($orderStatusLabel) ?></span>
+                    </div>
 
-            <dl class="detail-grid">
-                <dt>Order Number:</dt>
-                <dd>#<?= htmlspecialchars((string) $order['id'], ENT_QUOTES, 'UTF-8') ?></dd>
+                    <ul class="confirmation-items" role="list">
+                        <?php foreach ($orderItems as $item): ?>
+                            <?php
+                            $imagePath = trim($item['image_path'] ?? '');
+                            $size = trim($item['size'] ?? '');
+                            $color = trim($item['color'] ?? '');
+                            $metaParts = [];
 
-                <dt>Status:</dt>
-                <dd><?= htmlspecialchars($orderStatusLabel, ENT_QUOTES, 'UTF-8') ?></dd>
+                            if ($size !== '') {
+                                $metaParts[] = 'Size ' . $size;
+                            }
 
-                <dt>Cancellation:</dt>
-                <dd><?= htmlspecialchars($cancellationStatusLabel, ENT_QUOTES, 'UTF-8') ?></dd>
+                            if ($color !== '') {
+                                $metaParts[] = $color;
+                            }
+                            ?>
+                            <li class="confirmation-item">
+                                <div class="confirmation-item__image">
+                                    <?php if ($imagePath !== ''): ?>
+                                        <img
+                                            src="<?= hopia_e('../' . ltrim($imagePath, '/')) ?>"
+                                            alt="<?= hopia_e($item['product_name']) ?>"
+                                        >
+                                    <?php else: ?>
+                                        <div class="confirmation-item__placeholder">
+                                            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                                <rect x="3" y="3" width="18" height="18" rx="2"></rect>
+                                                <circle cx="8.5" cy="8.5" r="1.5"></circle>
+                                                <polyline points="21 15 16 10 5 21"></polyline>
+                                            </svg>
+                                        </div>
+                                    <?php endif; ?>
+                                </div>
+                                <div class="confirmation-item__details">
+                                    <h3><?= hopia_e($item['product_name']) ?></h3>
+                                    <?php if (count($metaParts) > 0): ?>
+                                        <p><?= hopia_e(implode(' · ', $metaParts)) ?></p>
+                                    <?php endif; ?>
+                                    <?php if ((int) $item['quantity'] > 1): ?>
+                                        <p>Quantity <?= hopia_e($item['quantity']) ?></p>
+                                    <?php endif; ?>
+                                </div>
+                                <p class="price confirmation-item__price">₱<?= number_format((float) $item['subtotal'], 2) ?></p>
+                            </li>
+                        <?php endforeach; ?>
+                    </ul>
 
-                <dt>Placed On:</dt>
-                <dd><?= htmlspecialchars(date('M j, Y g:i A', strtotime($order['created_at'])), ENT_QUOTES, 'UTF-8') ?></dd>
-            </dl>
-        </section>
+                    <div class="confirmation-totals">
+                        <div class="confirmation-total-row">
+                            <span>Order total before shipping</span>
+                            <span>₱<?= number_format((float) $order['subtotal'], 2) ?></span>
+                        </div>
+                        <div class="confirmation-total-row confirmation-total-row--muted">
+                            <span>Shipping</span>
+                            <span>To be confirmed</span>
+                        </div>
+                        <div class="confirmation-total-row confirmation-total-row--grand">
+                            <span>Order total</span>
+                            <span>₱<?= number_format((float) $order['total_amount'], 2) ?></span>
+                        </div>
+                    </div>
 
-        <section class="confirmation-section" aria-labelledby="order-items-heading">
-            <h3 id="order-items-heading">Items Purchased</h3>
+                    <dl class="confirmation-meta">
+                        <div>
+                            <dt>Placed on</dt>
+                            <dd><?= hopia_e(date('M j, Y g:i A', strtotime($order['created_at']))) ?></dd>
+                        </div>
+                        <div>
+                            <dt>Cancellation</dt>
+                            <dd><?= hopia_e($cancellationStatusLabel) ?></dd>
+                        </div>
+                    </dl>
+                </section>
 
-            <table class="items-table">
-                <thead>
-                    <tr>
-                        <th scope="col">Product</th>
-                        <th scope="col">Size</th>
-                        <th scope="col">Color</th>
-                        <th scope="col" class="amount">Unit Price</th>
-                        <th scope="col" class="amount">Quantity</th>
-                        <th scope="col" class="amount">Subtotal</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <?php foreach ($orderItems as $item): ?>
-                        <?php
-                        $size = trim($item['size'] ?? '');
-                        $color = trim($item['color'] ?? '');
-                        ?>
-                        <tr>
-                            <td><?= htmlspecialchars($item['product_name'], ENT_QUOTES, 'UTF-8') ?></td>
-                            <td><?= $size !== '' ? htmlspecialchars($size, ENT_QUOTES, 'UTF-8') : '&mdash;' ?></td>
-                            <td><?= $color !== '' ? htmlspecialchars($color, ENT_QUOTES, 'UTF-8') : '&mdash;' ?></td>
-                            <td class="amount">₱<?= number_format((float) $item['unit_price'], 2) ?></td>
-                            <td class="amount"><?= htmlspecialchars((string) (int) $item['quantity'], ENT_QUOTES, 'UTF-8') ?></td>
-                            <td class="amount">₱<?= number_format((float) $item['subtotal'], 2) ?></td>
-                        </tr>
-                    <?php endforeach; ?>
-                </tbody>
-            </table>
+                <section class="confirmation-card" aria-labelledby="payment-details-heading">
+                    <div class="confirmation-card__head">
+                        <div>
+                            <p class="confirmation-card__eyebrow">How you will pay</p>
+                            <h2 id="payment-details-heading">Payment</h2>
+                        </div>
+                    </div>
 
-            <div class="totals">
-                <p>Subtotal: ₱<?= number_format((float) $order['subtotal'], 2) ?></p>
-                <p>Shipping: To be confirmed</p>
-                <p class="order-total">Total: ₱<?= number_format((float) $order['total_amount'], 2) ?></p>
+                    <dl class="confirmation-details">
+                        <div>
+                            <dt>Payment method</dt>
+                            <dd><?= hopia_e($paymentMethodLabel) ?></dd>
+                        </div>
+                        <div>
+                            <dt>Payment status</dt>
+                            <dd><span class="badge badge-pending"><?= hopia_e($paymentStatusLabel) ?></span></dd>
+                        </div>
+                    </dl>
+                </section>
+
+                <section class="confirmation-card" aria-labelledby="delivery-details-heading">
+                    <div class="confirmation-card__head">
+                        <div>
+                            <p class="confirmation-card__eyebrow">Where it is going</p>
+                            <h2 id="delivery-details-heading">Delivery</h2>
+                        </div>
+                    </div>
+
+                    <dl class="confirmation-details">
+                        <div>
+                            <dt>Shipping</dt>
+                            <dd>To be confirmed</dd>
+                        </div>
+                        <div>
+                            <dt>Recipient</dt>
+                            <dd><?= hopia_e($order['shipping_name']) ?></dd>
+                        </div>
+                        <div>
+                            <dt>Phone</dt>
+                            <dd><?= hopia_e($order['shipping_phone']) ?></dd>
+                        </div>
+                        <div>
+                            <dt>Address</dt>
+                            <dd><?= hopia_e($order['shipping_address']) ?></dd>
+                        </div>
+                        <?php if ($trackingNumber !== ''): ?>
+                            <div>
+                                <dt>Tracking number</dt>
+                                <dd><?= hopia_e($trackingNumber) ?></dd>
+                            </div>
+                        <?php endif; ?>
+                    </dl>
+                </section>
+
+                <?php if ($showCancelForm || $showCancelInfo): ?>
+
+                    <section class="confirmation-card confirmation-cancellation" aria-labelledby="order-actions-heading">
+                        <div class="confirmation-card__head">
+                            <div>
+                                <p class="confirmation-card__eyebrow">Need to make a change?</p>
+                                <h2 id="order-actions-heading">Order Actions</h2>
+                            </div>
+                        </div>
+
+                        <?php if ($showCancelForm): ?>
+
+                            <p>
+                                This order is still pending. You may request a cancellation;
+                                an administrator will review it before the order is cancelled.
+                            </p>
+
+                            <form method="POST" action="order-cancel-request.php"
+                                  onsubmit="return confirm('Are you sure you want to request cancellation for this order?');">
+                                <input type="hidden" name="order_id" value="<?= (int) $order['id'] ?>">
+                                <input type="hidden" name="csrf_token" value="<?= hopia_e($csrfToken) ?>">
+                                <button class="btn btn-danger" type="submit">REQUEST CANCELLATION</button>
+                            </form>
+
+                        <?php elseif ($cancellationStatus === 'REQUESTED'): ?>
+
+                            <p role="status">Your cancellation request is waiting for admin review.</p>
+
+                        <?php elseif ($cancellationStatus === 'REJECTED'): ?>
+
+                            <p role="status">Your cancellation request was rejected.</p>
+
+                        <?php else: ?>
+
+                            <p role="status">Your cancellation request was approved. This order has been cancelled.</p>
+
+                        <?php endif; ?>
+                    </section>
+
+                <?php endif; ?>
             </div>
-        </section>
 
-        <section class="confirmation-section" aria-labelledby="shipping-details-heading">
-            <h3 id="shipping-details-heading">Shipping Details</h3>
-
-            <dl class="detail-grid">
-                <dt>Name:</dt>
-                <dd><?= htmlspecialchars($order['shipping_name'], ENT_QUOTES, 'UTF-8') ?></dd>
-
-                <dt>Phone:</dt>
-                <dd><?= htmlspecialchars($order['shipping_phone'], ENT_QUOTES, 'UTF-8') ?></dd>
-
-                <dt>Address:</dt>
-                <dd><?= htmlspecialchars($order['shipping_address'], ENT_QUOTES, 'UTF-8') ?></dd>
-
-                <?php if ($trackingNumber !== ''): ?>
-
-                    <dt>Tracking Number:</dt>
-                    <dd><?= htmlspecialchars($trackingNumber, ENT_QUOTES, 'UTF-8') ?></dd>
-
-                <?php endif; ?>
-            </dl>
-        </section>
-
-        <section class="confirmation-section" aria-labelledby="payment-details-heading">
-            <h3 id="payment-details-heading">Payment Details</h3>
-
-            <dl class="detail-grid">
-                <dt>Payment Method:</dt>
-                <dd><?= htmlspecialchars($paymentMethodLabel, ENT_QUOTES, 'UTF-8') ?></dd>
-
-                <dt>Payment Status:</dt>
-                <dd><?= htmlspecialchars($paymentStatusLabel, ENT_QUOTES, 'UTF-8') ?></dd>
-            </dl>
-        </section>
-
-        <?php if ($showCancelForm || $showCancelInfo): ?>
-
-            <section class="confirmation-section" aria-labelledby="order-actions-heading">
-                <h3 id="order-actions-heading">Order Actions</h3>
-
-                <?php if ($showCancelForm): ?>
-
-                    <p>
-                        This order is still pending. You may request a cancellation;
-                        an administrator will review it before the order is cancelled.
-                    </p>
-
-                    <form method="POST" action="order-cancel-request.php"
-                          onsubmit="return confirm('Are you sure you want to request cancellation for this order?');">
-                        <input type="hidden" name="order_id" value="<?= (int) $order['id'] ?>">
-                        <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken, ENT_QUOTES, 'UTF-8') ?>">
-                        <button type="submit">Request Cancellation</button>
-                    </form>
-
-                <?php elseif ($cancellationStatus === 'REQUESTED'): ?>
-
-                    <p role="status">
-                        Your cancellation request is waiting for admin review.
-                    </p>
-
-                <?php elseif ($cancellationStatus === 'REJECTED'): ?>
-
-                    <p role="status">
-                        Your cancellation request was rejected.
-                    </p>
-
-                <?php else: ?>
-
-                    <p role="status">
-                        Your cancellation request was approved. This order has been cancelled.
-                    </p>
-
-                <?php endif; ?>
-
-            </section>
-
-        <?php endif; ?>
-
-        <div class="confirmation-actions">
-            <p>
-                <a href="orders.php">My Orders</a>
-                |
-                <a href="products.php">Continue Shopping</a>
-            </p>
+            <aside class="confirmation-aside" aria-label="Order actions">
+                <div class="confirmation-aside__inner">
+                    <p class="confirmation-aside__label">Order number</p>
+                    <p class="confirmation-aside__number">#<?= hopia_e($order['id']) ?></p>
+                    <a class="btn btn-primary btn-block" href="orders.php">VIEW ORDER</a>
+                    <a class="btn btn-secondary btn-block" href="products.php">CONTINUE SHOPPING</a>
+                </div>
+            </aside>
         </div>
 
     <?php endif; ?>
+</section>
 
-</body>
-</html>
+<?php require __DIR__ . '/../includes/ui.footer.php'; ?>
