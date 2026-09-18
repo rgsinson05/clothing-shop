@@ -2805,3 +2805,231 @@ body.is-modal-open {
         top: calc(var(--sp-6) + 60px);
     }
 }
+
+/* My Orders Page */
+.orders-page {
+    padding-top: var(--sp-4);
+}
+
+.orders-header {
+    margin-bottom: var(--sp-4);
+}
+
+.orders-header h1 {
+    font-size: 1.5rem;
+    letter-spacing: 0.04em;
+}
+
+.orders-filters {
+    margin-bottom: var(--sp-5);
+}
+
+.orders-filter-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--sp-2);
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.orders-filter {
+    display: inline-block;
+    padding: 0.5rem 1rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-pill);
+    background: var(--color-surface);
+    color: var(--color-text-soft);
+    font-size: 0.875rem;
+    font-weight: 600;
+    text-decoration: none;
+    transition: border-color var(--transition), background-color var(--transition),
+        color var(--transition);
+}
+
+.orders-filter:hover {
+    border-color: var(--color-border-strong);
+    color: var(--color-text);
+}
+
+.orders-filter.is-active {
+    background: var(--color-primary);
+    border-color: var(--color-primary);
+    color: var(--color-on-primary);
+}
+
+.orders-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: var(--sp-7) var(--sp-4);
+    text-align: center;
+    background: var(--color-surface);
+    border: 1px dashed var(--color-border-strong);
+    border-radius: var(--radius);
+}
+
+.orders-empty__icon {
+    margin-bottom: var(--sp-4);
+    color: var(--color-text-muted);
+}
+
+.orders-empty h2 {
+    margin-bottom: var(--sp-2);
+    font-size: 1.25rem;
+}
+
+.orders-empty p {
+    margin-bottom: var(--sp-5);
+    color: var(--color-text-soft);
+    font-size: 0.9375rem;
+}
+
+.orders-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-3);
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.order-card {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-3);
+    padding: var(--sp-4);
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    transition: border-color var(--transition), box-shadow var(--transition);
+}
+
+.order-card:hover {
+    border-color: var(--color-border-strong);
+    box-shadow: var(--shadow-sm);
+}
+
+.order-card__link {
+    display: block;
+    color: inherit;
+    text-decoration: none;
+}
+
+.order-card__product {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-3);
+}
+
+.order-card__thumb {
+    flex-shrink: 0;
+    width: 64px;
+    height: 80px;
+    overflow: hidden;
+    border-radius: var(--radius-sm);
+    background: var(--color-bg-alt);
+}
+
+.order-card__thumb img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.order-card__thumb--placeholder {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--color-text-muted);
+}
+
+.order-card__info {
+    min-width: 0;
+    flex: 1;
+}
+
+.order-card__name {
+    overflow: hidden;
+    font-size: 0.9375rem;
+    font-weight: 650;
+    line-height: 1.35;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--color-text);
+}
+
+.order-card__date {
+    margin-top: var(--sp-1);
+    color: var(--color-text-muted);
+    font-size: 0.8125rem;
+}
+
+.order-card__meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--sp-2) var(--sp-3);
+    padding-top: var(--sp-3);
+    border-top: 1px solid var(--color-border);
+}
+
+.order-card__cancel-note {
+    font-size: 0.75rem;
+    color: var(--color-danger);
+    font-weight: 500;
+}
+
+.order-card__amount {
+    margin-left: auto;
+    font-size: 0.9375rem;
+    white-space: nowrap;
+}
+
+.order-card__view {
+    margin-left: auto;
+    margin-top: var(--sp-2);
+    width: 100%;
+}
+
+@media (min-width: 720px) {
+    .orders-page {
+        padding-top: var(--sp-5);
+    }
+
+    .orders-header h1 {
+        font-size: 1.75rem;
+    }
+
+    .order-card {
+        flex-direction: row;
+        align-items: center;
+        gap: var(--sp-4);
+    }
+
+    .order-card__meta {
+        padding-top: 0;
+        border-top: 0;
+    }
+
+    .order-card__amount {
+        margin-left: 0;
+    }
+
+    .order-card__view {
+        margin-left: 0;
+        margin-top: 0;
+        width: auto;
+    }
+
+    .order-card__thumb {
+        width: 72px;
+        height: 90px;
+    }
+}
+
+@media (min-width: 1024px) {
+    .orders-header h1 {
+        font-size: 2rem;
+    }
+}
