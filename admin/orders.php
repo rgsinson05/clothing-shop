@@ -26,88 +26,113 @@ $ordersStmt->execute();
 $orders = $ordersStmt->fetchAll();
 
 $adminName = $_SESSION['admin_name'] ?? 'Admin';
+
+$orderStatusBadgeClasses = [
+    'PENDING' => 'badge-pending',
+    'CONFIRMED' => 'badge-info',
+    'PACKED' => 'badge-warning',
+    'SHIPPED' => 'badge-info',
+    'DELIVERED' => 'badge-success',
+    'CANCELLED' => 'badge-cancelled'
+];
+
+$cancellationStatusBadgeClasses = [
+    'NONE' => 'badge-cancellation-none',
+    'REQUESTED' => 'badge-cancellation-requested',
+    'APPROVED' => 'badge-cancellation-approved',
+    'REJECTED' => 'badge-cancellation-rejected'
+];
+
+$page_title = "Orders - Admin - Hopia's Ukay-Ukay";
+$page_description = "Manage customer orders at Hopia's Ukay-Ukay.";
+$ui_section = 'admin';
+$ui_active = 'orders.php';
+$body_class = 'admin-orders-page';
+
+require __DIR__ . '/../includes/ui.head.php';
+require __DIR__ . '/../includes/ui.header.php';
 ?>
 
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Orders - Admin - Hopia's Ukay-Ukay</title>
-</head>
-<body>
-
-    <h1>Orders</h1>
-
-    <p>
-        Welcome, <?= htmlspecialchars($adminName) ?>.
-    </p>
-
-    <p>
-        <a href="index.php">Dashboard</a>
-        |
-        <a href="logout.php">Logout</a>
-    </p>
-
-    <hr>
+<div class="admin-orders">
+    <header class="admin-page-header">
+        <div>
+            <p class="admin-page-header__eyebrow">Order management</p>
+            <h1>ORDERS</h1>
+            <p class="admin-page-header__copy">
+                Welcome, <?= htmlspecialchars($adminName) ?>. Review and manage customer orders from one place.
+            </p>
+        </div>
+    </header>
 
     <?php if (count($orders) === 0): ?>
 
-        <p>No orders have been placed yet.</p>
+        <div class="empty-state">
+            <p>No orders have been placed yet.</p>
+        </div>
 
     <?php else: ?>
 
-        <table border="1" cellpadding="8">
-            <thead>
-                <tr>
-                    <th>Order ID</th>
-                    <th>Customer Name</th>
-                    <th>Order Date</th>
-                    <th>Total Amount</th>
-                    <th>Order Status</th>
-                    <th>Cancellation Status</th>
-                    <th>Action</th>
-                </tr>
-            </thead>
+        <div class="admin-orders__summary">
+            <p class="text-small muted">
+                Showing <?= count($orders) ?> order<?= count($orders) === 1 ? '' : 's' ?>, newest first.
+            </p>
+        </div>
 
-            <tbody>
-                <?php foreach ($orders as $order): ?>
+        <div class="admin-order-list">
+            <?php foreach ($orders as $order): ?>
+                <?php
+                $orderStatus = (string) $order['status'];
+                $cancellationStatus = (string) $order['cancellation_status'];
+                $orderStatusBadgeClass = $orderStatusBadgeClasses[$orderStatus] ?? 'badge';
+                $cancellationStatusBadgeClass = $cancellationStatusBadgeClasses[$cancellationStatus] ?? 'badge';
+                ?>
 
-                    <tr>
-                        <td>#<?= htmlspecialchars((string) $order['id'], ENT_QUOTES, 'UTF-8') ?></td>
+                <article class="admin-order-card">
+                    <div class="admin-order-card__header">
+                        <div>
+                            <p class="admin-order-card__eyebrow">Order</p>
+                            <h2>#<?= htmlspecialchars((string) $order['id'], ENT_QUOTES, 'UTF-8') ?></h2>
+                        </div>
 
-                        <td>
-                            <?= htmlspecialchars($order['customer_name'], ENT_QUOTES, 'UTF-8') ?>
-                        </td>
+                        <div class="admin-order-card__statuses">
+                            <span class="badge <?= htmlspecialchars($orderStatusBadgeClass, ENT_QUOTES, 'UTF-8') ?>">
+                                <?= htmlspecialchars($orderStatus, ENT_QUOTES, 'UTF-8') ?>
+                            </span>
+                            <span class="badge <?= htmlspecialchars($cancellationStatusBadgeClass, ENT_QUOTES, 'UTF-8') ?>">
+                                <?= htmlspecialchars($cancellationStatus, ENT_QUOTES, 'UTF-8') ?>
+                            </span>
+                        </div>
+                    </div>
 
-                        <td>
-                            <?= htmlspecialchars(date('M j, Y g:i A', strtotime($order['created_at'])), ENT_QUOTES, 'UTF-8') ?>
-                        </td>
+                    <dl class="admin-order-card__details">
+                        <div>
+                            <dt>Customer</dt>
+                            <dd><?= htmlspecialchars($order['customer_name'], ENT_QUOTES, 'UTF-8') ?></dd>
+                        </div>
+                        <div>
+                            <dt>Order date</dt>
+                            <dd><?= htmlspecialchars(date('M j, Y g:i A', strtotime($order['created_at'])), ENT_QUOTES, 'UTF-8') ?></dd>
+                        </div>
+                        <div>
+                            <dt>Total amount</dt>
+                            <dd class="admin-order-card__total">₱<?= number_format((float) $order['total_amount'], 2) ?></dd>
+                        </div>
+                        <div>
+                            <dt>Cancellation</dt>
+                            <dd><?= htmlspecialchars($cancellationStatus, ENT_QUOTES, 'UTF-8') ?></dd>
+                        </div>
+                    </dl>
 
-                        <td>
-                            ₱<?= number_format((float) $order['total_amount'], 2) ?>
-                        </td>
-
-                        <td>
-                            <?= htmlspecialchars($order['status'], ENT_QUOTES, 'UTF-8') ?>
-                        </td>
-
-                        <td>
-                            <?= htmlspecialchars($order['cancellation_status'], ENT_QUOTES, 'UTF-8') ?>
-                        </td>
-
-                        <td>
-                            <a href="order-view.php?id=<?= (int) $order['id'] ?>">
-                                View Order
-                            </a>
-                        </td>
-                    </tr>
-
-                <?php endforeach; ?>
-            </tbody>
-        </table>
+                    <div class="admin-order-card__actions">
+                        <a class="btn btn-primary btn-sm" href="order-view.php?id=<?= (int) $order['id'] ?>">
+                            View Order
+                        </a>
+                    </div>
+                </article>
+            <?php endforeach; ?>
+        </div>
 
     <?php endif; ?>
+</div>
 
-</body>
-</html>
+<?php require __DIR__ . '/../includes/ui.footer.php'; ?>
