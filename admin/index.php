@@ -12,6 +12,7 @@ $adminName = $_SESSION['admin_name'] ?? 'Admin';
 $inventoryTotal = 0;
 $inventoryAvailable = 0;
 $inventorySold = 0;
+$pendingOrders = 0;
 
 $categoryBreakdown = [
     'SHIRTS' => ['AVAILABLE' => 0, 'SOLD' => 0],
@@ -51,70 +52,131 @@ try {
             $categoryBreakdown[$row['category']][$row['status']] = (int) $row['item_count'];
         }
     }
+
+    $pendingOrders = (int) $pdo->query(
+        "SELECT COUNT(*) FROM orders WHERE status = 'PENDING'"
+    )->fetchColumn();
 } catch (Exception $e) {
     $inventoryError = true;
 }
 ?>
 
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Admin Dashboard - Hopia's Ukay-Ukay</title>
-</head>
-<body>
+<?php
+$page_title = "Dashboard - Admin - Hopia's Ukay-Ukay";
+$ui_section = 'admin';
+$ui_active = 'index.php';
+$body_class = 'admin-dashboard-page';
 
-    <h1>Admin Dashboard</h1>
+require __DIR__ . '/../includes/ui.head.php';
+require __DIR__ . '/../includes/ui.header.php';
+?>
 
-    <p>Welcome, <?= htmlspecialchars($adminName) ?>!</p>
-
-    <p>You are logged in as an administrator.</p>
-
-    <h2>Inventory Summary</h2>
+<div class="admin-dashboard">
+    <header class="admin-dashboard__header">
+        <p class="admin-dashboard__eyebrow">Admin overview</p>
+        <h1>DASHBOARD</h1>
+        <p class="admin-dashboard__welcome">
+            Welcome, <?= htmlspecialchars($adminName) ?>. You are logged in as an administrator.
+        </p>
+    </header>
 
     <?php if ($inventoryError): ?>
 
-        <p>Inventory summary is temporarily unavailable. Please try again later.</p>
+        <div class="alert alert-error" role="alert">
+            Inventory summary is temporarily unavailable. Please try again later.
+        </div>
 
     <?php else: ?>
 
-        <p>Total Products: <?= (int) $inventoryTotal ?></p>
-        <p>Available: <?= (int) $inventoryAvailable ?></p>
-        <p>Sold: <?= (int) $inventorySold ?></p>
+        <section class="admin-dashboard__section" aria-labelledby="summary-title">
+            <div class="admin-dashboard__section-heading">
+                <div>
+                    <p class="admin-dashboard__eyebrow">At a glance</p>
+                    <h2 id="summary-title">Store summary</h2>
+                </div>
+            </div>
 
-        <h3>Category Breakdown</h3>
+            <div class="admin-stat-grid">
+                <article class="admin-stat-card">
+                    <p class="admin-stat-card__label">Total products</p>
+                    <p class="admin-stat-card__value"><?= (int) $inventoryTotal ?></p>
+                </article>
 
-        <table border="1" cellpadding="8">
-            <thead>
-                <tr>
-                    <th>Category</th>
-                    <th>Available</th>
-                    <th>Sold</th>
-                </tr>
-            </thead>
-            <tbody>
-                <?php foreach ($categoryBreakdown as $category => $counts): ?>
-                <tr>
-                    <td><?= htmlspecialchars($category) ?></td>
-                    <td><?= (int) $counts['AVAILABLE'] ?></td>
-                    <td><?= (int) $counts['SOLD'] ?></td>
-                </tr>
-                <?php endforeach; ?>
-            </tbody>
-        </table>
+                <article class="admin-stat-card">
+                    <p class="admin-stat-card__label">Available products</p>
+                    <p class="admin-stat-card__value"><?= (int) $inventoryAvailable ?></p>
+                </article>
+
+                <article class="admin-stat-card">
+                    <p class="admin-stat-card__label">Sold products</p>
+                    <p class="admin-stat-card__value"><?= (int) $inventorySold ?></p>
+                </article>
+
+                <article class="admin-stat-card">
+                    <p class="admin-stat-card__label">Pending orders</p>
+                    <p class="admin-stat-card__value"><?= (int) $pendingOrders ?></p>
+                </article>
+            </div>
+        </section>
+
+        <section class="admin-dashboard__section" aria-labelledby="category-breakdown-title">
+            <div class="card">
+                <div class="card-body">
+                    <div class="admin-dashboard__section-heading">
+                        <div>
+                            <p class="admin-dashboard__eyebrow">Inventory</p>
+                            <h2 id="category-breakdown-title">Category breakdown</h2>
+                        </div>
+                    </div>
+
+                    <div class="table-wrap">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th scope="col">Category</th>
+                                    <th scope="col">Available</th>
+                                    <th scope="col">Sold</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <?php foreach ($categoryBreakdown as $category => $counts): ?>
+                                <tr>
+                                    <th scope="row"><?= htmlspecialchars($category) ?></th>
+                                    <td><?= (int) $counts['AVAILABLE'] ?></td>
+                                    <td><?= (int) $counts['SOLD'] ?></td>
+                                </tr>
+                                <?php endforeach; ?>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </section>
 
     <?php endif; ?>
 
-    <p>
-    <a href="products.php">Manage Products</a>
-    </p>
+    <section class="admin-dashboard__section" aria-labelledby="actions-title">
+        <div class="admin-dashboard__section-heading">
+            <div>
+                <p class="admin-dashboard__eyebrow">Keep things moving</p>
+                <h2 id="actions-title">Quick actions</h2>
+            </div>
+        </div>
 
-    <p>
-    <a href="orders.php">Manage Orders</a>
-    </p>
+        <div class="admin-actions-grid">
+            <a class="admin-action-card" href="products.php">
+                <span class="admin-action-card__title">Manage products</span>
+                <span class="admin-action-card__description">Add, edit, or remove inventory.</span>
+                <span class="admin-action-card__link">Open products</span>
+            </a>
 
-    <a href="logout.php">Logout</a>
+            <a class="admin-action-card" href="orders.php">
+                <span class="admin-action-card__title">Manage orders</span>
+                <span class="admin-action-card__description">Review customer orders and updates.</span>
+                <span class="admin-action-card__link">Open orders</span>
+            </a>
+        </div>
+    </section>
+</div>
 
-</body>
-</html>
+<?php require __DIR__ . '/../includes/ui.footer.php'; ?>
