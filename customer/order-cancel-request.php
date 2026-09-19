@@ -26,7 +26,7 @@ if (empty($_SESSION['csrf_token'])) {
 /*
  * Redirect helper for the POST/Redirect/GET flow. When a valid
  * order ID is known, the customer is sent back to the order
- * confirmation page, otherwise to the orders list. Every failure
+ * detail page, otherwise to the orders list. Every failure
  * shares the same generic error flag so order ownership and
  * order state are never revealed.
  */
@@ -37,7 +37,7 @@ function orderCancelRedirect(?int $orderId, bool $success = false)
         $query = $success
             ? 'id=' . $orderId . '&cancel_requested=1'
             : 'id=' . $orderId . '&cancel_error=1';
-        header('Location: order-confirmation.php?' . $query);
+        header('Location: order-detail.php?' . $query);
     } else {
         header('Location: orders.php');
     }

@@ -221,7 +221,7 @@ require __DIR__ . '/../includes/ui.header.php';
                 $statusLabel = $orderStatusLabels[$orderStatus] ?? $orderStatus;
                 $badgeClass = $orderStatusBadgeClasses[$orderStatus] ?? 'badge';
                 $item = $orderItemsMap[$orderId] ?? null;
-                $viewUrl = 'order-confirmation.php?id=' . $orderId;
+                $viewUrl = 'order-detail.php?id=' . $orderId;
                 $hasCancellation = $cancellationStatus !== 'NONE'
                     && isset($cancellationStatusLabels[$cancellationStatus]);
             ?>
