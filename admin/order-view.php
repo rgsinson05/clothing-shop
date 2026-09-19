@@ -666,259 +666,355 @@ $showTrackingForm = $order !== false
     && $order['cancellation_status'] !== 'REQUESTED';
 
 ?>
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><?= htmlspecialchars($pageTitle, ENT_QUOTES, 'UTF-8') ?> - Admin - Hopia's Ukay-Ukay</title>
-</head>
-<body>
+<?php
+$orderStatusBadgeClasses = [
+    'PENDING' => 'badge-pending',
+    'CONFIRMED' => 'badge-info',
+    'PACKED' => 'badge-warning',
+    'SHIPPED' => 'badge-info',
+    'DELIVERED' => 'badge-success',
+    'CANCELLED' => 'badge-cancelled'
+];
 
-    <h1><?= htmlspecialchars($pageTitle, ENT_QUOTES, 'UTF-8') ?></h1>
+$cancellationStatusBadgeClasses = [
+    'NONE' => 'badge-cancellation-none',
+    'REQUESTED' => 'badge-cancellation-requested',
+    'APPROVED' => 'badge-cancellation-approved',
+    'REJECTED' => 'badge-cancellation-rejected'
+];
 
-    <p>
-        Welcome, <?= htmlspecialchars($adminName, ENT_QUOTES, 'UTF-8') ?>.
-    </p>
+$paymentStatusBadgeClasses = [
+    'PENDING' => 'badge-pending',
+    'PAID' => 'badge-success',
+    'FAILED' => 'badge-cancelled',
+    'REFUNDED' => 'badge-warning'
+];
 
-    <p>
-        <a href="index.php">Dashboard</a>
-        |
-        <a href="orders.php">Orders</a>
-        |
-        <a href="logout.php">Logout</a>
-    </p>
+$shipmentStatusBadgeClasses = [
+    'NOT_SHIPPED' => 'badge-pending',
+    'READY_TO_SHIP' => 'badge-warning',
+    'SHIPPED' => 'badge-info',
+    'IN_TRANSIT' => 'badge-info',
+    'OUT_FOR_DELIVERY' => 'badge-warning',
+    'DELIVERED' => 'badge-success'
+];
 
-    <hr>
+$page_title = $pageTitle . " - Admin - Hopia's Ukay-Ukay";
+$page_description = "Review and manage order details at Hopia's Ukay-Ukay.";
+$ui_section = 'admin';
+$ui_active = 'orders.php';
+$body_class = 'admin-order-detail-page';
 
+require __DIR__ . '/../includes/ui.head.php';
+require __DIR__ . '/../includes/ui.header.php';
+?>
+
+<div class="admin-order-detail">
     <?php if ($updatedFlag === 1): ?>
-
-        <p role="status">The order has been updated.</p>
-
+        <div class="alert alert-success" role="status">The order has been updated.</div>
     <?php endif; ?>
 
     <?php if ($actionError !== ''): ?>
-
-        <p role="alert"><?= htmlspecialchars($actionError, ENT_QUOTES, 'UTF-8') ?></p>
-
+        <div class="alert alert-error" role="alert"><?= htmlspecialchars($actionError, ENT_QUOTES, 'UTF-8') ?></div>
     <?php endif; ?>
 
     <?php if ($order === false): ?>
-
-        <p>Order not found. The order ID may be missing, invalid, or the order may no longer exist.</p>
-
-        <p>
-            <a href="orders.php">&larr; Back to Orders</a>
-        </p>
-
+        <div class="admin-order-detail__empty">
+            <p class="admin-page-header__eyebrow">Order management</p>
+            <h1>ORDER NOT FOUND</h1>
+            <p>Order not found. The order ID may be missing, invalid, or the order may no longer exist.</p>
+            <a class="btn btn-primary" href="orders.php">Back to Orders</a>
+        </div>
     <?php else: ?>
+        <header class="admin-order-detail__header">
+            <div>
+                <a class="admin-page-header__back" href="orders.php">&larr; Back to Orders</a>
+                <p class="admin-page-header__eyebrow">Order management</p>
+                <h1>ORDER #<?= (int) $order['id'] ?></h1>
+                <p class="admin-order-detail__date">
+                    Placed on <?= htmlspecialchars(date('M j, Y g:i A', strtotime($order['created_at'])), ENT_QUOTES, 'UTF-8') ?>
+                </p>
+            </div>
 
-        <section aria-labelledby="order-information-heading">
-            <h2 id="order-information-heading">Order Information</h2>
+            <div class="admin-order-detail__header-status" aria-label="Order statuses">
+                <span class="badge <?= htmlspecialchars($orderStatusBadgeClasses[$order['status']] ?? 'badge', ENT_QUOTES, 'UTF-8') ?>">
+                    <?= htmlspecialchars($order['status'], ENT_QUOTES, 'UTF-8') ?>
+                </span>
+                <span class="badge <?= htmlspecialchars($cancellationStatusBadgeClasses[$order['cancellation_status']] ?? 'badge', ENT_QUOTES, 'UTF-8') ?>">
+                    <?= htmlspecialchars($order['cancellation_status'], ENT_QUOTES, 'UTF-8') ?>
+                </span>
+            </div>
+        </header>
 
-            <dl>
-                <dt>Order ID:</dt>
-                <dd>#<?= (int) $order['id'] ?></dd>
+        <div class="admin-order-detail__layout">
+            <div class="admin-order-detail__main">
+                <section class="admin-order-detail__card" aria-labelledby="order-status-heading">
+                    <div class="admin-order-detail__card-head">
+                        <div>
+                            <p class="admin-order-detail__eyebrow">Current state</p>
+                            <h2 id="order-status-heading">Order status</h2>
+                        </div>
+                        <span class="badge <?= htmlspecialchars($orderStatusBadgeClasses[$order['status']] ?? 'badge', ENT_QUOTES, 'UTF-8') ?>">
+                            <?= htmlspecialchars($order['status'], ENT_QUOTES, 'UTF-8') ?>
+                        </span>
+                    </div>
 
-                <dt>Order Date:</dt>
-                <dd><?= htmlspecialchars(date('M j, Y g:i A', strtotime($order['created_at'])), ENT_QUOTES, 'UTF-8') ?></dd>
+                    <div class="admin-order-detail__status-meta">
+                        <div>
+                            <span>Order status</span>
+                            <strong><?= htmlspecialchars($orderStatusLabel, ENT_QUOTES, 'UTF-8') ?></strong>
+                        </div>
+                        <div>
+                            <span>Cancellation</span>
+                            <strong><?= htmlspecialchars($cancellationStatusLabel, ENT_QUOTES, 'UTF-8') ?></strong>
+                        </div>
+                    </div>
 
-                <dt>Order Status:</dt>
-                <dd><?= htmlspecialchars($orderStatusLabel, ENT_QUOTES, 'UTF-8') ?></dd>
+                    <div class="admin-order-detail__actions">
+                        <?php if ($showCancellationActions): ?>
+                            <div class="admin-order-detail__action-note">
+                                <p class="admin-order-detail__eyebrow">Cancellation request</p>
+                                <p>This order is waiting for a cancellation decision.</p>
+                            </div>
 
-                <dt>Cancellation Status:</dt>
-                <dd><?= htmlspecialchars($cancellationStatusLabel, ENT_QUOTES, 'UTF-8') ?></dd>
-            </dl>
-        </section>
+                            <div class="admin-order-detail__action-buttons">
+                                <form method="POST" action="order-view.php?id=<?= (int) $order['id'] ?>">
+                                    <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($adminCsrfToken, ENT_QUOTES, 'UTF-8') ?>">
+                                    <input type="hidden" name="order_id" value="<?= (int) $order['id'] ?>">
+                                    <input type="hidden" name="action" value="approve_cancellation">
+                                    <button class="btn btn-primary" type="submit" onclick="return confirm('Approve this cancellation request? The ordered items will become available again.')">
+                                        Approve Cancellation
+                                    </button>
+                                </form>
 
-        <section aria-labelledby="customer-information-heading">
-            <h2 id="customer-information-heading">Customer Information</h2>
+                                <form method="POST" action="order-view.php?id=<?= (int) $order['id'] ?>">
+                                    <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($adminCsrfToken, ENT_QUOTES, 'UTF-8') ?>">
+                                    <input type="hidden" name="order_id" value="<?= (int) $order['id'] ?>">
+                                    <input type="hidden" name="action" value="reject_cancellation">
+                                    <button class="btn btn-danger" type="submit" onclick="return confirm('Reject this cancellation request? The order will remain pending.')">
+                                        Reject Cancellation
+                                    </button>
+                                </form>
+                            </div>
+                        <?php elseif ($nextOrderStatus !== null): ?>
+                            <div class="admin-order-detail__action-note">
+                                <p class="admin-order-detail__eyebrow">Next step</p>
+                                <p>Advance this order when the next fulfillment step is complete.</p>
+                            </div>
 
-            <dl>
-                <dt>Customer Name:</dt>
-                <dd><?= htmlspecialchars($order['customer_name'], ENT_QUOTES, 'UTF-8') ?></dd>
+                            <form method="POST" action="order-view.php?id=<?= (int) $order['id'] ?>">
+                                <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($adminCsrfToken, ENT_QUOTES, 'UTF-8') ?>">
+                                <input type="hidden" name="order_id" value="<?= (int) $order['id'] ?>">
+                                <input type="hidden" name="action" value="advance_status">
+                                <button class="btn btn-primary" type="submit">
+                                    Mark as <?= htmlspecialchars($nextOrderStatusLabel, ENT_QUOTES, 'UTF-8') ?>
+                                </button>
+                            </form>
+                        <?php else: ?>
+                            <p class="muted">No actions are available for this order.</p>
+                        <?php endif; ?>
+                    </div>
+                </section>
 
-                <dt>Email:</dt>
-                <dd><?= htmlspecialchars($order['customer_email'], ENT_QUOTES, 'UTF-8') ?></dd>
+                <section class="admin-order-detail__card" aria-labelledby="ordered-items-heading">
+                    <div class="admin-order-detail__card-head">
+                        <div>
+                            <p class="admin-order-detail__eyebrow">Order contents</p>
+                            <h2 id="ordered-items-heading">Items</h2>
+                        </div>
+                        <span class="text-small muted"><?= count($orderItems) ?> item<?= count($orderItems) === 1 ? '' : 's' ?></span>
+                    </div>
 
-                <dt>Phone:</dt>
-                <dd><?= $customerPhone !== '' ? htmlspecialchars($customerPhone, ENT_QUOTES, 'UTF-8') : '&mdash;' ?></dd>
-            </dl>
-        </section>
+                    <?php if (count($orderItems) === 0): ?>
+                        <p class="muted">No items are recorded for this order.</p>
+                    <?php else: ?>
+                        <div class="admin-order-items" role="list">
+                            <?php foreach ($orderItems as $item): ?>
+                                <?php
+                                $size = trim($item['size'] ?? '');
+                                $color = trim($item['color'] ?? '');
+                                ?>
+                                <article class="admin-order-item" role="listitem">
+                                    <div class="admin-order-item__info">
+                                        <h3><?= htmlspecialchars($item['product_name'], ENT_QUOTES, 'UTF-8') ?></h3>
+                                        <p class="admin-order-item__meta">
+                                            Size: <?= $size !== '' ? htmlspecialchars($size, ENT_QUOTES, 'UTF-8') : '&mdash;' ?>
+                                            <span aria-hidden="true">&middot;</span>
+                                            Color: <?= $color !== '' ? htmlspecialchars($color, ENT_QUOTES, 'UTF-8') : '&mdash;' ?>
+                                        </p>
+                                    </div>
+                                    <dl class="admin-order-item__details">
+                                        <div>
+                                            <dt>Unit price</dt>
+                                            <dd>₱<?= number_format((float) $item['unit_price'], 2) ?></dd>
+                                        </div>
+                                        <div>
+                                            <dt>Quantity</dt>
+                                            <dd><?= htmlspecialchars((string) (int) $item['quantity'], ENT_QUOTES, 'UTF-8') ?></dd>
+                                        </div>
+                                        <div>
+                                            <dt>Subtotal</dt>
+                                            <dd>₱<?= number_format((float) $item['subtotal'], 2) ?></dd>
+                                        </div>
+                                    </dl>
+                                </article>
+                            <?php endforeach; ?>
+                        </div>
+                    <?php endif; ?>
+                </section>
 
-        <section aria-labelledby="ordered-items-heading">
-            <h2 id="ordered-items-heading">Ordered Items</h2>
+                <div class="admin-order-detail__info-grid">
+                    <section class="admin-order-detail__card" aria-labelledby="customer-information-heading">
+                        <div class="admin-order-detail__card-head">
+                            <div>
+                                <p class="admin-order-detail__eyebrow">Customer</p>
+                                <h2 id="customer-information-heading">Customer information</h2>
+                            </div>
+                        </div>
 
-            <?php if (count($orderItems) === 0): ?>
+                        <dl class="admin-order-detail__details">
+                            <div>
+                                <dt>Name</dt>
+                                <dd><?= htmlspecialchars($order['customer_name'], ENT_QUOTES, 'UTF-8') ?></dd>
+                            </div>
+                            <div>
+                                <dt>Email</dt>
+                                <dd><?= htmlspecialchars($order['customer_email'], ENT_QUOTES, 'UTF-8') ?></dd>
+                            </div>
+                            <div>
+                                <dt>Phone</dt>
+                                <dd><?= $customerPhone !== '' ? htmlspecialchars($customerPhone, ENT_QUOTES, 'UTF-8') : '&mdash;' ?></dd>
+                            </div>
+                        </dl>
+                    </section>
 
-                <p>No items are recorded for this order.</p>
+                    <section class="admin-order-detail__card" aria-labelledby="shipping-information-heading">
+                        <div class="admin-order-detail__card-head">
+                            <div>
+                                <p class="admin-order-detail__eyebrow">Delivery</p>
+                                <h2 id="shipping-information-heading">Shipping information</h2>
+                            </div>
+                        </div>
 
-            <?php else: ?>
+                        <dl class="admin-order-detail__details">
+                            <div>
+                                <dt>Name</dt>
+                                <dd><?= htmlspecialchars($order['shipping_name'], ENT_QUOTES, 'UTF-8') ?></dd>
+                            </div>
+                            <div>
+                                <dt>Phone</dt>
+                                <dd><?= htmlspecialchars($order['shipping_phone'], ENT_QUOTES, 'UTF-8') ?></dd>
+                            </div>
+                            <div>
+                                <dt>Address</dt>
+                                <dd><?= htmlspecialchars($order['shipping_address'], ENT_QUOTES, 'UTF-8') ?></dd>
+                            </div>
+                        </dl>
+                    </section>
+                </div>
 
-                <table border="1" cellpadding="8">
-                    <thead>
-                        <tr>
-                            <th>Product</th>
-                            <th>Size</th>
-                            <th>Color</th>
-                            <th>Unit Price</th>
-                            <th>Quantity</th>
-                            <th>Subtotal</th>
-                        </tr>
-                    </thead>
+                <section class="admin-order-detail__card" aria-labelledby="payment-heading">
+                    <div class="admin-order-detail__card-head">
+                        <div>
+                            <p class="admin-order-detail__eyebrow">Payment</p>
+                            <h2 id="payment-heading">Payment information</h2>
+                        </div>
+                        <span class="badge <?= htmlspecialchars($paymentStatusBadgeClasses[$payment !== false ? ($payment['payment_status'] ?? '') : ''] ?? 'badge', ENT_QUOTES, 'UTF-8') ?>">
+                            <?= htmlspecialchars($paymentStatusLabel, ENT_QUOTES, 'UTF-8') ?>
+                        </span>
+                    </div>
 
-                    <tbody>
-                        <?php foreach ($orderItems as $item): ?>
-                            <?php
-                            $size = trim($item['size'] ?? '');
-                            $color = trim($item['color'] ?? '');
-                            ?>
-                            <tr>
-                                <td><?= htmlspecialchars($item['product_name'], ENT_QUOTES, 'UTF-8') ?></td>
-                                <td><?= $size !== '' ? htmlspecialchars($size, ENT_QUOTES, 'UTF-8') : '&mdash;' ?></td>
-                                <td><?= $color !== '' ? htmlspecialchars($color, ENT_QUOTES, 'UTF-8') : '&mdash;' ?></td>
-                                <td>₱<?= number_format((float) $item['unit_price'], 2) ?></td>
-                                <td><?= htmlspecialchars((string) (int) $item['quantity'], ENT_QUOTES, 'UTF-8') ?></td>
-                                <td>₱<?= number_format((float) $item['subtotal'], 2) ?></td>
-                            </tr>
+                    <dl class="admin-order-detail__details admin-order-detail__details--inline">
+                        <div>
+                            <dt>Payment method</dt>
+                            <dd><?= htmlspecialchars($paymentMethodLabel, ENT_QUOTES, 'UTF-8') ?></dd>
+                        </div>
+                        <div>
+                            <dt>Payment status</dt>
+                            <dd><?= htmlspecialchars($paymentStatusLabel, ENT_QUOTES, 'UTF-8') ?></dd>
+                        </div>
+                    </dl>
+                </section>
 
-                        <?php endforeach; ?>
-                    </tbody>
-                </table>
+                <section class="admin-order-detail__card" aria-labelledby="shipment-heading">
+                    <div class="admin-order-detail__card-head">
+                        <div>
+                            <p class="admin-order-detail__eyebrow">Fulfillment</p>
+                            <h2 id="shipment-heading">Shipment and tracking</h2>
+                        </div>
+                        <span class="badge <?= htmlspecialchars($shipmentStatusBadgeClasses[$shipment !== false ? ($shipment['shipment_status'] ?? '') : ''] ?? 'badge', ENT_QUOTES, 'UTF-8') ?>">
+                            <?= htmlspecialchars($shipmentStatusLabel, ENT_QUOTES, 'UTF-8') ?>
+                        </span>
+                    </div>
 
-            <?php endif; ?>
-        </section>
+                    <dl class="admin-order-detail__details admin-order-detail__details--inline">
+                        <div>
+                            <dt>Shipment status</dt>
+                            <dd><?= htmlspecialchars($shipmentStatusLabel, ENT_QUOTES, 'UTF-8') ?></dd>
+                        </div>
+                        <div>
+                            <dt>Tracking number</dt>
+                            <dd><?= $trackingNumber !== '' ? htmlspecialchars($trackingNumber, ENT_QUOTES, 'UTF-8') : '&mdash;' ?></dd>
+                        </div>
+                        <div>
+                            <dt>Shipped at</dt>
+                            <dd><?= $shippedAtDisplay !== '' ? htmlspecialchars($shippedAtDisplay, ENT_QUOTES, 'UTF-8') : '&mdash;' ?></dd>
+                        </div>
+                        <div>
+                            <dt>Delivered at</dt>
+                            <dd><?= $deliveredAtDisplay !== '' ? htmlspecialchars($deliveredAtDisplay, ENT_QUOTES, 'UTF-8') : '&mdash;' ?></dd>
+                        </div>
+                    </dl>
 
-        <section aria-labelledby="totals-heading">
-            <h2 id="totals-heading">Totals</h2>
+                    <?php if ($showTrackingForm): ?>
+                        <form class="admin-order-detail__tracking-form" method="POST" action="order-view.php?id=<?= (int) $order['id'] ?>">
+                            <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($adminCsrfToken, ENT_QUOTES, 'UTF-8') ?>">
+                            <input type="hidden" name="order_id" value="<?= (int) $order['id'] ?>">
+                            <input type="hidden" name="action" value="save_tracking_number">
 
-            <dl>
-                <dt>Subtotal:</dt>
-                <dd>₱<?= number_format((float) $order['subtotal'], 2) ?></dd>
+                            <div class="field">
+                                <label for="tracking-number-input">Tracking number</label>
+                                <input
+                                    type="text"
+                                    id="tracking-number-input"
+                                    name="tracking_number"
+                                    maxlength="100"
+                                    value="<?= htmlspecialchars($trackingNumber, ENT_QUOTES, 'UTF-8') ?>"
+                                >
+                            </div>
+                            <button class="btn btn-secondary" type="submit">Save Tracking Number</button>
+                        </form>
+                    <?php endif; ?>
+                </section>
+            </div>
 
-                <dt>Shipping Fee:</dt>
-                <dd>₱<?= number_format((float) $order['shipping_fee'], 2) ?></dd>
+            <aside class="admin-order-detail__aside">
+                <section class="admin-order-detail__card admin-order-detail__totals" aria-labelledby="totals-heading">
+                    <div class="admin-order-detail__card-head">
+                        <div>
+                            <p class="admin-order-detail__eyebrow">Order summary</p>
+                            <h2 id="totals-heading">Totals</h2>
+                        </div>
+                    </div>
 
-                <dt>Total Amount:</dt>
-                <dd>₱<?= number_format((float) $order['total_amount'], 2) ?></dd>
-            </dl>
-        </section>
-
-        <section aria-labelledby="shipping-information-heading">
-            <h2 id="shipping-information-heading">Shipping Information</h2>
-
-            <dl>
-                <dt>Shipping Name:</dt>
-                <dd><?= htmlspecialchars($order['shipping_name'], ENT_QUOTES, 'UTF-8') ?></dd>
-
-                <dt>Shipping Phone:</dt>
-                <dd><?= htmlspecialchars($order['shipping_phone'], ENT_QUOTES, 'UTF-8') ?></dd>
-
-                <dt>Shipping Address:</dt>
-                <dd><?= htmlspecialchars($order['shipping_address'], ENT_QUOTES, 'UTF-8') ?></dd>
-            </dl>
-        </section>
-
-        <section aria-labelledby="payment-heading">
-            <h2 id="payment-heading">Payment</h2>
-
-            <dl>
-                <dt>Payment Method:</dt>
-                <dd><?= htmlspecialchars($paymentMethodLabel, ENT_QUOTES, 'UTF-8') ?></dd>
-
-                <dt>Payment Status:</dt>
-                <dd><?= htmlspecialchars($paymentStatusLabel, ENT_QUOTES, 'UTF-8') ?></dd>
-            </dl>
-        </section>
-
-        <section aria-labelledby="shipment-heading">
-            <h2 id="shipment-heading">Shipment</h2>
-
-            <dl>
-                <dt>Shipment Status:</dt>
-                <dd><?= htmlspecialchars($shipmentStatusLabel, ENT_QUOTES, 'UTF-8') ?></dd>
-
-                <dt>Tracking Number:</dt>
-                <dd><?= $trackingNumber !== '' ? htmlspecialchars($trackingNumber, ENT_QUOTES, 'UTF-8') : '&mdash;' ?></dd>
-
-                <dt>Shipped At:</dt>
-                <dd><?= $shippedAtDisplay !== '' ? htmlspecialchars($shippedAtDisplay, ENT_QUOTES, 'UTF-8') : '&mdash;' ?></dd>
-
-                <dt>Delivered At:</dt>
-                <dd><?= $deliveredAtDisplay !== '' ? htmlspecialchars($deliveredAtDisplay, ENT_QUOTES, 'UTF-8') : '&mdash;' ?></dd>
-            </dl>
-
-            <?php if ($showTrackingForm): ?>
-
-                <form method="POST" action="order-view.php?id=<?= (int) $order['id'] ?>">
-                    <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($adminCsrfToken, ENT_QUOTES, 'UTF-8') ?>">
-                    <input type="hidden" name="order_id" value="<?= (int) $order['id'] ?>">
-                    <input type="hidden" name="action" value="save_tracking_number">
-
-                    <label for="tracking-number-input">Tracking Number</label>
-                    <input
-                        type="text"
-                        id="tracking-number-input"
-                        name="tracking_number"
-                        maxlength="100"
-                        value="<?= htmlspecialchars($trackingNumber, ENT_QUOTES, 'UTF-8') ?>"
-                    >
-
-                    <button type="submit">Save Tracking Number</button>
-                </form>
-
-            <?php endif; ?>
-        </section>
-
-        <section aria-labelledby="order-actions-heading">
-            <h2 id="order-actions-heading">Order Actions</h2>
-
-            <?php if ($showCancellationActions): ?>
-
-                <form method="POST" action="order-view.php?id=<?= (int) $order['id'] ?>">
-                    <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($adminCsrfToken, ENT_QUOTES, 'UTF-8') ?>">
-                    <input type="hidden" name="order_id" value="<?= (int) $order['id'] ?>">
-                    <input type="hidden" name="action" value="approve_cancellation">
-
-                    <button type="submit" onclick="return confirm('Approve this cancellation request? The ordered items will become available again.')">
-                        Approve Cancellation
-                    </button>
-                </form>
-
-                <form method="POST" action="order-view.php?id=<?= (int) $order['id'] ?>">
-                    <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($adminCsrfToken, ENT_QUOTES, 'UTF-8') ?>">
-                    <input type="hidden" name="order_id" value="<?= (int) $order['id'] ?>">
-                    <input type="hidden" name="action" value="reject_cancellation">
-
-                    <button type="submit" onclick="return confirm('Reject this cancellation request? The order will remain pending.')">
-                        Reject Cancellation
-                    </button>
-                </form>
-
-            <?php elseif ($nextOrderStatus !== null): ?>
-
-                <form method="POST" action="order-view.php?id=<?= (int) $order['id'] ?>">
-                    <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($adminCsrfToken, ENT_QUOTES, 'UTF-8') ?>">
-                    <input type="hidden" name="order_id" value="<?= (int) $order['id'] ?>">
-                    <input type="hidden" name="action" value="advance_status">
-
-                    <button type="submit">
-                        Mark as <?= htmlspecialchars($nextOrderStatusLabel, ENT_QUOTES, 'UTF-8') ?>
-                    </button>
-                </form>
-
-            <?php else: ?>
-
-                <p>No actions are available for this order.</p>
-
-            <?php endif; ?>
-        </section>
-
-        <p>
-            <a href="orders.php">&larr; Back to Orders</a>
-        </p>
-
+                    <dl class="admin-order-detail__total-list">
+                        <div>
+                            <dt>Subtotal</dt>
+                            <dd>₱<?= number_format((float) $order['subtotal'], 2) ?></dd>
+                        </div>
+                        <div>
+                            <dt>Shipping fee</dt>
+                            <dd>₱<?= number_format((float) $order['shipping_fee'], 2) ?></dd>
+                        </div>
+                        <div class="admin-order-detail__total-list-grand">
+                            <dt>Total amount</dt>
+                            <dd>₱<?= number_format((float) $order['total_amount'], 2) ?></dd>
+                        </div>
+                    </dl>
+                </section>
+            </aside>
+        </div>
     <?php endif; ?>
+</div>
 
-</body>
-</html>
+<?php require __DIR__ . '/../includes/ui.footer.php'; ?>
