@@ -4,6 +4,15 @@ session_start();
 
 require_once __DIR__ . '/../includes/database.php';
 
+define('HUPIA_BASE', '..');
+
+$page_title = 'Customer Login - Hopia\'s Ukay-Ukay';
+$page_description = 'Log in to your customer account at Hopia\'s Ukay-Ukay.';
+$ui_active = 'login.php';
+$body_class = 'login-page';
+
+require_once __DIR__ . '/../includes/ui.php';
+
 $message = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -35,7 +44,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $_SESSION['customer_id'] = $customer['id'];
             $_SESSION['customer_name'] = $customer['first_name'];
 
-            header('Location: account.php');
+            header('Location: ../index.php');
             exit;
         }
 
@@ -44,48 +53,53 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 ?>
 
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Customer Login</title>
-</head>
-<body>
+<?php
+require __DIR__ . '/../includes/ui.head.php';
+require __DIR__ . '/../includes/ui.header.php';
+?>
 
-<h1>Customer Login</h1>
+<section class="login-page__content" aria-labelledby="login-title">
+    <div class="login-card">
+        <header class="login-card__header">
+            <p class="login-card__eyebrow">Hopia's Ukay-Ukay</p>
+            <h1 id="login-title">WELCOME BACK</h1>
+            <p class="login-card__intro">Log in to continue browsing your preloved finds.</p>
+        </header>
 
-<?php if ($message !== ''): ?>
-    <p><?= htmlspecialchars($message) ?></p>
-<?php endif; ?>
+        <?php if ($message !== ''): ?>
+            <p class="alert alert-error" role="alert">
+                <?= htmlspecialchars($message) ?>
+            </p>
+        <?php endif; ?>
 
-<form method="POST">
+        <form class="login-form" method="POST">
+            <div class="field">
+                <label for="email">Email</label>
+                <input
+                    id="email"
+                    type="email"
+                    name="email"
+                    required
+                >
+            </div>
 
-    <label>
-        Email:
-        <input
-            type="email"
-            name="email"
-            required
-        >
-    </label>
+            <div class="field">
+                <label for="password">Password</label>
+                <input
+                    id="password"
+                    type="password"
+                    name="password"
+                    required
+                >
+            </div>
 
-    <br><br>
+            <button class="btn btn-primary btn-block login-form__submit" type="submit">Login</button>
+        </form>
 
-    <label>
-        Password:
-        <input
-            type="password"
-            name="password"
-            required
-        >
-    </label>
+        <p class="login-card__register">
+            New to Hopia? <a href="register.php">Create an account</a>
+        </p>
+    </div>
+</section>
 
-    <br><br>
-
-    <button type="submit">Login</button>
-
-</form>
-
-</body>
-</html>
+<?php require __DIR__ . '/../includes/ui.footer.php'; ?>

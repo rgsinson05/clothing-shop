@@ -252,6 +252,86 @@ pre {
   color: var(--color-primary-dark);
 }
 
+.nav__cart {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  min-height: 44px;
+  border-radius: var(--radius-sm);
+  color: var(--color-text-soft);
+}
+
+.nav__cart:hover {
+  background: var(--color-bg-alt);
+  color: var(--color-text);
+}
+
+.nav__cart[aria-current="page"] {
+  background: var(--color-primary-soft);
+  color: var(--color-primary-dark);
+}
+
+.nav-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text);
+  cursor: pointer;
+}
+
+.nav-toggle:hover {
+  background: var(--color-bg-alt);
+}
+
+.ui-store .brand {
+  margin-right: auto;
+}
+
+.ui-store .site-nav {
+  display: none;
+}
+
+.ui-store .site-header__actions {
+  order: 4;
+  display: none;
+}
+
+.site-header.nav-open .site-nav {
+  display: block;
+  border-top: 1px solid var(--color-border);
+}
+
+.site-header.nav-open .site-nav .nav {
+  flex-direction: column;
+  align-items: stretch;
+  padding-block: var(--sp-2);
+}
+
+.site-header.nav-open .nav a {
+  padding: 0.875rem var(--sp-2);
+}
+
+.site-header.nav-open .site-header__actions {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--sp-2);
+  width: 100%;
+  padding-block: var(--sp-2) var(--sp-3);
+  border-top: 1px solid var(--color-border);
+}
+
+.site-header.nav-open .site-header__actions .btn {
+  width: 100%;
+}
+
 .nav__actions {
   margin-left: auto;
 }
@@ -803,6 +883,193 @@ tbody tr:hover {
   border: 0;
 }
 
+/* Customer registration */
+.register-page .site-main {
+  padding-block: var(--sp-5);
+}
+
+.register-page__content {
+  display: flex;
+  justify-content: center;
+}
+
+.register-card {
+  width: 100%;
+  max-width: 560px;
+  padding: var(--sp-5);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow);
+}
+
+.register-card__header {
+  margin-bottom: var(--sp-5);
+  text-align: center;
+}
+
+.register-card__eyebrow {
+  color: var(--color-primary);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.register-card h1 {
+  margin-top: var(--sp-2);
+  font-size: 1.5rem;
+  letter-spacing: 0.04em;
+}
+
+.register-card__intro {
+  margin-top: var(--sp-2);
+  color: var(--color-text-muted);
+  font-size: 0.9375rem;
+}
+
+.register-card .alert {
+  margin-bottom: var(--sp-5);
+}
+
+.register-form__fields {
+  display: grid;
+  gap: 0 var(--sp-4);
+}
+
+.register-form .field:last-child {
+  margin-bottom: 0;
+}
+
+.register-form__optional {
+  color: var(--color-text-muted);
+  font-size: 0.8125rem;
+  font-weight: 400;
+}
+
+.register-form__submit {
+  margin-top: var(--sp-5);
+  min-height: 48px;
+}
+
+.register-card__login {
+  margin-top: var(--sp-5);
+  padding-top: var(--sp-4);
+  border-top: 1px solid var(--color-border);
+  color: var(--color-text-muted);
+  font-size: 0.9375rem;
+  text-align: center;
+}
+
+@media (min-width: 560px) {
+  .register-page .site-main {
+    padding-block: var(--sp-6);
+  }
+
+  .register-card {
+    padding: var(--sp-6);
+  }
+
+  .register-form__fields {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .register-form__fields .field:nth-child(3),
+  .register-form__fields .field:nth-child(4),
+  .register-form__fields .field:nth-child(5) {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (min-width: 720px) {
+  .register-card h1 {
+    font-size: 1.75rem;
+  }
+}
+
+/* Customer login */
+.login-page .site-main {
+  padding-block: var(--sp-5);
+}
+
+.login-page__content {
+  display: flex;
+  justify-content: center;
+}
+
+.login-card {
+  width: 100%;
+  max-width: 480px;
+  padding: var(--sp-5);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow);
+}
+
+.login-card__header {
+  margin-bottom: var(--sp-5);
+  text-align: center;
+}
+
+.login-card__eyebrow {
+  color: var(--color-primary);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.login-card h1 {
+  margin-top: var(--sp-2);
+  font-size: 1.5rem;
+  letter-spacing: 0.04em;
+}
+
+.login-card__intro {
+  margin-top: var(--sp-2);
+  color: var(--color-text-muted);
+  font-size: 0.9375rem;
+}
+
+.login-card .alert {
+  margin-bottom: var(--sp-5);
+}
+
+.login-form .field:last-of-type {
+  margin-bottom: 0;
+}
+
+.login-form__submit {
+  margin-top: var(--sp-5);
+  min-height: 48px;
+}
+
+.login-card__register {
+  margin-top: var(--sp-5);
+  padding-top: var(--sp-4);
+  border-top: 1px solid var(--color-border);
+  color: var(--color-text-muted);
+  font-size: 0.9375rem;
+  text-align: center;
+}
+
+@media (min-width: 560px) {
+  .login-page .site-main {
+    padding-block: var(--sp-6);
+  }
+
+  .login-card {
+    padding: var(--sp-6);
+  }
+}
+
+@media (min-width: 720px) {
+  .login-card h1 {
+    font-size: 1.75rem;
+  }
+}
+
 /* Customer homepage */
 .home-page .site-main {
   padding-top: 0;
@@ -1003,6 +1270,22 @@ tbody tr:hover {
   .site-nav {
     order: 0;
     width: auto;
+  }
+
+  .nav-toggle {
+    display: none;
+  }
+
+  .ui-store .site-nav {
+    display: block;
+  }
+
+  .ui-store .site-header__actions {
+    display: flex;
+  }
+
+  .nav__cart {
+    margin-left: calc(var(--sp-1) - var(--sp-4));
   }
 
   .site-footer__inner {

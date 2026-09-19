@@ -2,6 +2,15 @@
 
 require_once __DIR__ . '/../includes/database.php';
 
+define('HUPIA_BASE', '..');
+
+$page_title = 'Create an Account - Hopia\'s Ukay-Ukay';
+$page_description = 'Create a customer account at Hopia\'s Ukay-Ukay.';
+$ui_active = 'register.php';
+$body_class = 'register-page';
+
+require_once __DIR__ . '/../includes/ui.php';
+
 $message = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -43,7 +52,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 ':phone' => $phone
             ]);
 
-            $message = 'Registration successful!';
+            header('Location: ../index.php');
+            exit;
         } catch (PDOException $e) {
             if ($e->getCode() === '23000') {
                 $message = 'That email address is already registered.';
@@ -55,61 +65,61 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 ?>
 
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Create an Account</title>
-</head>
-<body>
+<?php
+require __DIR__ . '/../includes/ui.head.php';
+require __DIR__ . '/../includes/ui.header.php';
+?>
 
-<h1>Create an Account</h1>
+<section class="register-page__content" aria-labelledby="register-title">
+    <div class="register-card">
+        <header class="register-card__header">
+            <p class="register-card__eyebrow">Welcome to Hopia</p>
+            <h1 id="register-title">CREATE AN ACCOUNT</h1>
+            <p class="register-card__intro">Join us to keep track of your preloved finds and orders.</p>
+        </header>
 
-<?php if ($message !== ''): ?>
-    <p><?= htmlspecialchars($message) ?></p>
-<?php endif; ?>
+        <?php if ($message !== ''): ?>
+            <p class="alert <?= $message === 'Registration successful!' ? 'alert-success' : 'alert-error' ?>" role="alert">
+                <?= hopia_e($message) ?>
+            </p>
+        <?php endif; ?>
 
-<form method="POST">
+        <form class="register-form" method="POST">
+            <div class="register-form__fields">
+                <div class="field">
+                    <label for="first-name">First Name</label>
+                    <input id="first-name" type="text" name="first_name" required>
+                </div>
 
-    <label>
-        First Name:
-        <input type="text" name="first_name" required>
-    </label>
+                <div class="field">
+                    <label for="last-name">Last Name</label>
+                    <input id="last-name" type="text" name="last_name" required>
+                </div>
 
-    <br><br>
+                <div class="field">
+                    <label for="email">Email</label>
+                    <input id="email" type="email" name="email" required>
+                </div>
 
-    <label>
-        Last Name:
-        <input type="text" name="last_name" required>
-    </label>
+                <div class="field">
+                    <label for="phone">Phone <span class="register-form__optional">(optional)</span></label>
+                    <input id="phone" type="text" name="phone">
+                </div>
 
-    <br><br>
+                <div class="field">
+                    <label for="password">Password</label>
+                    <input id="password" type="password" name="password" required>
+                    <p class="hint">Use at least 8 characters.</p>
+                </div>
+            </div>
 
-    <label>
-        Email:
-        <input type="email" name="email" required>
-    </label>
+            <button class="btn btn-primary btn-block register-form__submit" type="submit">Register</button>
+        </form>
 
-    <br><br>
+        <p class="register-card__login">
+            Already have an account? <a href="login.php">Log in</a>
+        </p>
+    </div>
+</section>
 
-    <label>
-        Phone:
-        <input type="text" name="phone">
-    </label>
-
-    <br><br>
-
-    <label>
-        Password:
-        <input type="password" name="password" required>
-    </label>
-
-    <br><br>
-
-    <button type="submit">Register</button>
-
-</form>
-
-</body>
-</html>
+<?php require __DIR__ . '/../includes/ui.footer.php'; ?>
