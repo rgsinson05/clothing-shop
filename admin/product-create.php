@@ -220,64 +220,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 $adminName = $_SESSION['admin_name'] ?? 'Admin';
 
+$page_title = "Add Product - Admin - Hopia's Ukay-Ukay";
+$page_description = "Add a product to Hopia's inventory.";
+$ui_section = 'admin';
+$ui_active = 'products.php';
+$body_class = 'admin-product-form-page';
+
 ?>
 
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<?php require __DIR__ . '/../includes/ui.head.php'; ?>
+<?php require __DIR__ . '/../includes/ui.header.php'; ?>
 
-    <title>Add Product - Admin - Hopia's Ukay-Ukay</title>
-
-    <style>
-        .image-upload {
-            margin-top: 10px;
-        }
-
-        .image-row {
-            margin-bottom: 15px;
-        }
-
-        .image-preview {
-            display: block;
-            width: 150px;
-            height: 150px;
-            object-fit: cover;
-            margin-top: 8px;
-            border: 1px solid #ccc;
-        }
-
-        .remove-image {
-            margin-top: 5px;
-        }
-    </style>
-</head>
-
-<body>
-
-    <h1>Add Product</h1>
-
-    <p>
-        Welcome, <?= htmlspecialchars($adminName) ?>.
-    </p>
-
-    <p>
-        <a href="products.php">Back to Products</a>
-        |
-        <a href="index.php">Dashboard</a>
-        |
-        <a href="logout.php">Logout</a>
-    </p>
-
-    <hr>
+<div class="admin-product-form-page">
+    <header class="admin-page-header">
+        <div>
+            <a class="admin-page-header__back" href="products.php">&larr; Back to Products</a>
+            <p class="admin-page-header__eyebrow">Inventory management</p>
+            <h1>ADD PRODUCT</h1>
+            <p class="admin-page-header__copy">
+                Add one unique secondhand item to the shop's inventory.
+            </p>
+        </div>
+    </header>
 
     <?php if (!empty($errors)): ?>
-
-        <div>
+        <div class="alert alert-error" role="alert">
             <strong>Please fix the following:</strong>
-
-            <ul>
+            <ul class="alert__list">
                 <?php foreach ($errors as $error): ?>
                     <li><?= htmlspecialchars($error) ?></li>
                 <?php endforeach; ?>
@@ -286,195 +255,82 @@ $adminName = $_SESSION['admin_name'] ?? 'Admin';
 
     <?php endif; ?>
 
-    <form method="POST" enctype="multipart/form-data">
+    <form class="admin-form-layout" method="POST" enctype="multipart/form-data">
+        <section class="admin-form-card" aria-labelledby="product-details-title">
+            <h2 id="product-details-title">Product details</h2>
+            <p class="admin-form-card__intro">Use the existing product information fields below.</p>
 
-        <div>
-            <label for="name">Product Name</label>
-            <br>
+            <div class="admin-form-grid">
+                <div class="field field--wide">
+                    <label for="name">Product Name</label>
+                    <input type="text" id="name" name="name" value="<?= htmlspecialchars($name) ?>" required>
+                </div>
 
-            <input
-                type="text"
-                id="name"
-                name="name"
-                value="<?= htmlspecialchars($name) ?>"
-                required
-            >
-        </div>
+                <div class="field">
+                    <label for="category">Category</label>
+                    <select id="category" name="category" required>
+                        <option value="">Select category</option>
+                        <option value="SHIRTS"<?= $category === 'SHIRTS' ? ' selected' : '' ?>>Shirts</option>
+                        <option value="PANTS"<?= $category === 'PANTS' ? ' selected' : '' ?>>Pants</option>
+                        <option value="SHORTS"<?= $category === 'SHORTS' ? ' selected' : '' ?>>Shorts</option>
+                    </select>
+                </div>
 
-        <br>
+                <div class="field">
+                    <label for="condition_label">Condition</label>
+                    <input type="text" id="condition_label" name="condition_label" placeholder="Example: Good" value="<?= htmlspecialchars($conditionLabel) ?>" required>
+                </div>
 
-        <div>
-            <label for="category">Category</label>
-            <br>
+                <div class="field field--wide">
+                    <label for="description">Description</label>
+                    <textarea id="description" name="description" rows="5"><?= htmlspecialchars($description) ?></textarea>
+                </div>
 
-            <select id="category" name="category" required>
-                <option value="">Select category</option>
+                <div class="field field--wide">
+                    <label for="defects">Defects</label>
+                    <textarea id="defects" name="defects" rows="4" placeholder="Example: Minor fading on sleeve"><?= htmlspecialchars($defects) ?></textarea>
+                </div>
 
-                <option
-                    value="SHIRTS"
-                    <?= $category === 'SHIRTS' ? 'selected' : '' ?>
-                >
-                    Shirts
-                </option>
+                <div class="field">
+                    <label for="price">Price</label>
+                    <input type="number" id="price" name="price" step="0.01" min="0" value="<?= htmlspecialchars($price) ?>" required>
+                </div>
 
-                <option
-                    value="PANTS"
-                    <?= $category === 'PANTS' ? 'selected' : '' ?>
-                >
-                    Pants
-                </option>
+                <div class="field">
+                    <label for="size">Size</label>
+                    <input type="text" id="size" name="size" placeholder="Example: Large" value="<?= htmlspecialchars($size) ?>">
+                </div>
 
-                <option
-                    value="SHORTS"
-                    <?= $category === 'SHORTS' ? 'selected' : '' ?>
-                >
-                    Shorts
-                </option>
-            </select>
-        </div>
-
-        <br>
-
-        <div>
-            <label for="description">Description</label>
-            <br>
-
-            <textarea
-                id="description"
-                name="description"
-                rows="5"
-            ><?= htmlspecialchars($description) ?></textarea>
-        </div>
-
-        <br>
-
-        <div>
-            <label for="condition_label">Condition</label>
-            <br>
-
-            <input
-                type="text"
-                id="condition_label"
-                name="condition_label"
-                placeholder="Example: Good"
-                value="<?= htmlspecialchars($conditionLabel) ?>"
-                required
-            >
-        </div>
-
-        <br>
-
-        <div>
-            <label for="defects">Defects</label>
-            <br>
-
-            <textarea
-                id="defects"
-                name="defects"
-                rows="4"
-                placeholder="Example: Minor fading on sleeve"
-            ><?= htmlspecialchars($defects) ?></textarea>
-        </div>
-
-        <br>
-
-        <div>
-            <label for="price">Price</label>
-            <br>
-
-            <input
-                type="number"
-                id="price"
-                name="price"
-                step="0.01"
-                min="0"
-                value="<?= htmlspecialchars($price) ?>"
-                required
-            >
-        </div>
-
-        <br>
-
-        <div>
-            <label for="size">Size</label>
-            <br>
-
-            <input
-                type="text"
-                id="size"
-                name="size"
-                placeholder="Example: Large"
-                value="<?= htmlspecialchars($size) ?>"
-            >
-        </div>
-
-        <br>
-
-        <div>
-            <label for="color">Color</label>
-            <br>
-
-            <input
-                type="text"
-                id="color"
-                name="color"
-                placeholder="Example: Black"
-                value="<?= htmlspecialchars($color) ?>"
-            >
-        </div>
-
-        <br>
-
-        <hr>
-
-        <h2>Product Images</h2>
-
-        <p>
-            Upload up to 5 images. JPG, PNG, and WebP are supported.
-            Maximum 5 MB per image.
-        </p>
-
-        <div id="image-upload-container">
-
-            <div class="image-row">
-                <input
-                    type="file"
-                    name="images[]"
-                    accept="image/jpeg,image/png,image/webp"
-                    class="image-input"
-                >
-
-                <img
-                    class="image-preview"
-                    alt="Image preview"
-                    hidden
-                >
-
-                <button
-                    type="button"
-                    class="remove-image"
-                    hidden
-                >
-                    Remove
-                </button>
+                <div class="field">
+                    <label for="color">Color</label>
+                    <input type="text" id="color" name="color" placeholder="Example: Black" value="<?= htmlspecialchars($color) ?>">
+                </div>
             </div>
 
-        </div>
+            <div class="admin-form-actions">
+                <button class="btn btn-primary" type="submit">Save Product</button>
+                <a class="btn btn-secondary" href="products.php">Cancel</a>
+            </div>
+        </section>
 
-        <button
-            type="button"
-            id="add-image"
-        >
-            + Add another image
-        </button>
+        <section class="admin-form-card admin-image-upload" aria-labelledby="product-images-title">
+            <h2 id="product-images-title">Product Images</h2>
+            <p class="admin-image-upload__hint">
+                Upload up to 5 images. JPG, PNG, and WebP are supported. Maximum 5 MB per image.
+            </p>
 
-        <br>
-        <br>
+            <div id="image-upload-container">
+                <div class="image-row admin-image-row">
+                    <input type="file" name="images[]" accept="image/jpeg,image/png,image/webp" class="image-input">
+                    <img class="image-preview admin-image-preview" alt="Image preview" hidden>
+                    <button type="button" class="btn btn-danger btn-sm remove-image" hidden>Remove</button>
+                </div>
+            </div>
 
-        <button type="submit">
-            Save Product
-        </button>
-
+            <button class="btn btn-secondary admin-image-upload__add" type="button" id="add-image">
+                + Add another image
+            </button>
+        </section>
     </form>
 
     <script>
@@ -539,7 +395,7 @@ $adminName = $_SESSION['admin_name'] ?? 'Admin';
 
             const row = document.createElement('div');
 
-            row.className = 'image-row';
+            row.className = 'image-row admin-image-row';
 
             row.innerHTML = `
                 <input
@@ -550,14 +406,14 @@ $adminName = $_SESSION['admin_name'] ?? 'Admin';
                 >
 
                 <img
-                    class="image-preview"
+                    class="image-preview admin-image-preview"
                     alt="Image preview"
                     hidden
                 >
 
                 <button
                     type="button"
-                    class="remove-image"
+                    class="btn btn-danger btn-sm remove-image"
                 >
                     Remove
                 </button>
@@ -573,6 +429,6 @@ $adminName = $_SESSION['admin_name'] ?? 'Admin';
         updateAddButton();
 
     </script>
+</div>
 
-</body>
-</html>
+<?php require __DIR__ . '/../includes/ui.footer.php'; ?>
