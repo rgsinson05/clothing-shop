@@ -11,7 +11,6 @@ Thumbs.db
 # Logs
 *.log
 
-# Composer dependencies
-/vendor/
+
 
 clothing_shop_backup.sql
