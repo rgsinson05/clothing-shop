@@ -44,15 +44,20 @@ require __DIR__ . '/includes/ui.header.php';
 <section class="home-hero" aria-labelledby="home-title">
     <div class="home-hero__content">
         <p class="home-hero__eyebrow">Wholesale &amp; retail</p>
-        <h1 id="home-title">Find your next fit.</h1>
+        <h1 id="home-title">Find your<br>next fit.</h1>
         <p class="home-hero__copy">Browse thrift finds in shirts, pants, and shorts.</p>
-        <a class="btn btn-primary home-hero__cta" href="customer/products.php">Shop now</a>
+        <a class="home-hero__cta" href="customer/products.php">Shop now</a>
     </div>
+    <a class="home-hero__cue" href="#shop-by-category">
+        <span class="home-hero__cue-arrow" aria-hidden="true">&darr;</span>
+        <span class="home-hero__cue-label">Shop by category</span>
+    </a>
 </section>
 
-<section class="home-section home-categories" aria-labelledby="categories-title">
+<section id="shop-by-category" class="home-section home-categories" aria-labelledby="categories-title">
     <div class="home-section__heading">
         <div>
+            <span class="home-section__rule" aria-hidden="true"></span>
             <p class="home-section__eyebrow">Find your next staple</p>
             <h2 id="categories-title">Shop by category</h2>
         </div>
@@ -84,6 +89,27 @@ require __DIR__ . '/includes/ui.header.php';
 </section>
 
 <script>
+    (function () {
+        var cue = document.querySelector('.home-hero__cue');
+        if (!cue) {
+            return;
+        }
+
+        cue.addEventListener('click', function (event) {
+            event.preventDefault();
+            var target = document.querySelector(cue.getAttribute('href'));
+            if (!target) {
+                return;
+            }
+
+            var reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+            target.scrollIntoView({
+                behavior: reduceMotion.matches ? 'auto' : 'smooth',
+                block: 'start'
+            });
+        });
+    }());
+
     (function () {
         var carousel = document.querySelector('[data-category-carousel]');
         if (!carousel) {
