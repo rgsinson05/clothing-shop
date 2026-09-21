@@ -5,10 +5,36 @@ session_start();
 require_once __DIR__ . '/../includes/database.php';
 
 /*
+ * Quick-add requests from the catalog send this header and expect
+ * JSON results instead of redirects.
+ */
+
+$wantsJson = isset($_SERVER['HTTP_X_REQUESTED_WITH'])
+    && strtolower((string) $_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest';
+
+function cartAddRespondJson(array $payload, int $status): void
+{
+    header('Content-Type: application/json; charset=UTF-8');
+    http_response_code($status);
+    echo json_encode($payload);
+    exit;
+}
+
+function cartAddFreshToken(): string
+{
+    $token = bin2hex(random_bytes(32));
+    $_SESSION['csrf_token_cart'] = $token;
+    return $token;
+}
+
+/*
  * Require the customer to be logged in.
  */
 
 if (!isset($_SESSION['customer_id'])) {
+    if ($wantsJson) {
+        cartAddRespondJson(['ok' => false, 'reason' => 'auth', 'redirect' => 'login.php'], 401);
+    }
     header('Location: login.php');
     exit;
 }
@@ -25,6 +51,9 @@ $storedToken = $_SESSION['csrf_token_cart'] ?? '';
 
 if ($csrfToken === false || $storedToken === '' || !hash_equals($storedToken, $csrfToken)) {
     unset($_SESSION['csrf_token_cart']);
+    if ($wantsJson) {
+        cartAddRespondJson(['ok' => false, 'reason' => 'csrf', 'token' => cartAddFreshToken()], 403);
+    }
     header('Location: products.php');
     exit;
 }
@@ -38,6 +67,9 @@ unset($_SESSION['csrf_token_cart']);
 $productId = filter_input(INPUT_POST, 'product_id', FILTER_VALIDATE_INT);
 
 if ($productId === false || $productId === null || $productId < 1) {
+    if ($wantsJson) {
+        cartAddRespondJson(['ok' => false, 'reason' => 'invalid'], 400);
+    }
     header('Location: products.php');
     exit;
 }
@@ -57,6 +89,9 @@ $productStmt = $pdo->prepare(
 $productStmt->execute([':id' => $productId]);
 
 if ($productStmt->fetch() === false) {
+    if ($wantsJson) {
+        cartAddRespondJson(['ok' => false, 'reason' => 'unavailable'], 409);
+    }
     header('Location: products.php');
     exit;
 }
@@ -89,6 +124,9 @@ $cartStmt->execute([':customer_id' => $customerId]);
 $cart = $cartStmt->fetch();
 
 if ($cart === false) {
+    if ($wantsJson) {
+        cartAddRespondJson(['ok' => false, 'reason' => 'error'], 500);
+    }
     header('Location: products.php');
     exit;
 }
@@ -116,6 +154,14 @@ $addItemStmt->execute([
     ':cart_id' => $cartId,
     ':product_id' => $productId,
 ]);
+
+if ($wantsJson) {
+    cartAddRespondJson([
+        'ok' => true,
+        'reason' => 'added',
+        'token' => cartAddFreshToken(),
+    ], 200);
+}
 
 /*
  * Redirect to the cart page or return URL.

@@ -45,13 +45,13 @@ if ($ui_section === 'admin') {
             <a class="brand" href="<?= hopia_e($ui_brand_href) ?>"><?= hopia_e($ui_brand_label) ?></a>
             <?php if ($ui_section !== 'admin'): ?>
                 <div class="site-header__mobile-tools">
-                    <button class="header-search-toggle" type="button" aria-expanded="false" aria-controls="header-search">
+                    <a class="header-search-toggle" href="<?= hopia_e($ui_path_prefix) ?>products.php?focus=1">
                         <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true">
                             <circle cx="11" cy="11" r="6.5"></circle>
                             <path d="m16 16 4.5 4.5"></path>
                         </svg>
                         <span class="sr-only">Search products</span>
-                    </button>
+                    </a>
                     <?php $ui_mobile_cart_current = ($ui_active !== '' ? $ui_active : $ui_script) === 'cart.php'; ?>
                     <a class="header-icon header-cart header-cart--mobile" href="<?= hopia_e($ui_path_prefix . ($ui_logged_in ? 'cart.php' : 'login.php')) ?>"<?= $ui_mobile_cart_current ? ' aria-current="page"' : '' ?> aria-label="Cart">
                         <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -115,6 +115,7 @@ if ($ui_section === 'admin') {
                 </nav>
                 <form class="header-search" id="header-search" method="GET" action="<?= hopia_e($ui_path_prefix) ?>products.php" role="search">
                     <label class="sr-only" for="header-search-input">Search products</label>
+                    <input type="hidden" name="focus" value="1">
                     <input id="header-search-input" type="search" name="search" placeholder="Search products" autocomplete="off">
                     <button type="submit" aria-label="Submit product search">
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true">
@@ -169,8 +170,6 @@ if ($ui_section === 'admin') {
             (function () {
                 var header = document.querySelector('.site-header');
                 var toggle = header ? header.querySelector('.nav-toggle') : null;
-                var searchToggle = header ? header.querySelector('.header-search-toggle') : null;
-                var search = header ? header.querySelector('.header-search') : null;
                 var accountToggle = header ? header.querySelector('.header-account__toggle') : null;
                 var account = header ? header.querySelector('.header-account') : null;
                 if (!header || !toggle) {
@@ -219,25 +218,11 @@ if ($ui_section === 'admin') {
                     });
                 }
 
-                if (searchToggle && search) {
-                    searchToggle.addEventListener('click', function () {
-                        var open = search.classList.toggle('is-open');
-                        searchToggle.setAttribute('aria-expanded', open ? 'true' : 'false');
-                        if (open) {
-                            search.querySelector('input').focus();
-                        }
-                    });
-                }
-
                 document.addEventListener('keydown', function (event) {
                     if (event.key === 'Escape') {
                         closeMenu();
                         closeDropdowns();
                         closeAccount();
-                        if (search && searchToggle) {
-                            search.classList.remove('is-open');
-                            searchToggle.setAttribute('aria-expanded', 'false');
-                        }
                     }
                 });
 
