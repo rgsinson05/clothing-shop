@@ -85,6 +85,11 @@ require __DIR__ . '/includes/ui.header.php';
                 <?php endforeach; ?>
             </div>
         </div>
+        <div class="home-category-carousel__dots" aria-hidden="true">
+            <span class="home-category-carousel__dot is-active"></span>
+            <span class="home-category-carousel__dot"></span>
+            <span class="home-category-carousel__dot"></span>
+        </div>
     </div>
 </section>
 
@@ -118,6 +123,7 @@ require __DIR__ . '/includes/ui.header.php';
 
         var viewport = carousel.querySelector('.home-category-carousel__viewport');
         var track = carousel.querySelector('[data-carousel-track]');
+        var dotsContainer = carousel.querySelector('.home-category-carousel__dots');
         var mobileQuery = window.matchMedia('(max-width: 719px)');
         var state = null;
 
@@ -155,6 +161,17 @@ require __DIR__ . '/includes/ui.header.php';
                 if (link) {
                     link.setAttribute('tabindex', active ? '0' : '-1');
                 }
+            });
+            updateDots();
+        }
+
+        function updateDots() {
+            if (!state || !dotsContainer) {
+                return;
+            }
+            var dots = dotsContainer.querySelectorAll('.home-category-carousel__dot');
+            dots.forEach(function (dot, i) {
+                dot.classList.toggle('is-active', i === state.index);
             });
         }
 
@@ -203,6 +220,15 @@ require __DIR__ . '/includes/ui.header.php';
             track.style.transform = '';
             track.style.transition = '';
             state = null;
+            if (dotsContainer) {
+                dotsContainer.querySelectorAll('.home-category-carousel__dot').forEach(function (dot) {
+                    dot.classList.remove('is-active');
+                });
+                var firstDot = dotsContainer.querySelector('.home-category-carousel__dot');
+                if (firstDot) {
+                    firstDot.classList.add('is-active');
+                }
+            }
         }
 
         function initCarousel() {

@@ -105,6 +105,10 @@ require __DIR__ . '/../includes/ui.head.php';
                 <?php if ($category !== ''): ?>
                     <input type="hidden" name="category" value="<?= hopia_e($category) ?>">
                 <?php endif; ?>
+                <svg class="catalog-search__icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true">
+                    <circle cx="11" cy="11" r="6.5"></circle>
+                    <line x1="16" y1="16" x2="20.5" y2="20.5"></line>
+                </svg>
                 <input
                     id="catalog-search-input"
                     type="search"

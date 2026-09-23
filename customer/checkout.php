@@ -439,7 +439,7 @@ require __DIR__ . '/../includes/ui.header.php';
     <header class="checkout-header">
         <div>
             <h1>CHECKOUT</h1>
-            <p class="checkout-header__count"><?= count($cartItems) ?> <?= count($cartItems) === 1 ? 'item' : 'items' ?> from your cart</p>
+            <p class="checkout-header__count"><?= count($cartItems) ?> ITEM FROM YOUR CART</p>
         </div>
         <a class="link-subtle checkout-header__back" href="cart.php">Back to cart</a>
     </header>
@@ -478,12 +478,12 @@ require __DIR__ . '/../includes/ui.header.php';
 
                 <section class="checkout-card" aria-labelledby="checkout-contact-heading">
                     <div class="checkout-card__head">
-                        <h2 class="checkout-card__title" id="checkout-contact-heading">Contact information</h2>
+                        <h2 class="checkout-card__title" id="checkout-contact-heading">Contact Information</h2>
                         <p class="checkout-card__hint">Prefilled from your account. You can edit it for this order.</p>
                     </div>
 
                     <div class="field">
-                        <label for="shipping_name">Full name</label>
+                        <label for="shipping_name">Full Name</label>
                         <input
                             type="text"
                             id="shipping_name"
@@ -496,7 +496,7 @@ require __DIR__ . '/../includes/ui.header.php';
                     </div>
 
                     <div class="field">
-                        <label for="shipping_phone">Phone number</label>
+                        <label for="shipping_phone">Phone Number</label>
                         <input
                             type="text"
                             id="shipping_phone"
@@ -512,7 +512,7 @@ require __DIR__ . '/../includes/ui.header.php';
 
                 <section class="checkout-card" aria-labelledby="checkout-address-heading">
                     <div class="checkout-card__head">
-                        <h2 class="checkout-card__title" id="checkout-address-heading">Delivery address</h2>
+                        <h2 class="checkout-card__title" id="checkout-address-heading">Delivery Address</h2>
                         <p class="checkout-card__hint">Choose your location, then add the street details.</p>
                     </div>
 
@@ -580,7 +580,7 @@ require __DIR__ . '/../includes/ui.header.php';
 
                 <section class="checkout-card" aria-labelledby="checkout-payment-heading">
                     <div class="checkout-card__head">
-                        <h2 class="checkout-card__title" id="checkout-payment-heading">Payment method</h2>
+                        <h2 class="checkout-card__title" id="checkout-payment-heading">Payment Method</h2>
                     </div>
 
                     <div class="payment-options">
@@ -612,7 +612,7 @@ require __DIR__ . '/../includes/ui.header.php';
 
             <aside class="checkout-summary" aria-labelledby="checkout-summary-heading">
                 <div class="checkout-summary__inner">
-                    <h2 class="checkout-summary__title" id="checkout-summary-heading">Order summary</h2>
+                    <h2 class="checkout-summary__title" id="checkout-summary-heading">Order Summary</h2>
 
                     <ul class="checkout-summary__items" role="list">
                         <?php foreach ($cartItems as $item): ?>
@@ -681,14 +681,19 @@ require __DIR__ . '/../includes/ui.header.php';
                         <button
                             type="submit"
                             form="checkout-form"
-                            class="btn btn-primary btn-block checkout-submit"
+                            class="checkout-submit"
                             id="checkout-submit"
                         >
                             <span class="checkout-submit__spinner" aria-hidden="true"></span>
                             <span class="checkout-submit__label">PLACE ORDER</span>
                         </button>
 
-                        <a class="btn btn-ghost btn-block" href="cart.php">Back to cart</a>
+                        <a class="checkout-back" href="cart.php">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                <path d="m15 18-6-6 6-6"></path>
+                            </svg>
+                            BACK TO CART
+                        </a>
                     </div>
                 </div>
             </aside>

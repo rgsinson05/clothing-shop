@@ -74,15 +74,15 @@ require __DIR__ . '/../includes/ui.header.php';
 
         <div class="cart-empty">
             <div class="cart-empty__icon" aria-hidden="true">
-                <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"></path>
                     <line x1="3" y1="6" x2="21" y2="6"></line>
                     <path d="M16 10a4 4 0 0 1-8 0"></path>
                 </svg>
             </div>
-            <h2>Your cart is empty</h2>
+            <h2>Your Cart Is Empty</h2>
             <p>Discover unique pre-loved pieces waiting for a new home.</p>
-            <a class="btn btn-primary btn-block" href="products.php">SHOP ALL FINDS</a>
+            <a class="btn btn-primary" href="products.php">Shop All Finds</a>
         </div>
 
     <?php else: ?>
@@ -133,14 +133,12 @@ require __DIR__ . '/../includes/ui.header.php';
                             <form class="cart-item__actions" method="POST" action="cart-remove.php">
                                 <input type="hidden" name="cart_item_id" value="<?= (int) $item['cart_item_id'] ?>">
                                 <input type="hidden" name="csrf_token" value="<?= hopia_e($csrfToken) ?>">
-                                <button type="submit" class="btn btn-ghost btn-sm cart-item__remove">
-                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                <button type="submit" class="cart-item__remove">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                                         <polyline points="3 6 5 6 21 6"></polyline>
                                         <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-                                        <line x1="10" y1="11" x2="10" y2="17"></line>
-                                        <line x1="14" y1="11" x2="14" y2="17"></line>
                                     </svg>
-                                    REMOVE
+                                    Remove
                                 </button>
                             </form>
                         </div>
@@ -152,21 +150,22 @@ require __DIR__ . '/../includes/ui.header.php';
                 <div class="cart-summary__inner">
                     <h2 id="cart-summary-heading" class="cart-summary__title">Order Summary</h2>
 
-                    <div class="cart-summary__row">
-                        <span>Order total before shipping</span>
-                        <span class="price">₱<?= number_format($subtotal, 2) ?></span>
+                    <div class="cart-summary__row cart-summary__row--total">
+                        <span class="cart-summary__row-label">Order total before shipping</span>
+                        <span class="cart-summary__row-value price">₱<?= number_format($subtotal, 2) ?></span>
                     </div>
 
                     <div class="cart-summary__row cart-summary__row--muted">
-                        <span>Shipping</span>
-                        <span>To be confirmed</span>
+                        <span class="cart-summary__row-label">Shipping</span>
+                        <span class="cart-summary__row-value">To be confirmed</span>
                     </div>
 
-                    <hr>
+                    <hr class="cart-summary__divider">
 
-                    <a class="btn btn-primary btn-block" href="checkout.php">PROCEED TO CHECKOUT</a>
-
-                    <a class="btn btn-ghost btn-block" href="products.php">Continue Shopping</a>
+                    <div class="cart-summary__actions">
+                        <a class="btn btn-primary" href="checkout.php">Proceed to Checkout</a>
+                        <a class="cart-summary__continue" href="products.php">Continue Shopping</a>
+                    </div>
                 </div>
             </aside>
         </div>
