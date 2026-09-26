@@ -13,6 +13,7 @@ $errors = [];
 
 $name = '';
 $category = '';
+$gender = '';
 $description = '';
 $conditionLabel = '';
 $defects = '';
@@ -23,6 +24,7 @@ $color = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $name = trim($_POST['name'] ?? '');
     $category = $_POST['category'] ?? '';
+    $gender = $_POST['gender'] ?? '';
     $description = trim($_POST['description'] ?? '');
     $conditionLabel = trim($_POST['condition_label'] ?? '');
     $defects = trim($_POST['defects'] ?? '');
@@ -42,6 +44,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if (!in_array($category, $allowedCategories, true)) {
         $errors[] = 'Please select a valid category.';
+    }
+
+    $allowedGenders = ['MEN', 'WOMEN'];
+
+    if (!in_array($gender, $allowedGenders, true)) {
+        $errors[] = 'Please select a valid gender.';
     }
 
     if ($conditionLabel === '') {
@@ -116,14 +124,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         $stmt = $pdo->prepare(
             'INSERT INTO products
-                (name, category, description, condition_label, defects, price, size, color)
+                (name, category, gender, description, condition_label, defects, price, size, color)
              VALUES
-                (:name, :category, :description, :condition_label, :defects, :price, :size, :color)'
+                (:name, :category, :gender, :description, :condition_label, :defects, :price, :size, :color)'
         );
 
         $stmt->execute([
             'name' => $name,
             'category' => $category,
+            'gender' => $gender,
             'description' => $description !== '' ? $description : null,
             'condition_label' => $conditionLabel,
             'defects' => $defects !== '' ? $defects : null,
@@ -273,6 +282,15 @@ $body_class = 'admin-product-form-page';
                         <option value="SHIRTS"<?= $category === 'SHIRTS' ? ' selected' : '' ?>>Shirts</option>
                         <option value="PANTS"<?= $category === 'PANTS' ? ' selected' : '' ?>>Pants</option>
                         <option value="SHORTS"<?= $category === 'SHORTS' ? ' selected' : '' ?>>Shorts</option>
+                    </select>
+                </div>
+
+                <div class="field">
+                    <label for="gender">Gender</label>
+                    <select id="gender" name="gender" required>
+                        <option value="">Select gender</option>
+                        <option value="MEN"<?= $gender === 'MEN' ? ' selected' : '' ?>>Men</option>
+                        <option value="WOMEN"<?= $gender === 'WOMEN' ? ' selected' : '' ?>>Women</option>
                     </select>
                 </div>
 

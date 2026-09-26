@@ -5,6 +5,7 @@ session_start();
 require_once __DIR__ . '/../includes/database.php';
 
 $allowedCategories = ['SHIRTS', 'PANTS', 'SHORTS'];
+$allowedGenders = ['MEN', 'WOMEN'];
 
 $search = trim($_GET['search'] ?? '');
 
@@ -16,7 +17,16 @@ if (!in_array($category, $allowedCategories, true)) {
     $category = '';
 }
 
-$sql = "SELECT p.id, p.name, p.category, p.price, p.size, p.color, p.status, pi.image_path
+// Optional gender filter. Whitelist strictly to MEN or WOMEN.
+// A missing or invalid value applies no gender restriction so the general
+// Shop page keeps showing the full catalog (including legacy NULL-gender rows).
+$gender = $_GET['gender'] ?? '';
+
+if (!in_array($gender, $allowedGenders, true)) {
+    $gender = '';
+}
+
+$sql = "SELECT p.id, p.name, p.category, p.gender, p.price, p.size, p.color, p.description, p.status, pi.image_path
      FROM products p
      LEFT JOIN product_images pi
          ON pi.id = (
@@ -35,6 +45,15 @@ if ($category !== '') {
     $params[':category'] = $category;
 }
 
+// Gender narrows the set further (gender AND category). Only apply it when a
+// valid MEN/WOMEN value is present, using a bound parameter. Rows with a NULL
+// gender never satisfy p.gender = :gender, so unclassified legacy products stay
+// hidden from gendered results until an admin classifies them.
+if ($gender !== '') {
+    $sql .= ' AND p.gender = :gender';
+    $params[':gender'] = $gender;
+}
+
 $sql .= " ORDER BY CASE p.status WHEN 'AVAILABLE' THEN 0 ELSE 1 END, p.created_at DESC";
 
 $stmt = $pdo->prepare($sql);
@@ -43,7 +62,26 @@ $stmt->execute($params);
 
 $products = $stmt->fetchAll();
 
-$hasFilters = ($search !== '' || $category !== '');
+$hasFilters = ($search !== '' || $category !== '' || $gender !== '');
+
+// Dynamic page heading based on the active gender + category context.
+// Gender present  -> "MEN'S" / "WOMEN'S" (optionally + category, e.g. "MEN'S PANTS").
+// Gender absent   -> empty string, preserving the existing category-only and
+//                    general Shop behavior (no dedicated heading).
+$genderHeadingLabels = [
+    'MEN' => "MEN'S",
+    'WOMEN' => "WOMEN'S",
+];
+
+$pageHeading = '';
+
+if ($gender !== '') {
+    $pageHeading = $genderHeadingLabels[$gender];
+
+    if ($category !== '') {
+        $pageHeading .= ' ' . $category;
+    }
+}
 
 $searchTerms = [];
 
@@ -100,8 +138,15 @@ require __DIR__ . '/../includes/ui.head.php';
     <main id="site-main" class="site-main">
         <div class="container">
 
-            <form class="catalog-search" method="GET" action="products.php" role="search">
+            <?php if ($pageHeading !== ''): ?>
+                <h1 class="catalog-heading"><?= hopia_e($pageHeading) ?></h1>
+            <?php endif; ?>
+
+            <form class="catalog-search" id="catalog-search-form" role="search">
                 <label class="sr-only" for="catalog-search-input">Search products</label>
+                <?php if ($gender !== ''): ?>
+                    <input type="hidden" name="gender" value="<?= hopia_e($gender) ?>">
+                <?php endif; ?>
                 <?php if ($category !== ''): ?>
                     <input type="hidden" name="category" value="<?= hopia_e($category) ?>">
                 <?php endif; ?>
@@ -175,7 +220,13 @@ require __DIR__ . '/../includes/ui.head.php';
                         }
                         ?>
 
-                        <article class="catalog-card<?= $isSold ? ' is-sold' : '' ?>" data-name="<?= hopia_e($product['name']) ?>"<?= $matchesSearch ? '' : ' hidden' ?>>
+                        <article class="catalog-card<?= $isSold ? ' is-sold' : '' ?>"
+                            data-category="<?= hopia_e($product['category']) ?>"
+                            data-name="<?= hopia_e($product['name']) ?>"
+                            data-color="<?= hopia_e($product['color']) ?>"
+                            data-size="<?= hopia_e($product['size']) ?>"
+                            data-description="<?= hopia_e($product['description']) ?>"
+                            <?= $matchesSearch ? '' : ' hidden' ?>>
 
                             <div class="catalog-card__image">
                                 <?php if ($imagePath !== ''): ?>
@@ -242,8 +293,8 @@ require __DIR__ . '/../includes/ui.head.php';
 
                 </div>
 
-                <div class="empty-state empty-state--search" id="catalog-empty"<?= ($search !== '' && $visibleCount === 0) ? '' : ' hidden' ?>>
-                    <p class="empty-state__title">Nothing found.</p>
+                <div class="empty-state empty-state--search" id="catalog-empty" hidden>
+                    <p class="empty-state__title" id="catalog-empty-title">Nothing found.</p>
                     <p>Try another fit.</p>
                 </div>
 
@@ -392,10 +443,16 @@ require __DIR__ . '/../includes/ui.head.php';
     var items = [];
     var activeIndex = -1;
 
-    function matchesName(name, terms) {
-        var lower = name.toLowerCase();
+    function matchesCard(card, terms) {
+        var searchable = [
+            card.getAttribute('data-name') || '',
+            card.getAttribute('data-category') || '',
+            card.getAttribute('data-color') || '',
+            card.getAttribute('data-size') || '',
+            card.getAttribute('data-description') || ''
+        ].join(' ').toLowerCase();
         for (var i = 0; i < terms.length; i++) {
-            if (lower.indexOf(terms[i]) === -1) {
+            if (searchable.indexOf(terms[i]) === -1) {
                 return false;
             }
         }
@@ -437,7 +494,7 @@ require __DIR__ . '/../includes/ui.head.php';
             return;
         }
         names.forEach(function(name, i) {
-            if (!matchesName(name, terms)) {
+            if (!matchesCard({getAttribute: function() { return name; }}, terms)) {
                 return;
             }
             var item = document.createElement('button');
@@ -474,7 +531,7 @@ require __DIR__ . '/../includes/ui.head.php';
         var visible = 0;
 
         cards.forEach(function(card) {
-            var show = !hasQuery || matchesName(card.getAttribute('data-name') || '', terms);
+            var show = !hasQuery || matchesCard(card, terms);
             card.hidden = !show;
             if (show) {
                 visible++;
@@ -485,7 +542,16 @@ require __DIR__ . '/../includes/ui.head.php';
             clearBtn.hidden = !hasQuery;
         }
         if (emptyState) {
-            emptyState.hidden = !(hasQuery && visible === 0);
+            if (hasQuery && visible === 0) {
+                var queryText = input.value.trim();
+                var emptyTitle = document.getElementById('catalog-empty-title');
+                if (emptyTitle) {
+                    emptyTitle.textContent = 'No products found for "' + queryText + '".';
+                }
+                emptyState.hidden = false;
+            } else {
+                emptyState.hidden = true;
+            }
         }
 
         if (suppressPanel || !hasQuery) {

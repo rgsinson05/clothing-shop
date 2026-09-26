@@ -74,6 +74,13 @@ CREATE TABLE products (
     id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     name VARCHAR(255) NOT NULL,
     category ENUM('SHIRTS','PANTS','SHORTS') NOT NULL,
+    -- Product gender classification.
+    -- Allowed values are strictly MEN or WOMEN.
+    -- Nullable with no default so that products created before this
+    -- field existed stay NULL ("not yet classified") instead of being
+    -- assigned a fabricated gender. The admin product form requires a
+    -- gender (MEN or WOMEN) for every newly created product.
+    gender ENUM('MEN','WOMEN') NULL DEFAULT NULL,
     description TEXT,
     condition_label VARCHAR(50) NOT NULL,
     defects TEXT,

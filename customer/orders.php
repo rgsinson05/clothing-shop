@@ -35,7 +35,6 @@ $orderStatusLabels = [
 
 $cancellationStatusLabels = [
     'REQUESTED' => 'Cancellation Requested',
-    'APPROVED' => 'Cancellation Approved',
     'REJECTED' => 'Cancellation Rejected'
 ];
 
@@ -57,11 +56,11 @@ $orderStatusBadgeClasses = [
  * database statuses. Display-only; no new statuses.
  */
 
-$activeStatuses = ['PENDING', 'CONFIRMED', 'PACKED', 'SHIPPED'];
+$orderFilter = isset($_GET['filter'])
+    ? strtoupper(str_replace('-', ' ', trim((string) $_GET['filter'])))
+    : 'ALL';
 
-$orderFilter = isset($_GET['filter']) ? strtoupper(trim((string) $_GET['filter'])) : 'ALL';
-
-if (!in_array($orderFilter, ['ALL', 'ACTIVE', 'COMPLETED'], true)) {
+if (!in_array($orderFilter, ['ALL', 'IN PROGRESS', 'DELIVERED', 'CANCELLED'], true)) {
     $orderFilter = 'ALL';
 }
 
@@ -153,23 +152,20 @@ require __DIR__ . '/../includes/ui.header.php';
 <section class="orders-page">
     <header class="orders-header">
         <h1>MY ORDERS</h1>
+        <p class="orders-intro">Keep track of your purchases and their current status.</p>
     </header>
 
     <nav class="orders-filters" aria-label="Order filters">
-        <ul class="orders-filter-list" role="list">
-            <li>
-                <a class="orders-filter<?= $orderFilter === 'ALL' ? ' is-active' : '' ?>"
-                   href="?filter=all">ALL</a>
-            </li>
-            <li>
-                <a class="orders-filter<?= $orderFilter === 'ACTIVE' ? ' is-active' : '' ?>"
-                   href="?filter=active">ACTIVE</a>
-            </li>
-            <li>
-                <a class="orders-filter<?= $orderFilter === 'COMPLETED' ? ' is-active' : '' ?>"
-                   href="?filter=completed">COMPLETED</a>
-            </li>
-        </ul>
+        <div class="orders-filter-tabs" role="list">
+            <a class="orders-filter<?= $orderFilter === 'ALL' ? ' is-active' : '' ?>"
+               href="?filter=all"<?= $orderFilter === 'ALL' ? ' aria-current="true"' : '' ?>>ALL</a>
+            <a class="orders-filter<?= $orderFilter === 'IN PROGRESS' ? ' is-active' : '' ?>"
+               href="?filter=in-progress"<?= $orderFilter === 'IN PROGRESS' ? ' aria-current="true"' : '' ?>>IN PROGRESS</a>
+            <a class="orders-filter<?= $orderFilter === 'DELIVERED' ? ' is-active' : '' ?>"
+               href="?filter=delivered"<?= $orderFilter === 'DELIVERED' ? ' aria-current="true"' : '' ?>>DELIVERED</a>
+            <a class="orders-filter<?= $orderFilter === 'CANCELLED' ? ' is-active' : '' ?>"
+               href="?filter=cancelled"<?= $orderFilter === 'CANCELLED' ? ' aria-current="true"' : '' ?>>CANCELLED</a>
+        </div>
     </nav>
 
     <?php
@@ -179,14 +175,19 @@ require __DIR__ . '/../includes/ui.header.php';
      * orders. No additional database query required.
      */
 
-    $filteredOrders = array_filter($orders, function ($order) use ($orderFilter, $activeStatuses) {
+    $inProgressStatuses = ['PENDING', 'CONFIRMED', 'PACKED', 'SHIPPED'];
+
+    $filteredOrders = array_filter($orders, function ($order) use ($orderFilter, $inProgressStatuses) {
         if ($orderFilter === 'ALL') {
             return true;
         }
-        if ($orderFilter === 'ACTIVE') {
-            return in_array($order['status'], $activeStatuses, true);
+        if ($orderFilter === 'IN PROGRESS') {
+            return in_array($order['status'], $inProgressStatuses, true);
         }
-        return $order['status'] === 'DELIVERED' || $order['status'] === 'CANCELLED';
+        if ($orderFilter === 'DELIVERED') {
+            return $order['status'] === 'DELIVERED';
+        }
+        return $order['status'] === 'CANCELLED';
     });
 
     ?>
@@ -194,19 +195,14 @@ require __DIR__ . '/../includes/ui.header.php';
     <?php if (count($filteredOrders) === 0): ?>
 
         <div class="orders-empty">
-            <div class="orders-empty__icon" aria-hidden="true">
-                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"></path>
-                    <line x1="3" y1="6" x2="21" y2="6"></line>
-                    <path d="M16 10a4 4 0 0 1-8 0"></path>
-                </svg>
-            </div>
             <?php if ($orderFilter === 'ALL'): ?>
-                <h2>No orders yet</h2>
-                <p>Start shopping to place your first order.</p>
+                <p>No orders yet.</p>
+            <?php elseif ($orderFilter === 'IN PROGRESS'): ?>
+                <p>No orders in progress.</p>
+            <?php elseif ($orderFilter === 'DELIVERED'): ?>
+                <p>No delivered orders yet.</p>
             <?php else: ?>
-                <h2>No <?= hopia_e(strtolower($orderFilter)) ?> orders</h2>
-                <p>You have no orders in this category right now.</p>
+                <p>No cancelled orders yet.</p>
             <?php endif; ?>
             <a class="btn btn-primary" href="products.php">SHOP ALL FINDS</a>
         </div>
@@ -221,53 +217,54 @@ require __DIR__ . '/../includes/ui.header.php';
                 $statusLabel = $orderStatusLabels[$orderStatus] ?? $orderStatus;
                 $badgeClass = $orderStatusBadgeClasses[$orderStatus] ?? 'badge';
                 $item = $orderItemsMap[$orderId] ?? null;
+                $productName = $item !== null ? (string) $item['product_name'] : 'Order #' . $orderId;
                 $viewUrl = 'order-detail.php?id=' . $orderId;
-                $hasCancellation = $cancellationStatus !== 'NONE'
+                $hasCancellationNote = $cancellationStatus !== 'NONE'
                     && isset($cancellationStatusLabels[$cancellationStatus]);
             ?>
                 <li class="order-card">
-                    <a class="order-card__link" href="<?= hopia_e($viewUrl) ?>">
-                        <div class="order-card__product">
-                            <?php if ($item !== null && trim($item['image_path']) !== ''): ?>
-                                <div class="order-card__thumb">
-                                    <img
-                                        src="<?= hopia_e('../' . ltrim(trim($item['image_path']), '/')) ?>"
-                                        alt="<?= hopia_e($item['product_name']) ?>"
-                                        loading="lazy"
-                                    >
-                                </div>
-                            <?php else: ?>
-                                <div class="order-card__thumb order-card__thumb--placeholder" aria-hidden="true">
-                                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-                                        <rect x="3" y="3" width="18" height="18" rx="2"></rect>
-                                        <circle cx="8.5" cy="8.5" r="1.5"></circle>
-                                        <polyline points="21 15 16 10 5 21"></polyline>
-                                    </svg>
-                                </div>
-                            <?php endif; ?>
-                            <div class="order-card__info">
-                                <p class="order-card__name">
-                                    <?= hopia_e($item !== null ? $item['product_name'] : 'Order #' . $orderId) ?>
-                                </p>
-                                <p class="order-card__date">
-                                    <?= hopia_e(date('M j, Y', strtotime($order['created_at']))) ?>
-                                </p>
-                            </div>
+                    <?php if ($item !== null && trim($item['image_path']) !== ''): ?>
+                        <div class="order-card__media">
+                            <img
+                                src="<?= hopia_e('../' . ltrim(trim($item['image_path']), '/')) ?>"
+                                alt="<?= hopia_e($productName) ?>"
+                                loading="lazy"
+                            >
                         </div>
-                    </a>
-                    <div class="order-card__meta">
+                    <?php else: ?>
+                        <div class="order-card__media order-card__media--placeholder" aria-hidden="true">
+                            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                                <rect x="3" y="3" width="18" height="18" rx="2"></rect>
+                                <circle cx="8.5" cy="8.5" r="1.5"></circle>
+                                <polyline points="21 15 16 10 5 21"></polyline>
+                            </svg>
+                        </div>
+                    <?php endif; ?>
+
+                    <div class="order-card__identity">
+                        <h2 class="order-card__name"><?= hopia_e($productName) ?></h2>
+                        <p class="order-card__date">
+                            <?= hopia_e(date('M j, Y', strtotime($order['created_at']))) ?>
+                        </p>
+                    </div>
+
+                    <div class="order-card__status">
                         <span class="badge <?= hopia_e($badgeClass) ?>">
                             <?= hopia_e($statusLabel) ?>
                         </span>
-                        <?php if ($hasCancellation): ?>
+                        <?php if ($hasCancellationNote): ?>
                             <span class="order-card__cancel-note">
                                 <?= hopia_e($cancellationStatusLabels[$cancellationStatus]) ?>
                             </span>
                         <?php endif; ?>
-                        <p class="order-card__amount price">
-                            ₱<?= number_format((float) $order['total_amount'], 2) ?>
-                        </p>
-                        <a class="btn btn-secondary btn-sm order-card__view" href="<?= hopia_e($viewUrl) ?>">
+                    </div>
+
+                    <p class="order-card__price price">
+                        ₱<?= number_format((float) $order['total_amount'], 2) ?>
+                    </p>
+
+                    <div class="order-card__action">
+                        <a class="btn btn-primary btn-sm order-card__view" href="<?= hopia_e($viewUrl) ?>" aria-label="View order: <?= hopia_e($productName) ?>">
                             VIEW ORDER
                         </a>
                     </div>

@@ -91,12 +91,13 @@ if ($ui_section === 'admin') {
                         <?php $ui_shop_current = ($ui_active !== '' ? $ui_active : $ui_script) === 'products.php'; ?>
                         <li class="mobile-nav-shop"><a href="<?= hopia_e($ui_path_prefix) ?>products.php"<?= $ui_shop_current ? ' aria-current="page"' : '' ?>>Shop</a></li>
                         <?php foreach (['men' => 'Men', 'women' => 'Women'] as $genderKey => $genderLabel): ?>
+                            <?php $genderUrl = strtoupper($genderKey); ?>
                             <li class="nav-dropdown">
-                                <a class="nav-dropdown__link" href="<?= hopia_e($ui_path_prefix) ?>products.php"><?= hopia_e($genderLabel) ?></a>
+                                <a class="nav-dropdown__link" href="<?= hopia_e($ui_path_prefix) ?>products.php?gender=<?= hopia_e($genderUrl) ?>"><?= hopia_e($genderLabel) ?></a>
                                 <button class="nav-dropdown__toggle" type="button" aria-label="Show <?= hopia_e($genderLabel) ?> categories" aria-expanded="false" aria-controls="nav-<?= hopia_e($genderKey) ?>"><span aria-hidden="true">&#9662;</span></button>
                                 <div class="nav-dropdown__menu" id="nav-<?= hopia_e($genderKey) ?>">
                                     <?php foreach (['SHIRTS', 'PANTS', 'SHORTS'] as $category): ?>
-                                        <a href="<?= hopia_e($ui_path_prefix) ?>products.php?category=<?= hopia_e($category) ?>"><?= hopia_e(ucfirst(strtolower($category))) ?></a>
+                                        <a href="<?= hopia_e($ui_path_prefix) ?>products.php?gender=<?= hopia_e($genderUrl) ?>&category=<?= hopia_e($category) ?>"><?= hopia_e(ucfirst(strtolower($category))) ?></a>
                                     <?php endforeach; ?>
                                 </div>
                             </li>

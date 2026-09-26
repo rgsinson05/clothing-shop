@@ -429,8 +429,13 @@ require __DIR__ . '/../includes/ui.header.php';
 
                         <?php if ($trackingNumber !== ''): ?>
                             <p class="order-detail-tracking">
-                                <a class="btn btn-secondary btn-sm" href="https://www.jtexpress.ph/track-and-trace?waybillNo=<?= rawurlencode($trackingNumber) ?>" target="_blank" rel="noopener noreferrer">
-                                    TRACK WITH J&amp;T &#8599;
+                                <a class="btn btn-outline btn-sm" href="https://www.jtexpress.ph/track-and-trace?waybillNo=<?= rawurlencode($trackingNumber) ?>" target="_blank" rel="noopener noreferrer" aria-label="Track with J&amp;T (opens in a new tab)">
+                                    Track with J&amp;T
+                                    <svg class="order-detail-action__icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+                                        <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+                                        <polyline points="15 3 21 3 21 9"></polyline>
+                                        <line x1="10" y1="14" x2="21" y2="3"></line>
+                                    </svg>
                                 </a>
                             </p>
                         <?php endif; ?>
@@ -489,13 +494,20 @@ require __DIR__ . '/../includes/ui.header.php';
                             <?= hopia_e($orderStatusLabel) ?>
                         </span>
                     </p>
-                    <?php if ($trackingNumber !== ''): ?>
-                        <a class="btn btn-secondary btn-block" href="https://www.jtexpress.ph/track-and-trace?waybillNo=<?= rawurlencode($trackingNumber) ?>" target="_blank" rel="noopener noreferrer">
-                            TRACK WITH J&amp;T &#8599;
-                        </a>
-                    <?php endif; ?>
-                    <a class="btn btn-primary btn-block" href="orders.php">VIEW ALL ORDERS</a>
-                    <a class="btn btn-secondary btn-block" href="products.php">CONTINUE SHOPPING</a>
+                    <div class="order-detail-actions">
+                        <?php if ($trackingNumber !== ''): ?>
+                            <a class="btn btn-primary btn-block" href="https://www.jtexpress.ph/track-and-trace?waybillNo=<?= rawurlencode($trackingNumber) ?>" target="_blank" rel="noopener noreferrer" aria-label="Track with J&amp;T (opens in a new tab)">
+                                <span>Track with J&amp;T</span>
+                                <svg class="order-detail-action__icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+                                    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+                                    <polyline points="15 3 21 3 21 9"></polyline>
+                                    <line x1="10" y1="14" x2="21" y2="3"></line>
+                                </svg>
+                            </a>
+                        <?php endif; ?>
+                        <a class="btn btn-secondary btn-block" href="orders.php">View all orders</a>
+                        <a class="btn btn-ghost btn-block order-detail-action--tertiary" href="products.php">Continue shopping</a>
+                    </div>
                 </div>
             </aside>
         </div>

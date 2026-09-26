@@ -109,6 +109,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isset($_POST['delete_image_id'])) 
 
     $name = trim($_POST['name'] ?? '');
     $category = $_POST['category'] ?? '';
+    $gender = $_POST['gender'] ?? '';
     $description = trim($_POST['description'] ?? '');
     $conditionLabel = trim($_POST['condition_label'] ?? '');
     $defects = trim($_POST['defects'] ?? '');
@@ -131,6 +132,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isset($_POST['delete_image_id'])) 
 
     if (!in_array($category, $allowedCategories, true)) {
         $errors[] = 'Please select a valid category.';
+    }
+
+    $allowedGenders = ['MEN', 'WOMEN'];
+
+    if (!in_array($gender, $allowedGenders, true)) {
+        $errors[] = 'Please select a valid gender.';
     }
 
     if ($conditionLabel === '') {
@@ -228,6 +235,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isset($_POST['delete_image_id'])) 
                 SET
                     name = ?,
                     category = ?,
+                    gender = ?,
                     description = ?,
                     condition_label = ?,
                     defects = ?,
@@ -241,6 +249,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isset($_POST['delete_image_id'])) 
             $updateStmt->execute([
                 $name,
                 $category,
+                $gender,
                 $description !== '' ? $description : null,
                 $conditionLabel,
                 $defects !== '' ? $defects : null,
@@ -328,6 +337,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isset($_POST['delete_image_id'])) 
 
     $product['name'] = $name;
     $product['category'] = $category;
+    $product['gender'] = $gender;
     $product['description'] = $description;
     $product['condition_label'] = $conditionLabel;
     $product['defects'] = $defects;
@@ -396,6 +406,16 @@ $body_class = 'admin-product-form-page';
                         <option value="SHIRTS"<?= $product['category'] === 'SHIRTS' ? ' selected' : '' ?>>Shirts</option>
                         <option value="PANTS"<?= $product['category'] === 'PANTS' ? ' selected' : '' ?>>Pants</option>
                         <option value="SHORTS"<?= $product['category'] === 'SHORTS' ? ' selected' : '' ?>>Shorts</option>
+                    </select>
+                </div>
+
+                <div class="field">
+                    <label for="gender">Gender</label>
+                    <?php $currentGender = $product['gender'] ?? ''; ?>
+                    <select id="gender" name="gender" required>
+                        <option value="" disabled<?= $currentGender === '' ? ' selected' : '' ?>>Select gender</option>
+                        <option value="MEN"<?= $currentGender === 'MEN' ? ' selected' : '' ?>>Men</option>
+                        <option value="WOMEN"<?= $currentGender === 'WOMEN' ? ' selected' : '' ?>>Women</option>
                     </select>
                 </div>
 

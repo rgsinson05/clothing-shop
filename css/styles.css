@@ -578,9 +578,34 @@ input[type="reset"]:active {
 }
 
 .btn-secondary:hover {
-  background: var(--color-surface-muted);
-  border-color: var(--color-border-strong);
-  color: var(--color-text);
+    background: var(--color-surface-muted);
+    border-color: var(--color-border-strong);
+    color: var(--color-text);
+}
+
+/*
+ * btn-outline — thin-border secondary action, visually subordinate to btn-secondary.
+ * Used in the shipment card where the aside panel already carries the primary track action.
+ */
+.btn-outline {
+    background: transparent;
+    border: 1px solid var(--color-border-strong);
+    border-radius: 2px;
+    color: var(--color-text);
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+
+.btn-outline:hover {
+    background: var(--color-bg-alt);
+    border-color: var(--color-border-strong);
+    color: var(--color-text);
+}
+
+.btn-outline:focus-visible {
+    outline: 2px solid var(--editorial-ink, #171717);
+    outline-offset: 3px;
 }
 
 .btn-ghost {
@@ -1098,64 +1123,278 @@ tbody tr:hover {
 }
 
 /* Customer login */
+.auth-page .site-main,
 .login-page .site-main {
-  padding-block: var(--sp-5);
+  padding-block: var(--sp-7);
 }
 
+.auth-page__content,
 .login-page__content {
   display: flex;
   justify-content: center;
+  align-items: flex-start;
+  padding-block: var(--sp-5);
 }
 
-.login-card {
+.auth-card {
   width: 100%;
-  max-width: 480px;
-  padding: var(--sp-5);
+  max-width: 440px;
+  padding: var(--sp-6);
   background: var(--color-surface);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow);
+  border-radius: var(--radius);
+  box-shadow: none;
 }
 
-.login-card__header {
+.auth-card__brand {
+  text-align: center;
+  font-size: 1.375rem;
+  font-weight: 900;
+  letter-spacing: -0.04em;
+  text-transform: uppercase;
+  color: var(--color-text);
+  margin-bottom: var(--sp-6);
+  line-height: 1;
+}
+
+.auth-card__header {
   margin-bottom: var(--sp-5);
   text-align: center;
 }
 
-.login-card__eyebrow {
-  color: var(--color-primary);
-  font-size: 0.75rem;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.login-card h1 {
-  margin-top: var(--sp-2);
+.auth-card__header h1 {
   font-size: 1.5rem;
+  font-weight: 700;
   letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-text);
+  line-height: 1.2;
 }
 
-.login-card__intro {
+.auth-card__subtitle {
   margin-top: var(--sp-2);
   color: var(--color-text-muted);
   font-size: 0.9375rem;
+  line-height: 1.5;
 }
 
-.login-card .alert {
+.auth-card .alert {
+  margin-bottom: var(--sp-4);
+}
+
+/* Form fields */
+.auth-form .field {
+  margin-bottom: var(--sp-4);
+}
+
+.field-label {
+  display: block;
+  margin-bottom: 0.375rem;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-text-soft);
+}
+
+.input {
+  width: 100%;
+  padding: 0.625rem 0.875rem;
+  min-height: 44px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  font-family: inherit;
+  font-size: 0.9375rem;
+  color: var(--color-text);
+  transition: border-color var(--transition), box-shadow var(--transition);
+}
+
+.input::placeholder {
+  color: var(--color-text-muted);
+  opacity: 1;
+}
+
+.input:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: var(--ring);
+}
+
+/* Password field with toggle */
+.input-password {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.input-password .input {
+  padding-right: 2.75rem;
+}
+
+/* Suppress the browser's native password reveal control so only the
+   custom show/hide toggle is visible (Edge/IE eye + Chrome caps-lock). */
+.input-password .input::-ms-reveal,
+.input-password .input::-ms-clear {
+  display: none;
+}
+
+.input-password .input::-webkit-credentials-auto-fill-button,
+.input-password .input::-webkit-strong-password-auto-fill-button {
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.input-password__toggle {
+  position: absolute;
+  right: 0.625rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  transition: color var(--transition);
+}
+
+.input-password__toggle:hover,
+.input-password__toggle:focus-visible {
+  color: var(--color-text);
+  outline: none;
+}
+
+.input-password__toggle:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 1px;
+}
+
+/* Extras row: Remember me + Forgot password */
+.auth-form__extras {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
   margin-bottom: var(--sp-5);
+  margin-top: var(--sp-2);
 }
 
-.login-form .field:last-of-type {
-  margin-bottom: 0;
+/* Checkbox */
+.checkbox-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.875rem;
+  color: var(--color-text-soft);
+  cursor: pointer;
+  user-select: none;
 }
 
-.login-form__submit {
-  margin-top: var(--sp-5);
+.checkbox-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.checkbox-custom {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 17px;
+  height: 17px;
+  flex: none;
+  border: 1.5px solid var(--color-border-strong);
+  border-radius: 3px;
+  background: var(--color-surface);
+  transition: border-color var(--transition), background-color var(--transition);
+}
+
+.checkbox-input:checked + .checkbox-custom {
+  border-color: var(--color-text);
+  background-color: var(--color-text);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 12 12'%3E%3Cpath fill='none' stroke='%23f5f2ec' stroke-width='2' stroke-linecap='round' stroke-linejoin='round' d='M2.5 6 5 8.5 9.5 3.5'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: 10px 10px;
+}
+
+.checkbox-input:focus-visible + .checkbox-custom {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+/* Forgot password link */
+.link-forgot {
+  font-size: 0.875rem;
+  color: var(--color-text-muted);
+  text-decoration: none;
+  white-space: nowrap;
+  transition: color var(--transition);
+}
+
+.link-forgot:hover {
+  color: var(--color-text);
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
+}
+
+/* Submit button */
+.btn-auth-submit {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
   min-height: 48px;
+  padding: 0.625rem 1.15rem;
+  border: 1px solid var(--editorial-ink, #171717);
+  border-radius: 2px;
+  background: var(--editorial-ink, #171717);
+  color: var(--editorial-paper, #f5f2ec);
+  font-family: inherit;
+  font-size: 0.9375rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: background-color var(--transition), border-color var(--transition),
+    color var(--transition), box-shadow var(--transition), transform var(--transition);
 }
 
-.login-card__register {
+@media (hover: hover) and (pointer: fine) {
+  .btn-auth-submit:hover {
+    background: var(--editorial-paper, #f5f2ec);
+    border-color: var(--editorial-ink, #171717);
+    color: var(--editorial-ink, #171717);
+  }
+}
+
+.btn-auth-submit:focus-visible {
+  background: var(--editorial-paper, #f5f2ec);
+  border-color: var(--editorial-ink, #171717);
+  color: var(--editorial-ink, #171717);
+  outline: 2px solid var(--editorial-ink, #171717);
+  outline-offset: 3px;
+}
+
+.btn-auth-submit:active {
+  background: var(--editorial-ink, #171717);
+  border-color: var(--editorial-ink, #171717);
+  color: var(--editorial-paper, #f5f2ec);
+  transform: translateY(1px);
+}
+
+/* Bottom switch link */
+.auth-card__switch {
   margin-top: var(--sp-5);
   padding-top: var(--sp-4);
   border-top: 1px solid var(--color-border);
@@ -1164,19 +1403,29 @@ tbody tr:hover {
   text-align: center;
 }
 
-@media (min-width: 560px) {
-  .login-page .site-main {
-    padding-block: var(--sp-6);
-  }
+.auth-card__switch a {
+  color: var(--color-text);
+  font-weight: 600;
+  text-decoration: none;
+  transition: color var(--transition);
+}
 
-  .login-card {
-    padding: var(--sp-6);
+.auth-card__switch a:hover {
+  color: var(--color-primary);
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
+}
+
+@media (min-width: 560px) {
+  .auth-card__header h1 {
+    font-size: 1.75rem;
   }
 }
 
 @media (min-width: 720px) {
-  .login-card h1 {
-    font-size: 1.75rem;
+  .auth-page .site-main,
+  .login-page .site-main {
+    padding-block: var(--sp-7);
   }
 }
 
@@ -1535,6 +1784,17 @@ tbody tr:hover {
   text-transform: uppercase;
 }
 
+.catalog-heading {
+  margin: 0;
+  padding-top: var(--sp-6);
+  text-align: center;
+  font-size: 1.25rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--editorial-ink, #171717);
+}
+
 .catalog-search {
   display: flex;
   align-items: center;
@@ -1674,6 +1934,10 @@ tbody tr:hover {
   min-width: 0;
   display: flex;
   flex-direction: column;
+}
+
+.catalog-card[hidden] {
+  display: none;
 }
 
 .catalog-card__image {
@@ -3974,7 +4238,7 @@ body.is-modal-open {
 
 /* My Orders Page */
 .orders-page {
-    padding-top: var(--sp-4);
+    padding-top: var(--sp-2);
 }
 
 .orders-header {
@@ -3982,75 +4246,83 @@ body.is-modal-open {
 }
 
 .orders-header h1 {
-    font-size: 1.5rem;
-    letter-spacing: 0.04em;
+    font-size: clamp(1.65rem, 5vw, 2.1rem);
+    font-weight: 800;
+    line-height: 1.08;
+    letter-spacing: 0.005em;
+    text-transform: uppercase;
+    color: var(--editorial-ink, #171717);
 }
 
+.orders-intro {
+    margin-top: var(--sp-2);
+    max-width: 48ch;
+    color: var(--color-text-muted);
+    font-size: 0.9375rem;
+    line-height: 1.5;
+}
+
+/* Filters */
 .orders-filters {
     margin-bottom: var(--sp-5);
+    border-bottom: 1px solid var(--color-border);
 }
 
-.orders-filter-list {
+.orders-filter-tabs {
     display: flex;
-    flex-wrap: wrap;
-    gap: var(--sp-2);
-    list-style: none;
-    margin: 0;
-    padding: 0;
+    align-items: center;
+    gap: 0;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+}
+
+.orders-filter-tabs::-webkit-scrollbar {
+    display: none;
 }
 
 .orders-filter {
+    flex: none;
     display: inline-block;
-    padding: 0.5rem 1rem;
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-pill);
-    background: var(--color-surface);
+    padding: var(--sp-2) var(--sp-4);
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+    background: transparent;
     color: var(--color-text-soft);
-    font-size: 0.875rem;
+    font-size: 0.8125rem;
     font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
     text-decoration: none;
-    transition: border-color var(--transition), background-color var(--transition),
-        color var(--transition);
+    white-space: nowrap;
+    transition: color var(--transition), border-color var(--transition);
 }
 
 .orders-filter:hover {
-    border-color: var(--color-border-strong);
     color: var(--color-text);
 }
 
 .orders-filter.is-active {
-    background: var(--color-primary);
-    border-color: var(--color-primary);
-    color: var(--color-on-primary);
+    border-bottom-color: var(--color-primary);
+    color: var(--color-primary);
+    font-weight: 700;
 }
 
+/* Empty state */
 .orders-empty {
     display: flex;
     flex-direction: column;
     align-items: center;
     padding: var(--sp-7) var(--sp-4);
     text-align: center;
-    background: var(--color-surface);
-    border: 1px dashed var(--color-border-strong);
-    border-radius: var(--radius);
-}
-
-.orders-empty__icon {
-    margin-bottom: var(--sp-4);
-    color: var(--color-text-muted);
-}
-
-.orders-empty h2 {
-    margin-bottom: var(--sp-2);
-    font-size: 1.25rem;
 }
 
 .orders-empty p {
-    margin-bottom: var(--sp-5);
-    color: var(--color-text-soft);
+    color: var(--color-text-muted);
     font-size: 0.9375rem;
 }
 
+/* Orders list */
 .orders-list {
     display: flex;
     flex-direction: column;
@@ -4060,10 +4332,23 @@ body.is-modal-open {
     padding: 0;
 }
 
+/*
+ * Order card. Mobile-first vertical hierarchy, promoted to a single
+ * horizontal row on wider screens. A CSS grid keeps the product
+ * identity dominant while status, price, and action stay aligned
+ * without a rigid table feel. One order = one unique item.
+ */
 .order-card {
-    display: flex;
-    flex-direction: column;
-    gap: var(--sp-3);
+    position: relative;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+        "media    media"
+        "identity identity"
+        "status   price"
+        "action   action";
+    column-gap: var(--sp-4);
+    row-gap: var(--sp-3);
     padding: var(--sp-4);
     background: var(--color-surface);
     border: 1px solid var(--color-border);
@@ -4076,127 +4361,154 @@ body.is-modal-open {
     box-shadow: var(--shadow-sm);
 }
 
-.order-card__link {
-    display: block;
-    color: inherit;
-    text-decoration: none;
+.order-card:focus-within {
+    border-color: var(--editorial-ink, #171717);
+    box-shadow: var(--shadow-sm);
 }
 
-.order-card__product {
-    display: flex;
-    align-items: center;
-    gap: var(--sp-3);
-}
-
-.order-card__thumb {
-    flex-shrink: 0;
-    width: 64px;
-    height: 80px;
+/* Product image */
+.order-card__media {
+    grid-area: media;
+    justify-self: start;
+    width: 132px;
+    max-width: 45%;
+    aspect-ratio: 4 / 5;
     overflow: hidden;
     border-radius: var(--radius-sm);
     background: var(--color-bg-alt);
 }
 
-.order-card__thumb img {
+.order-card__media img {
     width: 100%;
     height: 100%;
     object-fit: cover;
+    border-radius: inherit;
 }
 
-.order-card__thumb--placeholder {
+.order-card__media--placeholder {
     display: flex;
     align-items: center;
     justify-content: center;
     color: var(--color-text-muted);
 }
 
-.order-card__info {
+/* Product identity: name + date */
+.order-card__identity {
+    grid-area: identity;
     min-width: 0;
-    flex: 1;
+    padding-bottom: var(--sp-3);
+    border-bottom: 1px solid var(--color-border);
 }
 
 .order-card__name {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
     overflow: hidden;
-    font-size: 0.9375rem;
-    font-weight: 650;
-    line-height: 1.35;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    font-size: 1.0625rem;
+    font-weight: 700;
+    line-height: 1.3;
+    letter-spacing: -0.01em;
     color: var(--color-text);
+    overflow-wrap: anywhere;
 }
 
 .order-card__date {
     margin-top: var(--sp-1);
     color: var(--color-text-muted);
     font-size: 0.8125rem;
+    letter-spacing: 0.02em;
 }
 
-.order-card__meta {
+/* Status + optional cancellation notice */
+.order-card__status {
+    grid-area: status;
     display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: var(--sp-2) var(--sp-3);
-    padding-top: var(--sp-3);
-    border-top: 1px solid var(--color-border);
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--sp-2);
+    min-width: 0;
 }
 
 .order-card__cancel-note {
     font-size: 0.75rem;
-    color: var(--color-danger);
     font-weight: 500;
+    line-height: 1.35;
+    color: var(--color-danger);
 }
 
-.order-card__amount {
-    margin-left: auto;
-    font-size: 0.9375rem;
+/* Price stays top-aligned so a cancellation note never shifts it */
+.order-card__price {
+    grid-area: price;
+    justify-self: end;
+    align-self: start;
+    font-size: 1rem;
+    font-weight: 700;
     white-space: nowrap;
+    color: var(--color-text);
+}
+
+/* Action: primary VIEW ORDER button */
+.order-card__action {
+    grid-area: action;
 }
 
 .order-card__view {
-    margin-left: auto;
-    margin-top: var(--sp-2);
     width: 100%;
+    min-height: 44px;
 }
 
+/* Whole card is clickable via the VIEW ORDER link overlay */
+.order-card__view::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+}
+
+/* Tablet and desktop: single horizontal row */
 @media (min-width: 720px) {
     .orders-page {
-        padding-top: var(--sp-5);
-    }
-
-    .orders-header h1 {
-        font-size: 1.75rem;
+        padding-top: var(--sp-3);
     }
 
     .order-card {
-        flex-direction: row;
+        grid-template-columns: auto minmax(0, 1fr) auto auto auto;
+        grid-template-areas: "media identity status price action";
         align-items: center;
-        gap: var(--sp-4);
+        column-gap: var(--sp-4);
+        row-gap: 0;
+        padding: var(--sp-4) var(--sp-5);
     }
 
-    .order-card__meta {
-        padding-top: 0;
-        border-top: 0;
+    .order-card__media {
+        width: 84px;
+        max-width: none;
     }
 
-    .order-card__amount {
-        margin-left: 0;
+    .order-card__identity {
+        padding-bottom: 0;
+        border-bottom: 0;
+    }
+
+    .order-card__status {
+        align-self: center;
+    }
+
+    .order-card__price {
+        align-self: center;
     }
 
     .order-card__view {
-        margin-left: 0;
-        margin-top: 0;
         width: auto;
-    }
-
-    .order-card__thumb {
-        width: 72px;
-        height: 90px;
+        min-height: 36px;
     }
 }
 
 @media (min-width: 1024px) {
-    .orders-header h1 {
-        font-size: 2rem;
+    .order-card {
+        column-gap: var(--sp-5);
+        padding: var(--sp-4) var(--sp-6);
     }
 }
 
@@ -4205,9 +4517,19 @@ body.is-modal-open {
     padding-top: var(--sp-4);
 }
 
-.order-detail-breadcrumb__list {
+.order-detail-layout {
     display: flex;
-    flex-wrap: wrap;
+    flex-direction: column;
+    gap: var(--sp-4);
+    margin-top: var(--sp-5);
+}
+
+.order-detail-aside {
+    order: -1;
+    min-width: 0;
+}
+
+.order-detail-breadcrumb__list {
     align-items: center;
     gap: var(--sp-2);
     list-style: none;
@@ -4448,6 +4770,12 @@ body.is-modal-open {
     margin-top: var(--sp-4);
 }
 
+.order-detail-tracking .btn {
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+
 .order-detail-cancellation p {
     color: var(--color-text-soft);
 }
@@ -4483,6 +4811,33 @@ body.is-modal-open {
 
 .order-detail-aside__status {
     margin-bottom: var(--sp-3);
+}
+
+/* Order Detail — unified action system (primary / secondary / tertiary) */
+.order-detail-actions {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-2);
+}
+
+.order-detail-actions .btn {
+    border-radius: 2px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+
+.order-detail-actions .order-detail-action--tertiary {
+    color: var(--color-text-muted);
+}
+
+.order-detail-actions .order-detail-action--tertiary:hover {
+    background: var(--color-bg-alt);
+    color: var(--color-text);
+}
+
+.order-detail-action__icon {
+    flex-shrink: 0;
 }
 
 .order-detail-empty {
