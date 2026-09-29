@@ -42,6 +42,11 @@ require __DIR__ . '/includes/ui.header.php';
 ?>
 
 <section class="home-hero" aria-labelledby="home-title">
+    <video class="home-hero__video" autoplay muted loop playsinline aria-hidden="true" tabindex="-1">
+        <source src="assets/videos/luma-0f150a86.mp4" type="video/mp4" media="(max-width: 719px)">
+        <source src="assets/videos/luma-454e7711.mp4" type="video/mp4">
+    </video>
+    <span class="home-hero__scrim" aria-hidden="true"></span>
     <div class="home-hero__content">
         <p class="home-hero__eyebrow">Wholesale &amp; retail</p>
         <h1 id="home-title">Find your<br>next fit.</h1>

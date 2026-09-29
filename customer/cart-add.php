@@ -156,10 +156,22 @@ $addItemStmt->execute([
 ]);
 
 if ($wantsJson) {
+    // Same cart-count query/source used by includes/ui.header.php, so the
+    // badge on the catalog page stays in sync with the header badge.
+    $cartCountStmt = $pdo->prepare(
+        'SELECT COUNT(ci.id) AS item_count
+         FROM carts c
+         INNER JOIN cart_items ci ON ci.cart_id = c.id
+         WHERE c.customer_id = :customer_id'
+    );
+    $cartCountStmt->execute([':customer_id' => $customerId]);
+    $countResult = $cartCountStmt->fetch(PDO::FETCH_ASSOC);
+
     cartAddRespondJson([
         'ok' => true,
         'reason' => 'added',
         'token' => cartAddFreshToken(),
+        'cart_count' => (int) ($countResult['item_count'] ?? 0),
     ], 200);
 }
 

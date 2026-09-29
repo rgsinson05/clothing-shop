@@ -110,6 +110,22 @@ if ($catalog_logged_in) {
     $csrfTokenCart = $_SESSION['csrf_token_cart'];
 }
 
+// Same cart-count query/source used by includes/ui.header.php, so the
+// products-page cart icon shows the identical badge count.
+$catalogCartCount = 0;
+
+if ($catalog_logged_in) {
+    $cartCountStmt = $pdo->prepare(
+        'SELECT COUNT(ci.id) AS item_count
+         FROM carts c
+         INNER JOIN cart_items ci ON ci.cart_id = c.id
+         WHERE c.customer_id = :customer_id'
+    );
+    $cartCountStmt->execute([':customer_id' => (int) $_SESSION['customer_id']]);
+    $countResult = $cartCountStmt->fetch(PDO::FETCH_ASSOC);
+    $catalogCartCount = (int) ($countResult['item_count'] ?? 0);
+}
+
 require __DIR__ . '/../includes/ui.head.php';
 ?>
 
@@ -125,12 +141,15 @@ require __DIR__ . '/../includes/ui.head.php';
                 </svg>
             </a>
             <a class="catalog-head__brand" href="../index.php">HOPIA FITS</a>
-            <a class="catalog-head__icon catalog-head__cart" href="<?= hopia_e($catalog_logged_in ? 'cart.php' : 'login.php') ?>" aria-label="Cart">
+            <a class="catalog-head__icon catalog-head__cart" href="<?= hopia_e($catalog_logged_in ? 'cart.php' : 'login.php') ?>" aria-label="Cart" style="position: relative;">
                 <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                     <path d="M4 5h2l1.6 10.2a1.5 1.5 0 0 0 1.5 1.3h7.8a1.5 1.5 0 0 0 1.5-1.2L20 8H7"></path>
                     <circle cx="10" cy="20" r="1"></circle>
                     <circle cx="17" cy="20" r="1"></circle>
                 </svg>
+                <?php if ($catalogCartCount > 0): ?>
+                    <span class="cart-badge" aria-label="<?= (int) $catalogCartCount ?> items in cart"><?= hopia_e($catalogCartCount) ?></span>
+                <?php endif; ?>
             </a>
         </div>
     </header>
@@ -271,6 +290,8 @@ require __DIR__ . '/../includes/ui.head.php';
                             </div>
 
                             <div class="catalog-card__body">
+                                <p class="catalog-card__category"><?= hopia_e($product['category']) ?></p>
+
                                 <h2 class="catalog-card__name">
                                     <?php if (!$isSold): ?>
                                         <a href="<?= hopia_e($productUrl) ?>"><?= hopia_e($product['name']) ?></a>
@@ -367,6 +388,29 @@ require __DIR__ . '/../includes/ui.head.php';
         error: 'Something went wrong. Please try again.'
     };
 
+    var cartLink = document.querySelector('.catalog-head__cart');
+
+    function updateCartBadge(count) {
+        if (!cartLink || typeof count !== 'number' || isNaN(count)) {
+            return;
+        }
+        var badge = cartLink.querySelector('.cart-badge');
+        if (count > 0) {
+            if (badge) {
+                badge.textContent = count;
+                badge.setAttribute('aria-label', count + ' items in cart');
+            } else {
+                badge = document.createElement('span');
+                badge.className = 'cart-badge';
+                badge.setAttribute('aria-label', count + ' items in cart');
+                badge.textContent = count;
+                cartLink.appendChild(badge);
+            }
+        } else if (badge) {
+            badge.parentNode.removeChild(badge);
+        }
+    }
+
     document.querySelectorAll('.catalog-quickadd').forEach(function(form) {
         form.addEventListener('submit', function(e) {
             e.preventDefault();
@@ -390,6 +434,7 @@ require __DIR__ . '/../includes/ui.head.php';
             .then(function(data) {
                 if (data.ok) {
                     showToast('Added to cart', false);
+                    updateCartBadge(data.cart_count);
                 } else {
                     if (data.reason === 'auth' && data.redirect) {
                         window.location.href = data.redirect;

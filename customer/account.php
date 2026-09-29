@@ -102,6 +102,8 @@ require __DIR__ . '/../includes/ui.header.php';
     <div class="account-actions">
         <a class="btn btn-primary account-actions__orders" href="orders.php">VIEW MY ORDERS</a>
         <a class="btn btn-secondary account-actions__shop" href="products.php">CONTINUE SHOPPING</a>
+        <div class="account-actions__divider" role="presentation"></div>
+        <a class="account-actions__logout" href="logout.php" data-logout>LOG OUT</a>
     </div>
 </section>
 
