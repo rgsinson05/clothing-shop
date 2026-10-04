@@ -391,5 +391,71 @@ CREATE TABLE shipments (
 
 
 -- ============================================================
+-- 11. CUSTOMER FEEDBACK
+-- ============================================================
+--
+-- A feedback belongs to exactly one customer, one order, and
+-- one order item.
+--
+-- UNIQUE(order_item_id) enforces one feedback record per
+-- purchased order item.
+--
+-- rating is constrained to the range 1 through 5.
+--
+-- photo_path is NULL when the customer does not attach a photo.
+--
+-- There is intentionally NO approval/moderation status and NO
+-- admin ownership field.
+--
+-- Feedback is edited by updating the existing row:
+--   created_at keeps the original submission time.
+--   updated_at is maintained by ON UPDATE CURRENT_TIMESTAMP.
+--
+-- Foreign keys are RESTRICT on delete so historical feedback
+-- is never silently removed by unrelated record deletion.
+-- ============================================================
+
+CREATE TABLE customer_feedback (
+    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+
+    customer_id INT UNSIGNED NOT NULL,
+    order_id INT UNSIGNED NOT NULL,
+    order_item_id INT UNSIGNED NOT NULL,
+
+    rating TINYINT UNSIGNED NOT NULL,
+    feedback_text TEXT NOT NULL,
+    photo_path VARCHAR(500) NULL,
+
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        ON UPDATE CURRENT_TIMESTAMP,
+
+    CONSTRAINT fk_customer_feedback_customer
+        FOREIGN KEY (customer_id)
+        REFERENCES customers(id)
+        ON DELETE RESTRICT
+        ON UPDATE CASCADE,
+
+    CONSTRAINT fk_customer_feedback_order
+        FOREIGN KEY (order_id)
+        REFERENCES orders(id)
+        ON DELETE RESTRICT
+        ON UPDATE CASCADE,
+
+    CONSTRAINT fk_customer_feedback_order_item
+        FOREIGN KEY (order_item_id)
+        REFERENCES order_items(id)
+        ON DELETE RESTRICT
+        ON UPDATE CASCADE,
+
+    CONSTRAINT uq_customer_feedback_order_item
+        UNIQUE (order_item_id),
+
+    CONSTRAINT chk_customer_feedback_rating
+        CHECK (rating BETWEEN 1 AND 5)
+);
+
+
+-- ============================================================
 -- END OF SCHEMA
 -- ============================================================

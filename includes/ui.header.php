@@ -9,6 +9,74 @@
 
 require_once __DIR__ . '/ui.php';
 
+// Custom editorial line-art nav icons (Hopias refined editorial resale identity).
+// All icons: 24x24 viewBox, thin-to-medium stroke, currentColor, no fills.
+$hopia_nav_icons = [
+    // Male symbol - MEN
+    'men' => function () {
+        ?><svg class="nav-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="10" cy="14" r="4"></circle><line x1="12.8" y1="11.2" x2="21" y2="3"></line><polyline points="15 3 21 3 21 9"></polyline></svg><?php
+    },
+    // Female symbol - WOMEN
+    'women' => function () {
+        ?><svg class="nav-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="10" r="4"></circle><line x1="12" y1="14" x2="12" y2="22"></line><line x1="8.5" y1="19" x2="15.5" y2="19"></line></svg><?php
+    },
+    // Quote / speech bubble - CUSTOMER'S FEEDBACK
+    'feedback' => function () {
+        ?><svg class="nav-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 11.2a7.6 7.6 0 0 1-7.7 7.4c-1 0-2-.17-2.9-.5L4 19.5l1.4-4A7 7 0 0 1 4.6 11.2 7.6 7.6 0 0 1 12.3 3.8 7.6 7.6 0 0 1 20 11.2z"></path><path d="M9 10.8h.01M12.4 10.8h.01M15.8 10.8h.01"></path></svg><?php
+    },
+    // Collection grid - EXPLORE
+    'explore' => function () {
+        ?><svg class="nav-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="4" width="7" height="7" rx="1"></rect><rect x="13" y="4" width="7" height="7" rx="1"></rect><rect x="4" y="13" width="7" height="7" rx="1"></rect><rect x="13" y="13" width="7" height="7" rx="1"></rect></svg><?php
+    },
+    // T-shirt - category
+    'shirt' => function () {
+        ?><svg class="nav-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 4 4.6 6.7a1 1 0 0 0-.4 1.2L5.5 11l2.5-.9V20h8v-9.9l2.5.9 1.3-3.1a1 1 0 0 0-.4-1.2L15 4a3 3 0 0 1-6 0z"></path></svg><?php
+    },
+    // Pants - category
+    'pants' => function () {
+        ?><svg class="nav-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3h8l1.5 18h-5L12 10.5 11.5 21h-5L8 3z"></path><path d="M8 7h8"></path></svg><?php
+    },
+    // Shorts - category
+    'shorts' => function () {
+        ?><svg class="nav-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 4h10l2 14h-6.5L12 11l-.5 7H5L7 4z"></path><path d="M7 8h10"></path></svg><?php
+    },
+    // Info circle - ABOUT
+    'about' => function () {
+        ?><svg class="nav-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"></circle><path d="M12 11v5"></path><path d="M12 8h.01"></path></svg><?php
+    },
+    // Gallery frames - GALLERY
+    'gallery' => function () {
+        ?><svg class="nav-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="6.5" width="14" height="11" rx="1"></rect><path d="M7.5 6.5V5a1.5 1.5 0 0 1 1.5-1.5h10A1.5 1.5 0 0 1 20.5 5v9A1.5 1.5 0 0 1 19 15.5h-1.5"></path></svg><?php
+    },
+    // Envelope - CONTACT
+    'contact' => function () {
+        ?><svg class="nav-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="5.5" width="17" height="13" rx="1.5"></rect><path d="m4.5 7 7.5 6 7.5-6"></path></svg><?php
+    },
+    // Shop / rail - SHOP (mobile)
+    'shop' => function () {
+        ?><svg class="nav-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 8h14l-1 12H6L5 8z"></path><path d="M9 10V6.5a3 3 0 0 1 6 0V10"></path></svg><?php
+    },
+    // Category icon map for dropdown labels
+    'category' => [
+        'SHIRTS' => 'shirt',
+        'PANTS' => 'pants',
+        'SHORTS' => 'shorts',
+    ],
+    'explore_link' => [
+        'About' => 'about',
+        'Gallery' => 'gallery',
+        'Contact' => 'contact',
+    ],
+];
+
+// Render helper for the shared icon set.
+function hopia_nav_icon(array $icons, string $name): void
+{
+    if (isset($icons[$name]) && $icons[$name] instanceof Closure) {
+        $icons[$name]();
+    }
+}
+
 $ui_section = isset($ui_section) && $ui_section === 'admin' ? 'admin' : 'store';
 $ui_active = isset($ui_active) ? (string) $ui_active : '';
 $body_class = isset($body_class) ? (string) $body_class : '';
@@ -45,6 +113,11 @@ if ($ui_section === 'admin') {
     $ui_user_name = isset($_SESSION['customer_name']) ? (string) $_SESSION['customer_name'] : '';
     $ui_brand_href = $ui_brand_href_override !== '' ? $ui_brand_href_override : '../index.php';
     $ui_brand_label = 'HOPIA FITS';
+
+    // Root-level pages set $ui_path_prefix = 'customer/'; /customer/*.php pages leave it
+    // empty. Derive a matching relative prefix back to the project root for the public
+    // pages (Customer's Feedback, About, Gallery, Contact).
+    $ui_root_prefix = $ui_path_prefix === '' ? '../' : '';
     $ui_nav = [
         ['url' => $ui_path_prefix . 'products.php', 'active' => 'products.php', 'label' => 'Shop'],
     ];
@@ -55,7 +128,7 @@ if ($ui_section === 'admin') {
     <a class="sr-only" href="#site-main">Skip to content</a>
     <header class="site-header">
         <div class="container site-header__inner">
-            <a class="brand" href="<?= hopia_e($ui_brand_href) ?>"><?= hopia_e($ui_brand_label) ?></a>
+            <a class="brand" href="<?= hopia_e($ui_brand_href) ?>"><img class="brand__logo" src="<?= hopia_e(hopia_asset('assets/videos/pictures/Hopia-fits-logo.webp')) ?>" alt="" width="43" height="43"><span class="brand__text"><?= hopia_e($ui_brand_label) ?></span></a>
             <?php if ($ui_section !== 'admin'): ?>
                 <div class="site-header__mobile-tools">
                     <a class="header-search-toggle" href="<?= hopia_e($ui_path_prefix) ?>products.php?focus=1">
@@ -105,20 +178,48 @@ if ($ui_section === 'admin') {
                 <nav class="site-nav" id="site-nav" aria-label="Primary">
                     <ul class="nav">
                         <?php $ui_shop_current = ($ui_active !== '' ? $ui_active : $ui_script) === 'products.php'; ?>
-                        <li class="mobile-nav-shop"><a href="<?= hopia_e($ui_path_prefix) ?>products.php"<?= $ui_shop_current ? ' aria-current="page"' : '' ?>>Shop</a></li>
+                        <li class="mobile-nav-shop"><a href="<?= hopia_e($ui_path_prefix) ?>products.php"<?= $ui_shop_current ? ' aria-current="page"' : '' ?>><?php hopia_nav_icon($hopia_nav_icons, 'shop'); ?>Shop</a></li>
                         <?php foreach (['men' => 'Men', 'women' => 'Women'] as $genderKey => $genderLabel): ?>
                             <?php $genderUrl = strtoupper($genderKey); ?>
                             <li class="nav-dropdown">
-                                <a class="nav-dropdown__link" href="<?= hopia_e($ui_path_prefix) ?>products.php?gender=<?= hopia_e($genderUrl) ?>"><?= hopia_e($genderLabel) ?></a>
+                                <a class="nav-dropdown__link" href="<?= hopia_e($ui_path_prefix) ?>products.php?gender=<?= hopia_e($genderUrl) ?>"><?php hopia_nav_icon($hopia_nav_icons, $genderKey); ?><?= hopia_e($genderLabel) ?></a>
                                 <button class="nav-dropdown__toggle" type="button" aria-label="Show <?= hopia_e($genderLabel) ?> categories" aria-expanded="false" aria-controls="nav-<?= hopia_e($genderKey) ?>"><span aria-hidden="true">&#9662;</span></button>
                                 <div class="nav-dropdown__menu" id="nav-<?= hopia_e($genderKey) ?>">
                                     <p class="nav-dropdown__label">SHOP <?= hopia_e(strtoupper($genderLabel)) ?></p>
                                     <?php foreach (['SHIRTS', 'PANTS', 'SHORTS'] as $category): ?>
-                                        <a href="<?= hopia_e($ui_path_prefix) ?>products.php?gender=<?= hopia_e($genderUrl) ?>&category=<?= hopia_e($category) ?>"><?= hopia_e(ucfirst(strtolower($category))) ?></a>
+                                        <a href="<?= hopia_e($ui_path_prefix) ?>products.php?gender=<?= hopia_e($genderUrl) ?>&category=<?= hopia_e($category) ?>"><?php hopia_nav_icon($hopia_nav_icons, $hopia_nav_icons['category'][$category] ?? strtolower($category)); ?><?= hopia_e(ucfirst(strtolower($category))) ?></a>
                                     <?php endforeach; ?>
                                 </div>
                             </li>
                         <?php endforeach; ?>
+                        <?php
+                        // Primary direct link: Customer's Feedback. The customer/ prefix set by
+                        // root pages resolves the link back into /customer from every context.
+                        $ui_feedback_href = $ui_path_prefix . 'feedback.php';
+                        $ui_feedback_current = basename($ui_active !== '' ? $ui_active : $ui_script) === 'feedback.php';
+                        ?>
+                        <li class="nav-primary">
+                            <a href="<?= hopia_e($ui_feedback_href) ?>"<?= $ui_feedback_current ? ' aria-current="page"' : '' ?>><?php hopia_nav_icon($hopia_nav_icons, 'feedback'); ?>Customer's Feedback</a>
+                        </li>
+                        <?php
+                        // Explore groups the editorial pages About, Gallery and Contact, which
+                        // live at the project root. $ui_root_prefix steps back up from /customer.
+                        $ui_explore_current = basename($ui_active !== '' ? $ui_active : $ui_script);
+                        $ui_explore_links = [
+                            ['href' => $ui_root_prefix . 'about.php',   'file' => 'about.php',   'label' => 'About'],
+                            ['href' => $ui_root_prefix . 'gallery.php', 'file' => 'gallery.php', 'label' => 'Gallery'],
+                            ['href' => $ui_root_prefix . 'contact.php', 'file' => 'contact.php', 'label' => 'Contact'],
+                        ];
+                        ?>
+                        <li class="nav-dropdown nav-dropdown--explore">
+                            <button class="nav-dropdown__toggle" type="button" aria-expanded="false" aria-controls="nav-explore"><?php hopia_nav_icon($hopia_nav_icons, 'explore'); ?>Explore <span aria-hidden="true">&#9662;</span></button>
+                            <div class="nav-dropdown__menu" id="nav-explore">
+                                <p class="nav-dropdown__label">EXPLORE</p>
+                                <?php foreach ($ui_explore_links as $ui_explore_link): ?>
+                                    <a href="<?= hopia_e($ui_explore_link['href']) ?>"<?= $ui_explore_current === $ui_explore_link['file'] ? ' aria-current="page"' : '' ?>><?php hopia_nav_icon($hopia_nav_icons, strtolower($ui_explore_link['label'])); ?><?= hopia_e($ui_explore_link['label']) ?></a>
+                                <?php endforeach; ?>
+                            </div>
+                        </li>
                         <?php $ui_account_current = ($ui_active !== '' ? $ui_active : $ui_script) === 'account.php'; ?>
                         <li class="mobile-nav-account">
                             <a href="<?= hopia_e($ui_path_prefix . ($ui_logged_in ? 'account.php' : 'login.php')) ?>"<?= $ui_account_current ? ' aria-current="page"' : '' ?>>
@@ -158,13 +259,13 @@ if ($ui_section === 'admin') {
                         </button>
                         <div class="header-account__menu" id="header-account-menu">
                             <p class="header-account__label">ACCOUNT</p>
-                            <a href="<?= hopia_e($ui_path_prefix . ($ui_logged_in ? 'account.php' : 'login.php')) ?>"<?= $ui_account_current ? ' aria-current="page"' : '' ?>>My Account</a>
+                            <a href="<?= hopia_e($ui_path_prefix . ($ui_logged_in ? 'account.php' : 'login.php')) ?>"<?= $ui_account_current ? ' aria-current="page"' : '' ?>><svg class="nav-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="3.2"></circle><path d="M5.5 20c.7-3.5 3-5.2 6.5-5.2s5.8 1.7 6.5 5.2"></path></svg>My Account</a>
                             <?php if ($ui_logged_in): ?>
-                                <a href="<?= hopia_e($ui_path_prefix) ?>orders.php">My Orders</a>
+                                <a href="<?= hopia_e($ui_path_prefix) ?>orders.php"><svg class="nav-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="4" width="14" height="17" rx="1"></rect><path d="M9 4V3.2A1.2 1.2 0 0 1 10.2 2h3.6A1.2 1.2 0 0 1 15 3.2V4"></path><path d="M8.5 10h7M8.5 14h7M8.5 18h4"></path></svg>My Orders</a>
                                 <div class="header-account__divider" aria-hidden="true"></div>
                                 <a class="header-logout" href="<?= hopia_e($ui_path_prefix) ?>logout.php" data-logout>Log Out</a>
                             <?php else: ?>
-                                <a href="<?= hopia_e($ui_path_prefix) ?>register.php">Register</a>
+                                <a href="<?= hopia_e($ui_path_prefix) ?>register.php"><svg class="nav-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="10" cy="8" r="3.2"></circle><path d="M3.5 20c.7-3.5 3-5.2 6.5-5.2s5.8 1.7 6.5 5.2"></path><path d="M18.5 10v6M15.5 13h6"></path></svg>Register</a>
                             <?php endif; ?>
                         </div>
                     </div>
@@ -305,6 +406,12 @@ if ($ui_section === 'admin') {
                 header.querySelectorAll('.nav-dropdown__toggle').forEach(function (button) {
                     button.addEventListener('click', function () {
                         var dropdown = button.closest('.nav-dropdown');
+                        // On desktop the dropdown is driven by CSS :hover / :focus-within,
+                        // so a click must not latch .is-open — otherwise the menu stays
+                        // open after the pointer leaves the trigger.
+                        if (window.matchMedia('(min-width: 720px)').matches) {
+                            return;
+                        }
                         var open = dropdown.classList.toggle('is-open');
                         button.setAttribute('aria-expanded', open ? 'true' : 'false');
                     });

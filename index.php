@@ -83,7 +83,10 @@ require __DIR__ . '/includes/ui.header.php';
                         </span>
                         <span class="home-category__overlay"></span>
                         <span class="home-category__content">
+                            <span class="home-category__label">
+                            <?= hopia_category_icon($category) ?>
                             <strong><?= hopia_e($category) ?></strong>
+                            </span>
                             <span class="home-category__action">Shop now</span>
                         </span>
                     </a>
@@ -96,6 +99,63 @@ require __DIR__ . '/includes/ui.header.php';
             <span class="home-category-carousel__dot"></span>
         </div>
     </div>
+</section>
+
+<section class="home-section home-why" aria-labelledby="why-title">
+    <div class="home-section__heading home-why__heading">
+        <div>
+            <span class="home-section__rule" aria-hidden="true"></span>
+            <p class="home-section__eyebrow">A few good reasons</p>
+            <h2 id="why-title">Why Hopia Fits<span class="home-why__accent">?</span></h2>
+        </div>
+    </div>
+
+    <ul class="home-why__grid">
+        <li class="home-why__item">
+            <span class="home-why__icon" aria-hidden="true">
+                <svg class="home-why__svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" focusable="false">
+                    <path d="M10.5 3 Q11.1 9.9 18 10.5 Q11.1 11.1 10.5 18 Q9.9 11.1 3 10.5 Q9.9 9.9 10.5 3 Z"/>
+                    <path d="M17.8 14.6 Q18.2 17.4 21 17.8 Q18.2 18.2 17.8 21 Q17.4 18.2 14.6 17.8 Q17.4 17.4 17.8 14.6 Z"/>
+                </svg>
+            </span>
+            <h3 class="home-why__label">Unique Finds</h3>
+            <p class="home-why__text">Every piece is different.</p>
+        </li>
+
+        <li class="home-why__item">
+            <span class="home-why__icon" aria-hidden="true">
+                <svg class="home-why__svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" focusable="false">
+                    <rect x="6.5" y="4.3" width="11" height="4.1" rx="1.1"/>
+                    <rect x="5.5" y="9.8" width="13" height="4.1" rx="1.1"/>
+                    <rect x="4.5" y="15.3" width="15" height="4.1" rx="1.1"/>
+                </svg>
+            </span>
+            <h3 class="home-why__label">Wholesale + Retail</h3>
+            <p class="home-why__text">Shop for one or shop for more.</p>
+        </li>
+
+        <li class="home-why__item">
+            <span class="home-why__icon" aria-hidden="true">
+                <svg class="home-why__svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" focusable="false">
+                    <path d="M12 8.2 L5 13.9 C4.4 14.4 4.7 15.4 5.5 15.4 L18.5 15.4 C19.3 15.4 19.6 14.4 19 13.9 Z"/>
+                    <path d="M12 8.2 V6.9 C12 5.9 11.1 5.2 10.1 5.7"/>
+                </svg>
+            </span>
+            <h3 class="home-why__label">Real Thrift Finds</h3>
+            <p class="home-why__text">Curated secondhand pieces.</p>
+        </li>
+
+        <li class="home-why__item">
+            <span class="home-why__icon" aria-hidden="true">
+                <svg class="home-why__svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" focusable="false">
+                    <path d="M12 20.5 C12 20.5 6 14.6 6 10 A6 6 0 1 1 18 10 C18 14.6 12 20.5 12 20.5 Z"/>
+                    <circle cx="12" cy="10" r="2.3"/>
+                </svg>
+            </span>
+            <h3 class="home-why__label">Local Shop</h3>
+            <p class="home-why__text">Discover Hopia Fits online.</p>
+        </li>
+    </ul>
 </section>
 
 <script>

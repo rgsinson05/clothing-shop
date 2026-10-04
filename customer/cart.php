@@ -66,8 +66,9 @@ require __DIR__ . '/../includes/ui.header.php';
     <header class="cart-header">
         <h1>YOUR CART</h1>
         <?php if (count($cartItems) > 0): ?>
-            <p class="cart-header__count"><?= count($cartItems) ?> <?= count($cartItems) === 1 ? 'item' : 'items' ?></p>
+            <p class="cart-header__count"><?= str_pad((string) count($cartItems), 2, '0', STR_PAD_LEFT) ?> <?= count($cartItems) === 1 ? 'ITEM' : 'ITEMS' ?> IN YOUR BAG</p>
         <?php endif; ?>
+        <div class="cart-header__accent" aria-hidden="true"></div>
     </header>
 
     <?php if (count($cartItems) === 0): ?>
@@ -95,6 +96,14 @@ require __DIR__ . '/../includes/ui.header.php';
                     $size = trim($item['size'] ?? '');
                     $color = trim($item['color'] ?? '');
                     $category = trim($item['category'] ?? '');
+
+                    $metaParts = [];
+                    if ($size !== '') {
+                        $metaParts[] = 'Size ' . $size;
+                    }
+                    if ($color !== '') {
+                        $metaParts[] = 'Color ' . $color;
+                    }
                     ?>
                     <article class="cart-item" role="listitem">
                         <div class="cart-item__image">
@@ -115,21 +124,15 @@ require __DIR__ . '/../includes/ui.header.php';
                             <?php endif; ?>
                         </div>
                         <div class="cart-item__details">
-                            <div class="cart-item__header">
-                                <h3 class="cart-item__name"><?= hopia_e($item['name']) ?></h3>
-                                <p class="price cart-item__price">₱<?= number_format((float) $item['price'], 2) ?></p>
-                            </div>
-                            <div class="cart-item__meta">
-                                <?php if ($category !== ''): ?>
-                                    <span class="cart-item__meta-item"><?= hopia_e(ucfirst(strtolower($category))) ?></span>
-                                <?php endif; ?>
-                                <?php if ($size !== ''): ?>
-                                    <span class="cart-item__meta-item">Size: <?= hopia_e($size) ?></span>
-                                <?php endif; ?>
-                                <?php if ($color !== ''): ?>
-                                    <span class="cart-item__meta-item">Color: <?= hopia_e($color) ?></span>
-                                <?php endif; ?>
-                            </div>
+                            <p class="cart-item__eyebrow">Curated Thrift Find</p>
+                            <?php if ($category !== ''): ?>
+                                <p class="cart-item__category"><?= hopia_e(ucfirst(strtolower($category))) ?></p>
+                            <?php endif; ?>
+                            <h3 class="cart-item__name"><?= hopia_e($item['name']) ?></h3>
+                            <p class="price cart-item__price">₱<?= number_format((float) $item['price'], 2) ?></p>
+                            <?php if ($metaParts !== []): ?>
+                                <p class="cart-item__meta"><?= hopia_e(implode(' · ', $metaParts)) ?></p>
+                            <?php endif; ?>
                             <form class="cart-item__actions" method="POST" action="cart-remove.php">
                                 <input type="hidden" name="cart_item_id" value="<?= (int) $item['cart_item_id'] ?>">
                                 <input type="hidden" name="csrf_token" value="<?= hopia_e($csrfToken) ?>">
@@ -163,8 +166,21 @@ require __DIR__ . '/../includes/ui.header.php';
                     <hr class="cart-summary__divider">
 
                     <div class="cart-summary__actions">
-                        <a class="btn btn-primary" href="checkout.php">Proceed to Checkout</a>
-                        <a class="cart-summary__continue" href="products.php">Continue Shopping</a>
+                        <a class="btn btn-primary cart-summary__checkout" href="checkout.php">
+                            <span class="cart-summary__btn-label">Proceed to Checkout</span>
+                            <svg class="cart-summary__btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+                                <path d="M4.5 12h13"/>
+                                <path d="m12.5 7 5 5-5 5"/>
+                                <path d="m17.5 12-3.2 3.2"/>
+                            </svg>
+                        </a>
+                        <a class="btn btn-secondary cart-summary__continue" href="products.php">
+                            <svg class="cart-summary__btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+                                <path d="M6 8h12l1 12.5H5L6 8Z"/>
+                                <path d="M9 8V6.5a3 3 0 0 1 6 0V8"/>
+                            </svg>
+                            <span class="cart-summary__btn-label">Continue Shopping</span>
+                        </a>
                     </div>
                 </div>
             </aside>

@@ -77,12 +77,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <?php require __DIR__ . '/../includes/ui.head.php'; ?>
 <?php require __DIR__ . '/../includes/ui.header.php'; ?>
 
-<section class="register-section" aria-labelledby="register-heading">
-    <div class="register-wrapper">
-        <header class="register-header">
-            <p class="register-brand">HOPIA FITS</p>
-            <h1 id="register-heading">CREATE YOUR ACCOUNT</h1>
-            <p class="register-subtitle">Keep track of your purchases and discover your next fit.</p>
+<section class="auth-page__content" aria-labelledby="register-heading">
+    <div class="auth-card">
+
+        <div class="auth-card__lockup">
+            <img
+                class="auth-card__logo"
+                src="<?= hopia_e(hopia_asset('assets/videos/pictures/Hopia-fits-logo.webp')) ?>"
+                alt=""
+                width="36"
+                height="36"
+            >
+            <span class="auth-card__brand">HOPIA FITS</span>
+        </div>
+
+        <header class="auth-card__header">
+            <p class="auth-card__eyebrow">Account</p>
+            <h1 id="register-heading">Create Your Account</h1>
+            <p class="auth-card__subtitle">Keep track of your purchases and discover your next fit.</p>
         </header>
 
         <?php if (isset($errors['general'])): ?>
@@ -91,12 +103,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             </div>
         <?php endif; ?>
 
-        <form class="register-form" method="POST" novalidate>
-            <div class="register-form__row">
-                <div class="register-form__field">
-                    <label class="register-form__label" for="first-name">FIRST NAME</label>
+        <form class="auth-form" method="POST" novalidate>
+            <div class="auth-form__row">
+                <div class="field">
+                    <label class="field-label" for="first-name">
+                        <svg class="field-label__icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <circle cx="12" cy="8" r="3.2"></circle>
+                            <path d="M5.5 20c.7-3.5 3-5.2 6.5-5.2s5.8 1.7 6.5 5.2"></path>
+                        </svg>
+                        First Name
+                    </label>
                     <input
-                        class="register-form__input <?= isset($errors['first_name']) ? 'is-error' : '' ?>"
+                        class="input <?= isset($errors['first_name']) ? 'is-error' : '' ?>"
                         id="first-name"
                         type="text"
                         name="first_name"
@@ -105,14 +123,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         required
                     >
                     <?php if (isset($errors['first_name'])): ?>
-                        <p class="register-form__error"><?= hopia_e($errors['first_name']) ?></p>
+                        <p class="auth-form__error"><?= hopia_e($errors['first_name']) ?></p>
                     <?php endif; ?>
                 </div>
 
-                <div class="register-form__field">
-                    <label class="register-form__label" for="last-name">LAST NAME</label>
+                <div class="field">
+                    <label class="field-label" for="last-name">
+                        <svg class="field-label__icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <circle cx="10" cy="8" r="3.2"></circle>
+                            <path d="M3.5 20c.7-3.5 3-5.2 6.5-5.2s5.8 1.7 6.5 5.2"></path>
+                            <path d="M18.5 10v6M15.5 13h6"></path>
+                        </svg>
+                        Last Name
+                    </label>
                     <input
-                        class="register-form__input <?= isset($errors['last_name']) ? 'is-error' : '' ?>"
+                        class="input <?= isset($errors['last_name']) ? 'is-error' : '' ?>"
                         id="last-name"
                         type="text"
                         name="last_name"
@@ -121,15 +146,42 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         required
                     >
                     <?php if (isset($errors['last_name'])): ?>
-                        <p class="register-form__error"><?= hopia_e($errors['last_name']) ?></p>
+                        <p class="auth-form__error"><?= hopia_e($errors['last_name']) ?></p>
                     <?php endif; ?>
                 </div>
             </div>
 
-            <div class="register-form__field">
-                <label class="register-form__label" for="phone">PHONE NUMBER</label>
+            <div class="field">
+                <label class="field-label" for="email">
+                    <svg class="field-label__icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <rect x="3.5" y="5.5" width="17" height="13" rx="1.5"></rect>
+                        <path d="m4.5 7 7.5 6 7.5-6"></path>
+                    </svg>
+                    Email
+                </label>
                 <input
-                    class="register-form__input"
+                    class="input <?= isset($errors['email']) ? 'is-error' : '' ?>"
+                    id="email"
+                    type="email"
+                    name="email"
+                    value="<?= hopia_e($_POST['email'] ?? '') ?>"
+                    autocomplete="email"
+                    required
+                >
+                <?php if (isset($errors['email'])): ?>
+                    <p class="auth-form__error"><?= hopia_e($errors['email']) ?></p>
+                <?php endif; ?>
+            </div>
+
+            <div class="field">
+                <label class="field-label" for="phone">
+                    <svg class="field-label__icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M5 3.5h4l1.5 4.5-2.2 1.6a12.5 12.5 0 0 0 6.1 6.1l1.6-2.2 4.5 1.5v4a1.5 1.5 0 0 1-1.6 1.5C10.4 19.8 4.2 13.6 3.5 5.1A1.5 1.5 0 0 1 5 3.5z"></path>
+                    </svg>
+                    Phone Number
+                </label>
+                <input
+                    class="input"
                     id="phone"
                     type="tel"
                     name="phone"
@@ -138,19 +190,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 >
             </div>
 
-            <div class="register-form__field">
-                <label class="register-form__label" for="password">PASSWORD</label>
-                <div class="register-form__password">
+            <div class="field">
+                <label class="field-label" for="password">
+                    <svg class="field-label__icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <rect x="4.5" y="10.5" width="15" height="10" rx="1.5"></rect>
+                        <path d="M8 10.5V8a4 4 0 0 1 8 0v2.5"></path>
+                        <path d="M12 14.5v2.5"></path>
+                    </svg>
+                    Password
+                </label>
+                <div class="input-password">
                     <input
-                        class="register-form__input register-form__input--password <?= isset($errors['password']) ? 'is-error' : '' ?>"
+                        class="input <?= isset($errors['password']) ? 'is-error' : '' ?>"
                         id="password"
                         type="password"
                         name="password"
                         autocomplete="new-password"
                         required
                     >
-                    <button type="button" class="register-form__toggle" aria-label="Show password" data-toggle="password">
-                        <svg class="register-form__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <button type="button" class="input-password__toggle" aria-label="Show password" data-password-toggle="password">
+                        <svg class="icon-eye" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                             <path class="eye-open" d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
                             <circle class="eye-open" cx="12" cy="12" r="3"/>
                             <line class="eye-closed" x1="1" y1="1" x2="23" y2="23" style="display:none"/>
@@ -159,23 +218,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     </button>
                 </div>
                 <?php if (isset($errors['password'])): ?>
-                    <p class="register-form__error"><?= hopia_e($errors['password']) ?></p>
+                    <p class="auth-form__error"><?= hopia_e($errors['password']) ?></p>
                 <?php endif; ?>
             </div>
 
-            <div class="register-form__field">
-                <label class="register-form__label" for="confirm-password">CONFIRM PASSWORD</label>
-                <div class="register-form__password">
+            <div class="field">
+                <label class="field-label" for="confirm-password">
+                    <svg class="field-label__icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <rect x="4.5" y="10.5" width="15" height="10" rx="1.5"></rect>
+                        <path d="M8 10.5V8a4 4 0 0 1 8 0v2.5"></path>
+                        <path d="m9.5 15.5 2 2 3.5-3.5"></path>
+                    </svg>
+                    Confirm Password
+                </label>
+                <div class="input-password">
                     <input
-                        class="register-form__input register-form__input--password <?= isset($errors['confirm_password']) ? 'is-error' : '' ?>"
+                        class="input <?= isset($errors['confirm_password']) ? 'is-error' : '' ?>"
                         id="confirm-password"
                         type="password"
                         name="confirm_password"
                         autocomplete="new-password"
                         required
                     >
-                    <button type="button" class="register-form__toggle" aria-label="Show password" data-toggle="confirm-password">
-                        <svg class="register-form__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <button type="button" class="input-password__toggle" aria-label="Show password" data-password-toggle="confirm-password">
+                        <svg class="icon-eye" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                             <path class="eye-open" d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
                             <circle class="eye-open" cx="12" cy="12" r="3"/>
                             <line class="eye-closed" x1="1" y1="1" x2="23" y2="23" style="display:none"/>
@@ -184,328 +250,44 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     </button>
                 </div>
                 <?php if (isset($errors['confirm_password'])): ?>
-                    <p class="register-form__error"><?= hopia_e($errors['confirm_password']) ?></p>
+                    <p class="auth-form__error"><?= hopia_e($errors['confirm_password']) ?></p>
                 <?php endif; ?>
             </div>
 
-            <?php if (isset($errors['email'])): ?>
-                <p class="register-form__error register-form__error--standalone"><?= hopia_e($errors['email']) ?></p>
-            <?php endif; ?>
-
-            <button class="register-form__submit" type="submit">CREATE ACCOUNT</button>
+            <button class="btn-auth-submit" type="submit">
+                Create Account
+                <svg class="btn-auth-submit__arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <line x1="4" y1="12" x2="20" y2="12"></line>
+                    <polyline points="14 6 20 12 14 18"></polyline>
+                </svg>
+            </button>
         </form>
 
-        <p class="register-footer">
+        <p class="auth-card__switch">
             Already have an account? <a href="login.php">Sign in</a>
         </p>
+
     </div>
 </section>
 
-<style>
-/* Registration Page Styles */
-.register-page .site-main {
-    padding-block: var(--sp-5);
-}
-
-.register-section {
-    display: flex;
-    justify-content: center;
-    padding-inline: var(--sp-4);
-}
-
-.register-wrapper {
-    width: 100%;
-    max-width: 480px;
-}
-
-/* Header */
-.register-header {
-    text-align: center;
-    margin-bottom: var(--sp-6);
-}
-
-.register-brand {
-    font-size: 1.375rem;
-    font-weight: 900;
-    letter-spacing: -0.04em;
-    text-transform: uppercase;
-    color: var(--color-text);
-    line-height: 1;
-    margin-bottom: var(--sp-6);
-}
-
-.register-header h1 {
-    font-size: 1.625rem;
-    font-weight: 700;
-    letter-spacing: 0.03em;
-    text-transform: uppercase;
-    color: var(--color-text);
-    line-height: 1.2;
-    margin: 0;
-}
-
-.register-subtitle {
-    margin-top: var(--sp-3);
-    font-size: 0.9375rem;
-    color: var(--color-text-muted);
-    line-height: 1.5;
-}
-
-/* Alert */
-.register-alert {
-    padding: 0.875rem 1rem;
-    border: 1px solid var(--color-border);
-    border-radius: 2px;
-    background: var(--color-surface);
-    color: var(--color-text-soft);
-    font-size: 0.9375rem;
-    margin-bottom: var(--sp-5);
-}
-
-.register-alert--error {
-    background: var(--color-danger-soft);
-    border-color: #f0cfcd;
-    color: var(--color-danger-dark);
-}
-
-/* Form */
-.register-form {
-    display: flex;
-    flex-direction: column;
-    gap: var(--sp-5);
-}
-
-.register-form__row {
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: var(--sp-5);
-}
-
-@media (min-width: 480px) {
-    .register-form__row {
-        grid-template-columns: 1fr 1fr;
-    }
-}
-
-.register-form__field {
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
-}
-
-.register-form__label {
-    font-size: 0.6875rem;
-    font-weight: 700;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    color: var(--color-text-soft);
-}
-
-.register-form__input {
-    width: 100%;
-    padding: 0.75rem 0.875rem;
-    min-height: 48px;
-    background: var(--color-surface);
-    border: 1px solid var(--color-border-strong);
-    border-radius: 2px;
-    font-family: inherit;
-    font-size: 1rem;
-    color: var(--color-text);
-    transition: border-color 150ms ease, box-shadow 150ms ease;
-}
-
-.register-form__input::placeholder {
-    color: var(--color-text-muted);
-    opacity: 1;
-}
-
-.register-form__input:focus {
-    outline: none;
-    border-color: var(--color-text);
-    box-shadow: 0 0 0 3px rgba(42, 42, 42, 0.08);
-}
-
-.register-form__input.is-error {
-    border-color: var(--color-danger);
-}
-
-.register-form__input.is-error:focus {
-    box-shadow: 0 0 0 3px rgba(168, 58, 52, 0.12);
-}
-
-/* Password field */
-.register-form__password {
-    position: relative;
-}
-
-.register-form__input--password {
-    padding-right: 3rem;
-}
-
-/* Suppress the browser's native password reveal control so only the
-   custom show/hide toggle is visible (Edge/IE eye + WebKit auto-fill). */
-.register-form__input--password::-ms-reveal,
-.register-form__input--password::-ms-clear {
-    display: none;
-}
-
-.register-form__input--password::-webkit-credentials-auto-fill-button,
-.register-form__input--password::-webkit-strong-password-auto-fill-button {
-    visibility: hidden;
-    pointer-events: none;
-}
-
-.register-form__toggle {
-    position: absolute;
-    right: 0.75rem;
-    top: 50%;
-    transform: translateY(-50%);
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 32px;
-    height: 32px;
-    padding: 0;
-    border: 0;
-    border-radius: 2px;
-    background: transparent;
-    color: var(--color-text-muted);
-    cursor: pointer;
-    transition: color 150ms ease;
-}
-
-.register-form__toggle:hover {
-    color: var(--color-text);
-}
-
-.register-form__toggle:focus-visible {
-    outline: 2px solid var(--color-text);
-    outline-offset: 1px;
-}
-
-.register-form__icon {
-    width: 20px;
-    height: 20px;
-}
-
-/* Error messages */
-.register-form__error {
-    font-size: 0.8125rem;
-    color: var(--color-danger);
-    margin: 0;
-}
-
-.register-form__error--standalone {
-    padding: 0.75rem 0;
-    margin-top: calc(var(--sp-3) * -1);
-}
-
-@media (min-width: 480px) {
-    .register-form__error--standalone {
-        margin-top: calc(var(--sp-5) * -1);
-    }
-}
-
-/* Submit button */
-.register-form__submit {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 100%;
-    min-height: 52px;
-    padding: 0.75rem 1.5rem;
-    border: 1px solid var(--editorial-ink, #171717);
-    border-radius: 2px;
-    background: var(--editorial-ink, #171717);
-    color: var(--editorial-paper, #f5f2ec);
-    font-family: inherit;
-    font-size: 0.875rem;
-    font-weight: 700;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    cursor: pointer;
-    transition: background-color 150ms ease, color 150ms ease;
-    margin-top: var(--sp-2);
-}
-
-.register-form__submit:hover {
-    background: var(--editorial-paper, #f5f2ec);
-    color: var(--editorial-ink, #171717);
-}
-
-.register-form__submit:focus-visible {
-    outline: 2px solid var(--editorial-ink, #171717);
-    outline-offset: 3px;
-}
-
-.register-form__submit:active {
-    transform: translateY(1px);
-}
-
-/* Footer */
-.register-footer {
-    margin-top: var(--sp-6);
-    padding-top: var(--sp-5);
-    border-top: 1px solid var(--color-border);
-    text-align: center;
-    font-size: 0.9375rem;
-    color: var(--color-text-muted);
-}
-
-.register-footer a {
-    color: var(--color-text);
-    font-weight: 600;
-    text-decoration: underline;
-    text-underline-offset: 0.15em;
-}
-
-.register-footer a:hover {
-    color: var(--color-primary);
-}
-
-/* Responsive adjustments */
-@media (min-width: 560px) {
-    .register-page .site-main {
-        padding-block: var(--sp-7);
-    }
-
-    .register-section {
-        padding-inline: var(--sp-5);
-    }
-
-    .register-header h1 {
-        font-size: 1.875rem;
-    }
-}
-
-@media (max-width: 479px) {
-    .register-form__row {
-        gap: var(--sp-4);
-    }
-}
-</style>
-
 <script>
-(function() {
-    'use strict';
+(function () {
+    document.querySelectorAll('[data-password-toggle]').forEach(function (btn) {
+        var input = document.getElementById(btn.getAttribute('data-password-toggle'));
+        if (!input) return;
 
-    // Password show/hide toggle
-    document.querySelectorAll('[data-toggle]').forEach(function(button) {
-        button.addEventListener('click', function() {
-            var targetId = this.getAttribute('data-toggle');
-            var input = document.getElementById(targetId);
-            if (!input) return;
+        var eyeOpen = btn.querySelectorAll('.eye-open');
+        var eyeClosed = btn.querySelectorAll('.eye-closed');
 
-            var isPassword = input.type === 'password';
-            input.type = isPassword ? 'text' : 'password';
-            this.setAttribute('aria-label', isPassword ? 'Hide password' : 'Show password');
+        function apply(show) {
+            input.type = show ? 'text' : 'password';
+            eyeOpen.forEach(function (el) { el.style.display = show ? 'none' : ''; });
+            eyeClosed.forEach(function (el) { el.style.display = show ? '' : 'none'; });
+            btn.setAttribute('aria-label', show ? 'Hide password' : 'Show password');
+        }
 
-            this.querySelectorAll('.eye-open').forEach(function(el) {
-                el.style.display = isPassword ? 'none' : '';
-            });
-            this.querySelectorAll('.eye-closed').forEach(function(el) {
-                el.style.display = isPassword ? '' : 'none';
-            });
+        btn.addEventListener('click', function () {
+            apply(input.type === 'password');
         });
     });
 })();

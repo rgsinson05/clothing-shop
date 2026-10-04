@@ -478,7 +478,7 @@ require __DIR__ . '/../includes/ui.header.php';
 
                 <section class="checkout-card" aria-labelledby="checkout-contact-heading">
                     <div class="checkout-card__head">
-                        <h2 class="checkout-card__title" id="checkout-contact-heading">Contact Information</h2>
+                        <h2 class="checkout-card__title" id="checkout-contact-heading"><?= hopia_checkout_icon('contact') ?>Contact Information</h2>
                         <p class="checkout-card__hint">Prefilled from your account. You can edit it for this order.</p>
                     </div>
 
@@ -512,7 +512,7 @@ require __DIR__ . '/../includes/ui.header.php';
 
                 <section class="checkout-card" aria-labelledby="checkout-address-heading">
                     <div class="checkout-card__head">
-                        <h2 class="checkout-card__title" id="checkout-address-heading">Delivery Address</h2>
+                        <h2 class="checkout-card__title" id="checkout-address-heading"><?= hopia_checkout_icon('address') ?>Delivery Address</h2>
                         <p class="checkout-card__hint">Choose your location, then add the street details.</p>
                     </div>
 
@@ -580,7 +580,7 @@ require __DIR__ . '/../includes/ui.header.php';
 
                 <section class="checkout-card" aria-labelledby="checkout-payment-heading">
                     <div class="checkout-card__head">
-                        <h2 class="checkout-card__title" id="checkout-payment-heading">Payment Method</h2>
+                        <h2 class="checkout-card__title" id="checkout-payment-heading"><?= hopia_checkout_icon('payment') ?>Payment Method</h2>
                     </div>
 
                     <div class="payment-options">
@@ -592,7 +592,7 @@ require __DIR__ . '/../includes/ui.header.php';
                                 <?= $formValues['payment_method'] === 'COD' ? 'checked' : '' ?>
                             >
                             <span class="payment-option__body">
-                                <span class="payment-option__name">Cash on Delivery</span>
+                                <span class="payment-option__name"><?= hopia_checkout_icon('cash') ?>Cash on Delivery</span>
                                 <span class="payment-option__desc">Pay in cash when your order arrives.</span>
                             </span>
                         </label>
@@ -600,7 +600,7 @@ require __DIR__ . '/../includes/ui.header.php';
                         <label class="payment-option is-disabled" aria-disabled="true">
                             <input type="radio" name="payment_method" value="GCASH" disabled>
                             <span class="payment-option__body">
-                                <span class="payment-option__name">GCash <span class="badge badge-pending">Coming Soon</span></span>
+                                <span class="payment-option__name"><?= hopia_checkout_icon('gcash') ?>GCash <span class="badge badge-pending">Coming Soon</span></span>
                                 <span class="payment-option__desc">Not available yet.</span>
                             </span>
                         </label>
@@ -612,7 +612,7 @@ require __DIR__ . '/../includes/ui.header.php';
 
             <aside class="checkout-summary" aria-labelledby="checkout-summary-heading">
                 <div class="checkout-summary__inner">
-                    <h2 class="checkout-summary__title" id="checkout-summary-heading">Order Summary</h2>
+                    <h2 class="checkout-summary__title" id="checkout-summary-heading"><?= hopia_checkout_icon('summary') ?>Order Summary</h2>
 
                     <ul class="checkout-summary__items" role="list">
                         <?php foreach ($cartItems as $item): ?>
@@ -685,6 +685,11 @@ require __DIR__ . '/../includes/ui.header.php';
                             id="checkout-submit"
                         >
                             <span class="checkout-submit__spinner" aria-hidden="true"></span>
+                            <svg class="checkout-submit__icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+                                <path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"></path>
+                                <path d="M3 6h18"></path>
+                                <path d="M16 10a4 4 0 0 1-8 0"></path>
+                            </svg>
                             <span class="checkout-submit__label">PLACE ORDER</span>
                         </button>
 

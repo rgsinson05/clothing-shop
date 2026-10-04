@@ -7,37 +7,22 @@ $footer_prefix = isset($ui_section) && $ui_section === 'admin'
     ? '../customer/'
     : (isset($ui_path_prefix) ? (string) $ui_path_prefix : '');
 
+// Editorial pages (About, Gallery, Contact) live at the project root; step back
+// up from /customer or /admin to reach them.
+$footer_root = $footer_prefix === 'customer/' ? '' : '../';
+
 ?>
         </div>
     </main>
 
     <footer class="site-footer">
         <div class="container site-footer__inner">
-            <p class="site-footer__brand">HOPIA FITS</p>
-
-            <div class="site-footer__cols">
-                <section class="footer-accordion" id="footer-shop">
-                    <h3 class="footer-accordion__heading">
-                        <button class="footer-accordion__toggle" type="button" aria-expanded="false" aria-controls="footer-shop-panel">
-                            <span>Shop</span>
-                            <span class="footer-accordion__icon" aria-hidden="true"></span>
-                        </button>
-                    </h3>
-                    <ul class="footer-accordion__panel" id="footer-shop-panel">
-                        <li><a href="<?= hopia_e($footer_prefix) ?>products.php?category=SHIRTS">Shirts</a></li>
-                        <li><a href="<?= hopia_e($footer_prefix) ?>products.php?category=PANTS">Pants</a></li>
-                        <li><a href="<?= hopia_e($footer_prefix) ?>products.php?category=SHORTS">Shorts</a></li>
-                    </ul>
-                </section>
-
-                <section class="footer-accordion" id="footer-connect">
-                    <h3 class="footer-accordion__heading">
-                        <button class="footer-accordion__toggle" type="button" aria-expanded="false" aria-controls="footer-connect-panel">
-                            <span>Connect</span>
-                            <span class="footer-accordion__icon" aria-hidden="true"></span>
-                        </button>
-                    </h3>
-                    <ul class="footer-accordion__panel" id="footer-connect-panel">
+            <div class="site-footer__top">
+                <div class="site-footer__brand-block">
+                    <p class="site-footer__brand">HOPIA FITS</p>
+                    <p class="site-footer__tagline">Local thrift finds. Wholesale + Retail.</p>
+                    <p class="site-footer__location">Roxas City, Philippines.</p>
+                    <ul class="site-footer__contact">
                         <li>
                             <a href="https://www.facebook.com/maryhope.tumagos.7" target="_blank" rel="noopener">
                                 <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
@@ -64,15 +49,65 @@ $footer_prefix = isset($ui_section) && $ui_section === 'admin'
                             </span>
                         </li>
                     </ul>
-                </section>
+                </div>
+
+                <nav class="site-footer__nav" aria-label="Footer">
+                    <section class="footer-accordion" id="footer-shop">
+                        <h3 class="footer-accordion__heading">
+                            <button class="footer-accordion__toggle" type="button" aria-expanded="false" aria-controls="footer-shop-panel">
+                                <span>Shop</span>
+                                <span class="footer-accordion__icon" aria-hidden="true"></span>
+                            </button>
+                        </h3>
+                        <ul class="footer-accordion__panel" id="footer-shop-panel">
+                            <li><a href="<?= hopia_e($footer_prefix) ?>products.php?gender=MEN">Men</a></li>
+                            <li><a href="<?= hopia_e($footer_prefix) ?>products.php?gender=WOMEN">Women</a></li>
+                            <li><a href="<?= hopia_e($footer_prefix) ?>products.php?category=SHIRTS">Shirts</a></li>
+                            <li><a href="<?= hopia_e($footer_prefix) ?>products.php?category=PANTS">Pants</a></li>
+                            <li><a href="<?= hopia_e($footer_prefix) ?>products.php?category=SHORTS">Shorts</a></li>
+                        </ul>
+                    </section>
+
+                    <section class="footer-accordion" id="footer-explore">
+                        <h3 class="footer-accordion__heading">
+                            <button class="footer-accordion__toggle" type="button" aria-expanded="false" aria-controls="footer-explore-panel">
+                                <span>Explore</span>
+                                <span class="footer-accordion__icon" aria-hidden="true"></span>
+                            </button>
+                        </h3>
+                        <ul class="footer-accordion__panel" id="footer-explore-panel">
+                            <li><a href="<?= hopia_e($footer_root) ?>about.php">About</a></li>
+                            <li><a href="<?= hopia_e($footer_root) ?>gallery.php">Gallery</a></li>
+                            <li><a href="<?= hopia_e($footer_prefix) ?>feedback.php">Customer's Feedback</a></li>
+                            <li><a href="<?= hopia_e($footer_root) ?>contact.php">Contact</a></li>
+                        </ul>
+                    </section>
+
+                    <section class="footer-accordion" id="footer-account">
+                        <h3 class="footer-accordion__heading">
+                            <button class="footer-accordion__toggle" type="button" aria-expanded="false" aria-controls="footer-account-panel">
+                                <span>Account</span>
+                                <span class="footer-accordion__icon" aria-hidden="true"></span>
+                            </button>
+                        </h3>
+                        <ul class="footer-accordion__panel" id="footer-account-panel">
+                            <li><a href="<?= hopia_e($footer_prefix . (!empty($_SESSION['customer_id']) ? 'account.php' : 'login.php')) ?>">My Account</a></li>
+                            <li><a href="<?= hopia_e($footer_prefix) ?>orders.php">My Orders</a></li>
+                        </ul>
+                    </section>
+                </nav>
             </div>
 
             <div class="site-footer__bottom">
                 <span>&copy; <?= hopia_e(date('Y')) ?> HOPIA FITS</span>
-                <span>Philippines</span>
+                <span>This website is For Educational Purposes Only</span>
             </div>
         </div>
     </footer>
+
+    <?php if (!empty($ui_feedback_overlay)): ?>
+        <?php require __DIR__ . '/ui.feedback-overlay.php'; ?>
+    <?php endif; ?>
 
     <script>
         (function () {

@@ -61,9 +61,19 @@ require __DIR__ . '/../includes/ui.header.php';
 <section class="auth-page__content" aria-labelledby="login-title">
     <div class="auth-card">
 
-        <div class="auth-card__brand">Hopia Fits</div>
+        <div class="auth-card__lockup">
+            <img
+                class="auth-card__logo"
+                src="<?= hopia_e(hopia_asset('assets/videos/pictures/Hopia-fits-logo.webp')) ?>"
+                alt=""
+                width="36"
+                height="36"
+            >
+            <span class="auth-card__brand">HOPIA FITS</span>
+        </div>
 
         <header class="auth-card__header">
+            <p class="auth-card__eyebrow">Account</p>
             <h1 id="login-title">Welcome Back</h1>
             <p class="auth-card__subtitle">Sign in to continue browsing your finds.</p>
         </header>
@@ -74,7 +84,13 @@ require __DIR__ . '/../includes/ui.header.php';
 
         <form class="auth-form" method="POST" novalidate>
             <div class="field">
-                <label class="field-label" for="email">Email</label>
+                <label class="field-label" for="email">
+                    <svg class="field-label__icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <rect x="3.5" y="5.5" width="17" height="13" rx="1.5"></rect>
+                        <path d="m4.5 7 7.5 6 7.5-6"></path>
+                    </svg>
+                    Email
+                </label>
                 <input
                     id="email"
                     type="email"
@@ -87,7 +103,14 @@ require __DIR__ . '/../includes/ui.header.php';
             </div>
 
             <div class="field">
-                <label class="field-label" for="password">Password</label>
+                <label class="field-label" for="password">
+                    <svg class="field-label__icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <rect x="4.5" y="10.5" width="15" height="10" rx="1.5"></rect>
+                        <path d="M8 10.5V8a4 4 0 0 1 8 0v2.5"></path>
+                        <path d="M12 14.5v2.5"></path>
+                    </svg>
+                    Password
+                </label>
                 <div class="input-password">
                     <input
                         id="password"
@@ -103,7 +126,7 @@ require __DIR__ . '/../includes/ui.header.php';
                         aria-label="Show password"
                         data-password-toggle="password"
                     >
-                        <svg class="icon-eye" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <svg class="icon-eye" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                             <path class="eye-open" d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
                             <circle class="eye-open" cx="12" cy="12" r="3"/>
                             <line class="eye-closed" x1="1" y1="1" x2="23" y2="23" style="display:none"/>
@@ -126,7 +149,13 @@ require __DIR__ . '/../includes/ui.header.php';
                 </span>
             </div>
 
-            <button class="btn-auth-submit" type="submit">Login</button>
+            <button class="btn-auth-submit" type="submit">
+                Login
+                <svg class="btn-auth-submit__arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <line x1="4" y1="12" x2="20" y2="12"></line>
+                    <polyline points="14 6 20 12 14 18"></polyline>
+                </svg>
+            </button>
         </form>
 
         <p class="auth-card__switch">

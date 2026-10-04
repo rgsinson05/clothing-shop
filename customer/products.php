@@ -36,7 +36,7 @@ $sql = "SELECT p.id, p.name, p.category, p.gender, p.price, p.size, p.color, p.d
              ORDER BY pi2.sort_order ASC, pi2.id ASC
              LIMIT 1
          )
-     WHERE p.status IN ('AVAILABLE', 'SOLD')";
+     WHERE p.status = 'AVAILABLE'";
 
 $params = [];
 
@@ -270,19 +270,17 @@ require __DIR__ . '/../includes/ui.head.php';
                                             <input type="hidden" name="csrf_token" value="<?= hopia_e($csrfTokenCart) ?>">
                                             <input type="hidden" name="product_id" value="<?= $productId ?>">
                                             <button type="submit" class="catalog-card__cart" aria-label="Add <?= hopia_e($product['name']) ?> to cart">
-                                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                                                    <path d="M4 5h2l1.6 10.2a1.5 1.5 0 0 0 1.5 1.3h7.8a1.5 1.5 0 0 0 1.5-1.2L20 8H7"></path>
-                                                    <circle cx="10" cy="20" r="1"></circle>
-                                                    <circle cx="17" cy="20" r="1"></circle>
+                                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                                    <path d="M5.5 8.5h13l-1.05 11.3a1.6 1.6 0 0 1-1.59 1.45H8.14a1.6 1.6 0 0 1-1.59-1.45z"></path>
+                                                    <path d="M8.5 8.5V7a3.5 3.5 0 0 1 7 0v1.5"></path>
                                                 </svg>
                                             </button>
                                         </form>
                                     <?php else: ?>
                                         <a class="catalog-card__cart" href="login.php" aria-label="Log in to add <?= hopia_e($product['name']) ?> to cart">
-                                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                                                <path d="M4 5h2l1.6 10.2a1.5 1.5 0 0 0 1.5 1.3h7.8a1.5 1.5 0 0 0 1.5-1.2L20 8H7"></path>
-                                                <circle cx="10" cy="20" r="1"></circle>
-                                                <circle cx="17" cy="20" r="1"></circle>
+                                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                                <path d="M5.5 8.5h13l-1.05 11.3a1.6 1.6 0 0 1-1.59 1.45H8.14a1.6 1.6 0 0 1-1.59-1.45z"></path>
+                                                <path d="M8.5 8.5V7a3.5 3.5 0 0 1 7 0v1.5"></path>
                                             </svg>
                                         </a>
                                     <?php endif; ?>

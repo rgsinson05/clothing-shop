@@ -142,7 +142,10 @@ require __DIR__ . '/../includes/ui.header.php';
 
                 <section class="confirmation-card" aria-labelledby="purchase-heading">
                     <div class="confirmation-card__head">
-                        <p class="confirmation-card__eyebrow">YOUR PURCHASE</p>
+                        <div class="confirmation-card__label">
+                            <?= hopia_confirmation_icon('purchase') ?>
+                            <p class="confirmation-card__eyebrow">YOUR PURCHASE</p>
+                        </div>
                         <h2 id="purchase-heading">Order Details</h2>
                     </div>
 
@@ -208,7 +211,10 @@ require __DIR__ . '/../includes/ui.header.php';
 
                 <section class="confirmation-card" aria-labelledby="payment-heading">
                     <div class="confirmation-card__head">
-                        <p class="confirmation-card__eyebrow">HOW YOU WILL PAY</p>
+                        <div class="confirmation-card__label">
+                            <?= hopia_confirmation_icon('payment') ?>
+                            <p class="confirmation-card__eyebrow">HOW YOU WILL PAY</p>
+                        </div>
                         <h2 id="payment-heading">Payment</h2>
                     </div>
 
@@ -228,10 +234,19 @@ require __DIR__ . '/../includes/ui.header.php';
 
             <aside class="confirmation-aside" aria-label="Order actions">
                 <div class="confirmation-aside__inner">
-                    <p class="confirmation-aside__label">Order number</p>
+                    <p class="confirmation-aside__label">
+                        <?= hopia_confirmation_icon('receipt') ?>
+                        <span>Order number</span>
+                    </p>
                     <p class="confirmation-aside__number">#<?= hopia_e($order['id']) ?></p>
-                    <a class="btn btn-primary btn-block" href="orders.php">VIEW ORDER</a>
-                    <a class="btn btn-secondary btn-block" href="products.php">CONTINUE SHOPPING</a>
+                    <a class="btn btn-primary btn-block" href="orders.php">
+                        <?= hopia_confirmation_icon('view') ?>
+                        <span>VIEW ORDER</span>
+                    </a>
+                    <a class="btn btn-secondary btn-block" href="products.php">
+                        <?= hopia_confirmation_icon('shop') ?>
+                        <span>CONTINUE SHOPPING</span>
+                    </a>
                 </div>
             </aside>
         </div>
