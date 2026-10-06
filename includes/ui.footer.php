@@ -123,5 +123,110 @@ $footer_root = $footer_prefix === 'customer/' ? '' : '../';
             });
         })();
     </script>
+
+    <script>
+        /* Global page transition: fade the current page out on normal internal
+           navigation, then let the destination fade in (CSS handles the entry).
+           Purely progressive enhancement — if anything is unmet we fall straight
+           through to the browser's native navigation. */
+        (function () {
+            var reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+
+            // Always clear the leaving state when a page is shown — including
+            // restores from the back/forward cache, so Back never reveals a
+            // page frozen mid fade-out.
+            window.addEventListener('pageshow', function () {
+                document.body.classList.remove('is-leaving');
+            });
+
+            // Honour reduced-motion: no fade-out interception at all.
+            if (reduceMotion.matches) {
+                return;
+            }
+
+            var leaving = false;
+            var duration = 220;
+
+            document.addEventListener('click', function (event) {
+                // Let other handlers (logout modal, add-to-cart, etc.) win, and
+                // ignore new-tab / modified / non-primary clicks.
+                if (
+                    leaving ||
+                    event.defaultPrevented ||
+                    event.button !== 0 ||
+                    event.metaKey ||
+                    event.ctrlKey ||
+                    event.shiftKey ||
+                    event.altKey
+                ) {
+                    return;
+                }
+
+                var target = event.target;
+                if (!target || typeof target.closest !== 'function') {
+                    return;
+                }
+
+                var anchor = target.closest('a');
+                if (!anchor) {
+                    return;
+                }
+
+                // Respect explicit opt-outs and links that must keep native
+                // behavior: downloads, framed/new-tab targets, and the logout
+                // confirmation flow (which runs its own modal + redirect).
+                var explicitTarget = anchor.getAttribute('target');
+                if (
+                    anchor.hasAttribute('download') ||
+                    anchor.hasAttribute('data-no-transition') ||
+                    (explicitTarget && explicitTarget !== '_self') ||
+                    anchor.closest('[data-logout]') ||
+                    anchor.closest('[data-logout-accept]') ||
+                    anchor.closest('[data-logout-cancel]')
+                ) {
+                    return;
+                }
+
+                var rawHref = anchor.getAttribute('href');
+                if (!rawHref || rawHref.charAt(0) === '#') {
+                    return; // missing href or in-page anchor (hero cue, skip link)
+                }
+
+                var url;
+                try {
+                    url = new URL(anchor.href, window.location.href);
+                } catch (error) {
+                    return;
+                }
+
+                // Only plain same-origin http(s) navigations. Skips mailto:,
+                // tel:, and any external host.
+                if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+                    return;
+                }
+                if (url.origin !== window.location.origin) {
+                    return;
+                }
+
+                // Same document, only the hash differs → native anchor jump.
+                if (
+                    url.pathname === window.location.pathname &&
+                    url.search === window.location.search &&
+                    url.hash
+                ) {
+                    return;
+                }
+
+                leaving = true;
+                event.preventDefault();
+                document.body.classList.add('is-leaving');
+
+                var destination = anchor.href;
+                window.setTimeout(function () {
+                    window.location.href = destination;
+                }, duration);
+            });
+        })();
+    </script>
 </body>
 </html>

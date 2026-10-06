@@ -48,7 +48,23 @@ $formValues = [
     'barangay' => '',
     'house_unit_building' => '',
     'street' => '',
+    'delivery_method' => 'LOCAL_COURIER',
     'payment_method' => 'COD'
+];
+
+/*
+ * Delivery options available at checkout in this phase.
+ *
+ * LOCAL_COURIER is the only delivery method, so it is always the
+ * selected default. The map is deliberately limited to this one
+ * value: any other submitted value is rejected server-side instead
+ * of being trusted or silently rewritten.
+ *
+ * Delivery method ONLY. No fee of any kind is stored, calculated,
+ * or displayed for these options.
+ */
+$deliveryOptions = [
+    'LOCAL_COURIER' => 'Local Courier',
 ];
 
 /* Load account defaults without changing the customer's saved account. */
@@ -70,6 +86,23 @@ if ($customer !== false) {
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     foreach (array_keys($formValues) as $field) {
+        if ($field === 'delivery_method') {
+            /*
+             * Only a value that is actually one of the available
+             * delivery options is accepted. Anything else (including a
+             * missing field) falls back to the single available
+             * option, so a crafted POST cannot inject another method.
+             */
+            $submittedDeliveryMethod = $_POST[$field] ?? '';
+
+            $formValues[$field] = is_string($submittedDeliveryMethod)
+                && isset($deliveryOptions[$submittedDeliveryMethod])
+                    ? $submittedDeliveryMethod
+                    : 'LOCAL_COURIER';
+
+            continue;
+        }
+
         $formValues[$field] = isset($_POST[$field]) && is_string($_POST[$field])
             ? trim($_POST[$field])
             : '';
@@ -288,16 +321,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             ':payment_status' => 'PENDING'
                         ]);
 
+                        /*
+                         * One shipment row per order, created inside the same
+                         * transaction as the order. delivery_method stores how
+                         * the order is delivered (LOCAL_COURIER in this phase);
+                         * it carries no fee, so subtotal and total_amount are
+                         * untouched. shipment_status still starts at
+                         * NOT_SHIPPED and is advanced by the admin later.
+                         */
                         $shipmentStmt = $pdo->prepare(
                             'INSERT INTO shipments (
                                 order_id,
                                 shipment_status,
+                                delivery_method,
                                 tracking_number,
                                 shipped_at,
                                 delivered_at
                              ) VALUES (
                                 :order_id,
                                 :shipment_status,
+                                :delivery_method,
                                 NULL,
                                 NULL,
                                 NULL
@@ -305,7 +348,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         );
                         $shipmentStmt->execute([
                             ':order_id' => $orderId,
-                            ':shipment_status' => 'NOT_SHIPPED'
+                            ':shipment_status' => 'NOT_SHIPPED',
+                            ':delivery_method' => $formValues['delivery_method']
                         ]);
 
                         $productIds = array_map(static function (array $item): int {
@@ -575,6 +619,28 @@ require __DIR__ . '/../includes/ui.header.php';
                                 required
                             >
                         </div>
+                    </div>
+                </section>
+
+                <section class="checkout-card" aria-labelledby="checkout-delivery-heading">
+                    <div class="checkout-card__head">
+                        <h2 class="checkout-card__title" id="checkout-delivery-heading"><?= hopia_checkout_icon('delivery') ?>Delivery Option</h2>
+                        <p class="checkout-card__hint">Choose how your order is delivered.</p>
+                    </div>
+
+                    <div class="delivery-options">
+                        <label class="delivery-option">
+                            <input
+                                type="radio"
+                                name="delivery_method"
+                                value="LOCAL_COURIER"
+                                <?= $formValues['delivery_method'] === 'LOCAL_COURIER' ? 'checked' : '' ?>
+                            >
+                            <span class="delivery-option__body">
+                                <span class="delivery-option__name"><?= hopia_checkout_icon('courier') ?>Local Courier</span>
+                                <span class="delivery-option__desc">Delivered by our own local courier to your address.</span>
+                            </span>
+                        </label>
                     </div>
                 </section>
 

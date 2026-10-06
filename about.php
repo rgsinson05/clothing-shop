@@ -7,7 +7,7 @@ require_once __DIR__ . '/includes/database.php';
 define('HUPIA_BASE', '.');
 
 $page_title       = 'About - Hopia Fits';
-$page_description = 'Hopia Fits is a local thrift shop offering wholesale and retail secondhand clothing, including shirts, pants, and shorts.';
+$page_description = 'Hopia Fits is a local thrift shop offering wholesale and retail curated apparel, including shirts, pants, and shorts.';
 $ui_active        = 'about.php';
 $ui_path_prefix   = 'customer/';
 $ui_brand_href    = 'index.php';
@@ -28,21 +28,6 @@ require __DIR__ . '/includes/ui.header.php';
                 height="55"
             >
             <h1 class="about-header__name" id="about-title">HOPIA FITS</h1>
-            <svg
-                class="about-header__hanger"
-                viewBox="0 0 64 64"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                aria-hidden="true"
-                focusable="false"
-            >
-                <path class="about-header__hanger-accent" d="M32 17v-2.5a5 5 0 1 1 5-5"/>
-                <path d="M8 36 32 17l24 19"/>
-                <path d="M8 36h48"/>
-            </svg>
         </div>
     </header>
 

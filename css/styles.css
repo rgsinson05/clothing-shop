@@ -54,6 +54,31 @@
   --max-width: 1120px;
   --transition: 150ms ease;
 
+  /* Motion system — restrained editorial microinteractions.
+     --transition (150ms ease) stays the base color/UI token; the siblings
+     below reuse the easing curve already used across the file so dropdowns,
+     buttons, cards, and page transitions share one consistent language. */
+  --ease-standard: cubic-bezier(0.25, 0.6, 0.3, 1);
+  --transition-fast: 120ms var(--ease-standard);
+  --transition-base: 180ms var(--ease-standard);
+  --transition-slow: 240ms var(--ease-standard);
+  --page-transition-duration: 220ms;
+
+  /* Card geometry system — "Refined Modern + Modern Editorial Mix".
+     Geometry and spacing only: these tokens deliberately carry no color
+     values so the existing palette stays authoritative. Image-led cards
+     (catalog, gallery, feedback) share one frame treatment; the portrait
+     media ratio is a 4:5 refined proportion rather than a default square,
+     which reads naturally for clothing photography. */
+  --card-radius: 2px;
+  --card-radius-media: 2px;
+  --card-media-ratio: 4 / 5;
+  --card-media-lift: 320ms;
+  --card-accent-width: 28px;
+  --card-accent-height: 2px;
+  --card-padding: var(--sp-4);
+  --card-gap: var(--sp-4);
+
   /* Soft scattered dots (Style B). Five tiny taupe dots placed at
      intentionally irregular positions inside a 60x60 tile — gentle
      organic spacing, not a grid. Low alpha keeps the texture visible
@@ -101,7 +126,8 @@ body {
    Tiny taupe dots at gently irregular positions sit on top of the
    existing cream background; existing surface elements (header,
    footer, cards, forms, product image tiles, modal panels) all sit
-   above the body and remain unpatterned. */
+   above the body and remain unpatterned. The admin login portal opts in
+   separately in the admin login shell section below. */
 body.ui-store {
   background-image: var(--bg-dot-pattern);
   background-repeat: repeat;
@@ -246,6 +272,12 @@ pre {
   width: clamp(56px, 7.5vw, 50px);
   height: auto;
   flex: 0 0 auto;
+}
+
+@media (max-width: 719px) {
+  .brand__logo {
+    width: 50px;
+  }
 }
 
 .brand__text {
@@ -725,6 +757,32 @@ input[type="reset"]:active {
   width: 100%;
 }
 
+/* Shared button icon microinteraction. Pairs with the color + 1px press
+   transitions already defined above so every button speaks one motion
+   language: icons drift a hair on hover and settle back on press. Only
+   buttons that actually contain an icon are affected; icon-only chrome
+   controls (hamburger, account, accordion toggles) keep a class and are
+   intentionally excluded so they never shift. */
+.btn svg,
+button:not([class]) svg,
+.btn-auth-submit__arrow {
+  transition: transform var(--transition-base);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .btn:hover svg,
+  button:not([class]):hover svg,
+  .btn-auth-submit:hover .btn-auth-submit__arrow {
+    transform: translateX(1px);
+  }
+}
+
+.btn:active svg,
+button:not([class]):active svg,
+.btn-auth-submit:active .btn-auth-submit__arrow {
+  transform: translateX(0);
+}
+
 input,
 select,
 textarea {
@@ -903,11 +961,12 @@ tbody tr:hover {
   background: var(--color-surface-muted);
 }
 
+/* Base card surface. Thin border, no lift shadow, restrained radius — a
+   framing device rather than a floating panel. */
 .card {
   background: var(--color-surface);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow-sm);
+  border-radius: var(--card-radius);
   overflow: hidden;
 }
 
@@ -1618,6 +1677,161 @@ tbody tr:hover {
   }
 }
 
+/* Admin login — standalone portal shell.
+   The admin login is intentionally chrome-free: it is the only admin page
+   rendered before a session exists, so it carries no site header or
+   navigation. It reuses the shared auth-card / auth-form components above
+   (same palette, thin border, minimal radius, no gradient) and only adds
+   the centering shell plus a few portal-specific refinements. */
+/* Reuse the Soft Scattered Dots texture (Style B) on the admin portal so the
+   login reads as part of the same brand surface. The card sits on top of the
+   pattern and stays plain white. */
+body.admin-login-page {
+  background-image: var(--bg-dot-pattern);
+  background-repeat: repeat;
+  background-size: var(--bg-dot-size);
+  background-attachment: scroll;
+}
+
+.admin-login {
+  flex: 1 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* Side padding lives on the wrapper (not the card) so the card can never
+     overflow the viewport and cause horizontal scrolling on mobile. */
+  padding: var(--sp-5) var(--sp-4);
+  width: 100%;
+}
+
+.admin-login__card {
+  width: 100%;
+  max-width: 440px;
+  /* Comfortable, balanced whitespace on desktop. */
+  padding: var(--sp-6) var(--sp-5);
+  background: var(--color-surface);
+  border: 1px solid var(--editorial-line, #c9c2b8);
+  border-radius: 2px;
+  /* Minimal depth only — no heavy drop shadow. */
+  box-shadow: 0 1px 2px rgba(31, 28, 24, 0.04);
+}
+
+/* Logo lockup: official mark, centered above the form. */
+.admin-login__lockup {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: var(--sp-5);
+}
+
+.admin-login__logo {
+  width: 44px;
+  height: 44px;
+  flex: none;
+  object-fit: contain;
+  border-radius: 0;
+}
+
+.admin-login__card .auth-card__header {
+  padding-bottom: var(--sp-5);
+  margin-bottom: var(--sp-5);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.admin-login__card .auth-card__eyebrow {
+  margin-bottom: var(--sp-2);
+  font-size: 0.625rem;
+  font-weight: 700;
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+  color: var(--editorial-accent, #a45c3b);
+}
+
+.admin-login__card .auth-card__header h1 {
+  font-size: 1.5rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--editorial-ink, #171717);
+  line-height: 1.15;
+}
+
+.admin-login__card .auth-card__subtitle {
+  margin-top: var(--sp-2);
+  color: var(--color-text-muted);
+  font-size: 0.875rem;
+  line-height: 1.55;
+}
+
+.admin-login__alert {
+  margin-bottom: var(--sp-4);
+}
+
+.admin-login__card .auth-form .field {
+  margin-bottom: var(--sp-4);
+}
+
+.admin-login__card .auth-form .field-label {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-bottom: 0.4rem;
+  color: var(--editorial-ink, #171717);
+}
+
+.admin-login__card .field-label__icon {
+  flex: none;
+  color: var(--editorial-ink, #171717);
+}
+
+/* Comfortable tap target, full card width. */
+.admin-login__submit {
+  margin-top: var(--sp-2);
+}
+
+/* Supporting note — muted secondary typography. */
+.admin-login__note {
+  margin-top: var(--sp-5);
+  padding-top: var(--sp-4);
+  border-top: 1px solid var(--color-border);
+  color: var(--color-text-muted);
+  font-size: 0.8125rem;
+  text-align: center;
+  letter-spacing: 0.02em;
+}
+
+@media (min-width: 560px) {
+  .admin-login {
+    padding: var(--sp-7) var(--sp-4);
+  }
+
+  .admin-login__card {
+    padding: var(--sp-7) var(--sp-6);
+  }
+
+  .admin-login__card .auth-card__header h1 {
+    font-size: 1.75rem;
+  }
+}
+
+/* Very small phones: keep the logo readable but never oversized, and let the
+   card height adapt naturally instead of forcing a fixed viewport height. */
+@media (max-width: 400px) {
+  .admin-login {
+    padding: var(--sp-4) var(--sp-3);
+    align-items: flex-start;
+  }
+
+  .admin-login__card {
+    padding: var(--sp-5) var(--sp-4);
+  }
+
+  .admin-login__logo {
+    width: 38px;
+    height: 38px;
+  }
+}
+
 /* Customer homepage */
 .home-page .site-main {
   padding-top: 0;
@@ -1706,11 +1920,11 @@ tbody tr:hover {
   height: 100%;
   border-radius: inherit;
   object-fit: cover;
-  transition: transform 250ms ease;
+  transition: transform var(--transition-slow);
 }
 
 .home-product-card__image:hover img {
-  transform: scale(1.015);
+  transform: scale(1.02);
 }
 
 .home-product-card__placeholder {
@@ -1740,6 +1954,7 @@ tbody tr:hover {
 .home-product-card h3 a {
   color: var(--color-text);
   text-decoration: none;
+  transition: color var(--transition);
 }
 
 .home-product-card h3 a:hover {
@@ -2085,6 +2300,8 @@ tbody tr:hover {
   margin-inline: auto;
   max-height: min(40vh, 264px);
   overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
   border-bottom: 1px solid var(--editorial-line, #c9c2b8);
   background: var(--editorial-paper, #f5f2ec);
   scrollbar-width: thin;
@@ -2109,6 +2326,7 @@ tbody tr:hover {
   text-transform: uppercase;
   text-align: left;
   cursor: pointer;
+  touch-action: pan-y;
   transition: background-color var(--transition), color var(--transition);
 }
 
@@ -2142,10 +2360,10 @@ tbody tr:hover {
 
 .catalog-card__image {
   position: relative;
-  aspect-ratio: 3 / 4;
+  aspect-ratio: var(--card-media-ratio);
   overflow: hidden;
   border: 1px solid var(--editorial-line, #c9c2b8);
-  border-radius: 2px;
+  border-radius: var(--card-radius-media);
   background: var(--color-bg-alt);
 }
 
@@ -2160,12 +2378,19 @@ tbody tr:hover {
   height: 100%;
   object-fit: cover;
   border-radius: 0;
-  transition: transform 320ms cubic-bezier(0.25, 0.6, 0.3, 1);
+  transition: transform var(--card-media-lift) var(--ease-standard);
 }
 
 @media (hover: hover) and (pointer: fine) {
   .catalog-card__image-link:hover img {
     transform: scale(1.035);
+  }
+
+  /* Editorial accent mark opens a touch on hover, echoing the existing
+     category-tile underline rhythm. Transform-free so the frame never
+     shifts and the grid never reflows. */
+  .catalog-card:hover .catalog-card__body::before {
+    width: calc(var(--card-accent-width) + 0.75rem);
   }
 }
 
@@ -2185,42 +2410,92 @@ tbody tr:hover {
 
 .catalog-card__cart {
   position: absolute;
-  left: var(--sp-2);
-  bottom: var(--sp-2);
+  /* Still anchored at the bottom-left of the image. The small negative
+     offset lets the optical edge of the mark land on the original corner
+     once the invisible tap padding is added. */
+  left: calc(var(--sp-2) - 2px);
+  bottom: calc(var(--sp-2) - 2px);
+  /* Vertical stack: the drop arrow sits directly above the bag so the mark
+     reads as "put this piece into the bag". */
   display: inline-flex;
+  flex-direction: column;
   align-items: center;
-  justify-content: center;
-  width: 36px;
-  height: 36px;
-  padding: 0;
-  border: 1px solid var(--editorial-ink, #171717);
+  gap: 2px;
+  /* No square container: the bag + arrow read as an editorial mark set
+     straight onto the photograph rather than a standalone utility button.
+     The padding is invisible and exists only to grow the tap target. */
+  padding: 6px;
+  border: 0;
   border-radius: 0;
-  background: var(--editorial-paper, #f5f2ec);
+  background: none;
   color: var(--editorial-ink, #171717);
-  box-shadow: 0 1px 0 rgba(23, 23, 23, 0.08);
+  line-height: 0;
   cursor: pointer;
   font: inherit;
   text-decoration: none;
-  transition:
-    background-color 280ms cubic-bezier(0.25, 0.6, 0.3, 1),
-    color 280ms cubic-bezier(0.25, 0.6, 0.3, 1),
-    box-shadow 280ms cubic-bezier(0.25, 0.6, 0.3, 1);
+  -webkit-tap-highlight-color: transparent;
+  /* Subtle depth only, so the ink mark stays legible over imagery without a
+     fill or a glow. */
+  filter: drop-shadow(0 1px 1px rgba(23, 23, 23, 0.25));
+  transition: color 280ms var(--ease-standard);
 }
 
+.catalog-card__cart-bag,
+.catalog-card__cart-arrow {
+  display: block;
+}
+
+/* The arrow is decorative and only ever rides above the bag, so the hover
+   emphasis is a gentle downward settle rather than a sideways nudge. */
+.catalog-card__cart-drop {
+  display: block;
+  transition: transform 320ms var(--ease-standard);
+}
+
+/* Idle "guided into the bag" loop: the arrow drifts down toward the bag
+   opening, holds briefly at its closest point, then eases back up. Small
+   vertical travel only — no bounce, no rotation, no sideways drift. */
+.catalog-card__cart-arrow {
+  animation: hopia-cart-arrow-drop 3.2s ease-in-out infinite;
+}
+
+@keyframes hopia-cart-arrow-drop {
+  0% {
+    transform: translateY(0);
+  }
+  40% {
+    transform: translateY(3.5px);
+  }
+  60% {
+    transform: translateY(3.5px);
+  }
+  100% {
+    transform: translateY(0);
+  }
+}
+
+/* Invisible, touch-friendly hit area (comfortably past 44px) without
+   drawing a box. */
 .catalog-card__cart::before {
   content: "";
   position: absolute;
-  inset: -7px;
+  inset: -8px;
 }
 
-.catalog-card__cart:hover,
-.catalog-card__cart:focus-visible {
-  background: var(--editorial-ink, #171717);
-  color: var(--editorial-paper, #f5f2ec);
-  box-shadow: 0 2px 10px rgba(23, 23, 23, 0.22);
+@media (hover: hover) and (pointer: fine) {
+  .catalog-card:hover .catalog-card__cart {
+    color: var(--editorial-accent, #a45c3b);
+  }
+
+  /* Hover makes the drop slightly more purposeful: the arrow settles a
+     touch closer to the bag opening. The bag itself never moves. */
+  .catalog-card:hover .catalog-card__cart-drop {
+    transform: translateY(1.5px);
+  }
 }
 
 .catalog-card__cart:focus-visible {
+  color: var(--editorial-accent, #a45c3b);
   outline: 2px solid var(--editorial-ink, #171717);
   outline-offset: 3px;
 }
@@ -2230,20 +2505,37 @@ tbody tr:hover {
   opacity: 0.6;
 }
 
+@media (prefers-reduced-motion: reduce) {
+  .catalog-card__cart-arrow {
+    animation: none;
+  }
+
+  .catalog-card:hover .catalog-card__cart-drop {
+    transform: none;
+  }
+
+  .catalog-card__cart-drop {
+    transition: none;
+  }
+}
+
 .catalog-card__body {
   display: flex;
   flex-direction: column;
   gap: var(--sp-1);
-  padding-top: var(--sp-3);
+  /* Text reads as a separate editorial tier beneath the photograph rather
+     than a continuation of the image box. */
+  padding-top: var(--sp-4);
   flex: 1;
 }
 
 .catalog-card__body::before {
   content: "";
-  width: 28px;
-  height: 2px;
+  width: var(--card-accent-width);
+  height: var(--card-accent-height);
   margin-bottom: var(--sp-2);
   background: var(--editorial-accent, #a45c3b);
+  transition: width var(--transition-base) var(--ease-standard);
 }
 
 .catalog-card__category {
@@ -2266,6 +2558,7 @@ tbody tr:hover {
 .catalog-card__name a {
   color: var(--color-text);
   text-decoration: none;
+  transition: color var(--transition);
 }
 
 .catalog-card__name a:hover,
@@ -2322,12 +2615,6 @@ tbody tr:hover {
   .catalog-card__name {
     font-size: 1rem;
   }
-
-  .catalog-card__cart {
-    width: 40px;
-    height: 40px;
-    padding: 0;
-  }
 }
 
 @media (max-width: 719px) {
@@ -2341,6 +2628,16 @@ tbody tr:hover {
 
   .catalog-grid {
     column-gap: var(--sp-4);
+  }
+
+  /* Mobile: tighten the text tier beneath the portrait photograph so the
+     card stays compact and readable without cramping. */
+  .catalog-card__body {
+    padding-top: var(--sp-3);
+  }
+
+  .catalog-card__body::before {
+    margin-bottom: var(--sp-1);
   }
 
   .catalog-page .toast {
@@ -2368,6 +2665,16 @@ tbody tr:hover {
   }
 }
 
+/* Large desktop: a wider editorial tier. Five columns give the portrait
+   photography more breathing room and let the grid read as a considered
+   spread rather than a dense dashboard. */
+@media (min-width: 1280px) {
+  .catalog-grid {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: var(--sp-7) var(--sp-5);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -2376,6 +2683,44 @@ tbody tr:hover {
     animation-iteration-count: 1 !important;
     transition-duration: 0.001ms !important;
     scroll-behavior: auto !important;
+  }
+}
+
+/* ------------------------------------------------------------------ *
+ * Global page transition — a subtle editorial fade with a slight
+ * upward movement on entry, and a gentle fade/lift on exit.
+ *
+ * Enter runs automatically on load: it is flash-free and deliberately
+ * uses no animation fill-mode so the finished state never overrides the
+ * exit transition below. Exit is triggered by the footer navigation
+ * script adding `.is-leaving` to <body> just before navigating.
+ *
+ * The whole system lives inside prefers-reduced-motion: no-preference,
+ * so motion-sensitive users get an instant, fully-visible page with no
+ * fade and no interception (the footer script also bails out for them).
+ * ------------------------------------------------------------------ */
+@media (prefers-reduced-motion: no-preference) {
+  body {
+    animation: hopia-page-enter var(--page-transition-duration) var(--ease-standard);
+  }
+
+  body.is-leaving {
+    opacity: 0;
+    transform: translateY(-6px);
+    transition: opacity var(--page-transition-duration) var(--ease-standard),
+      transform var(--page-transition-duration) var(--ease-standard);
+  }
+}
+
+@keyframes hopia-page-enter {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
   }
 }
 
@@ -2438,9 +2783,9 @@ tbody tr:hover {
 }
 
 .gallery-main {
-  aspect-ratio: 4 / 5;
+  aspect-ratio: var(--card-media-ratio);
   overflow: hidden;
-  border-radius: var(--radius);
+  border-radius: var(--card-radius-media);
   background: var(--color-bg-alt);
   border: 1px solid var(--editorial-line, #c9c2b8);
 }
@@ -2465,7 +2810,7 @@ tbody tr:hover {
   height: 90px;
   padding: 0;
   border: 2px solid var(--color-border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--card-radius-media);
   background: var(--color-surface);
   overflow: hidden;
   cursor: pointer;
@@ -2487,13 +2832,13 @@ tbody tr:hover {
 }
 
 .gallery-placeholder {
-  aspect-ratio: 4 / 5;
+  aspect-ratio: var(--card-media-ratio);
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: var(--sp-3);
-  border-radius: var(--radius);
+  border-radius: var(--card-radius-media);
   background: var(--color-bg-alt);
   color: var(--color-text-muted);
 }
@@ -2930,20 +3275,20 @@ tbody tr:hover {
     padding: var(--sp-2);
     background: var(--color-surface);
     border: 1px solid var(--color-border-strong, #d5d0c7);
-    border-radius: 2px;
+    border-radius: var(--card-radius);
 }
 
 .cart-item__image img {
     display: block;
     width: 100%;
     height: auto;
-    border-radius: 2px;
+    border-radius: var(--card-radius-media);
 }
 
 .cart-item__placeholder {
     display: flex;
     width: 100%;
-    aspect-ratio: 4 / 5;
+    aspect-ratio: var(--card-media-ratio);
     align-items: center;
     justify-content: center;
     color: var(--color-text-muted);
@@ -3796,6 +4141,74 @@ tbody tr:hover {
 
 .payment-option.is-disabled .payment-option__desc {
     color: var(--color-text-muted);
+}
+
+/* Delivery Options - Editorial Style
+   Shares the exact payment-option construction (same paper surface, rule,
+   radius, spacing, and :has(input:checked) selected state) so the delivery
+   option reads as a native part of the checkout. Inherits every breakpoint
+   from the shared component rules below. */
+.delivery-options {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-3);
+}
+
+.delivery-option {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--sp-3);
+    margin: 0;
+    padding: var(--sp-4);
+    background: var(--editorial-paper, #f5f2ec);
+    border: 1px solid var(--editorial-line, #c9c2b8);
+    border-radius: 2px;
+    cursor: pointer;
+    transition: border-color var(--transition), background-color var(--transition);
+}
+
+.delivery-option:hover {
+    border-color: var(--editorial-ink, #171717);
+}
+
+.delivery-option input {
+    width: auto;
+    min-height: 0;
+    margin-top: 0.1rem;
+    accent-color: var(--editorial-ink, #171717);
+    flex-shrink: 0;
+}
+
+.delivery-option:has(input:checked) {
+    background: var(--color-surface);
+    border-color: var(--editorial-ink, #171717);
+}
+
+.delivery-option__body {
+    display: block;
+    min-width: 0;
+}
+
+.delivery-option__name {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--sp-2);
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--editorial-ink, #171717);
+    line-height: 1.4;
+}
+
+.delivery-option__desc {
+    display: block;
+    margin-top: 0.375rem;
+    color: var(--color-text-muted);
+    font-size: 0.8125rem;
+    font-weight: 400;
+    line-height: 1.5;
 }
 
 /* Order Summary - Editorial Style */
@@ -4857,9 +5270,9 @@ body.is-modal-open {
     grid-area: media;
     justify-self: start;
     width: min(62%, 240px);
-    aspect-ratio: 4 / 5;
+    aspect-ratio: var(--card-media-ratio);
     overflow: hidden;
-    border-radius: var(--radius-sm);
+    border-radius: var(--card-radius-media);
     background: var(--color-bg-alt);
 }
 
@@ -5645,181 +6058,684 @@ body.is-modal-open {
     }
 }
 
-/* Account Page */
-.account-page {
-    padding-top: var(--sp-4);
-}
+/* ------------------------------------------------------------------ *
+ * Customer Account Center
+ *
+ * The page masthead (ACCOUNT / MY ACCOUNT / greeting) was removed
+ * deliberately, so the profile identity area is the page's primary
+ * visual identity. Hierarchy comes from the identity area, the
+ * module grid beneath it, and the quiet logout row below them.
+ *
+ * Layout: .account-grid is a single-column stack on small screens
+ * (DOM order = identity, personal information, security, quick
+ * actions, log out) and becomes a two-column grid on wide screens,
+ * where personal information leads, quick actions supports it, and
+ * security spans the full width underneath. Panel heights are never
+ * forced to match.
+ * ------------------------------------------------------------------ */
+.account-center {
+    /* Account-scoped radius system. Kept local to the Account Center so the
+       site-wide card geometry tokens are untouched. Primary panels read as
+       soft, contemporary surfaces; inner elements stay slightly tighter. */
+    --account-radius: 20px;
+    --account-radius-inner: 14px;
 
-.account-header {
-    margin-bottom: var(--sp-5);
-}
+    /* Account-scoped warm surface system. The page sits on warm cream, so
+       pure white panels read as stark and clinical. These tokens shift the
+       Account Center to a warmer ivory while staying inside the existing
+       Hopia Fits palette: warm ivory surfaces, charcoal type, muted-rust
+       accents, thin warm borders, and no heavy shadows. */
+    --account-surface: #fbf8f1;
+    --account-surface-soft: #f6f0e4;
+    --account-input-bg: #fffdf8;
+    --account-border: #e8e1d2;
+    --account-border-strong: #d9d0bd;
 
-.account-header__eyebrow {
-    font-size: 0.6875rem;
-    font-weight: 700;
-    letter-spacing: 0.18em;
-    text-transform: uppercase;
-    color: var(--color-text-muted);
-    margin-bottom: var(--sp-1);
-}
-
-.account-header h1 {
-    font-size: 1.5rem;
-    font-weight: 800;
-    letter-spacing: 0.02em;
-    color: var(--color-text);
-    line-height: 1.05;
-}
-
-.account-header__rule {
-    width: 2.5rem;
-    height: 2px;
-    background: var(--color-primary);
-    margin: var(--sp-3) 0;
-}
-
-.account-header__greeting {
-    margin-top: var(--sp-2);
-    color: var(--color-text-soft);
-    font-size: 0.9375rem;
-}
-
-/* Two-column editorial dashboard */
-.account-dashboard {
+    padding-block: var(--sp-2) var(--sp-5);
     display: flex;
     flex-direction: column;
     gap: var(--sp-4);
 }
 
-/* Account information card */
-.account-card {
-    background: var(--color-surface);
+/* Premium bold-outline icon for the Account Center, shared stroke
+   weight with the checkout / confirmation / orders / order icon
+   families so every icon set on the customer site reads as one. */
+.account-icon {
+    flex-shrink: 0;
+    width: 20px;
+    height: 20px;
+    color: var(--editorial-ink, #171717);
 }
 
-.account-card__body {
+.account-btn .account-icon,
+.account-link .account-icon,
+.account-quick__action .account-icon,
+.account-exit__logout .account-icon {
+    color: currentColor;
+}
+
+/* -------------------------------------------------------------- *
+ * Profile identity area — the page's visual anchor
+ * -------------------------------------------------------------- */
+.account-identity {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-4);
     padding: var(--sp-5);
+    background: var(--account-surface);
+    border: 1px solid var(--account-border);
+    border-top: 2px solid var(--editorial-ink, #171717);
+    border-radius: var(--account-radius);
 }
 
-.account-card__eyebrow {
+.account-identity__main {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-4);
+    min-width: 0;
+}
+
+/* Editorial identity mark: a solid charcoal disc with reversed initials.
+   Not a gradient, shadow, or social-media avatar — a single flat fill
+   that gives the identity area its visual weight. */
+.account-identity__avatar {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+    width: 64px;
+    height: 64px;
+    border: 0;
+    border-radius: 50%;
+    background: var(--editorial-ink, #171717);
+    color: var(--editorial-paper, #f5f2ec);
+}
+
+.account-identity__initials {
+    font-size: 1.25rem;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    line-height: 1;
+}
+
+.account-identity__text {
+    min-width: 0;
+}
+
+.account-identity__name {
+    font-size: 1.375rem;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    line-height: 1.1;
+    color: var(--editorial-ink, #171717);
+    overflow-wrap: anywhere;
+}
+
+.account-identity__email {
+    margin-top: 0.2rem;
+    font-size: 0.9375rem;
+    color: var(--color-text-soft);
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}
+
+.account-identity__role {
+    margin-top: var(--sp-2);
+    font-size: 0.6875rem;
+    font-weight: 700;
+    letter-spacing: 0.18em;
+    color: var(--color-primary);
+}
+
+.account-identity__actions {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-3);
+}
+
+/* Quiet uppercase text action. The pencil is dropped in favour of the
+   trailing arrow the editorial action links use elsewhere. */
+.account-link {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    width: 100%;
+    min-height: 44px;
+    padding: 0.625rem 1rem;
+    background: var(--account-surface);
+    border: 1px solid var(--editorial-ink, #171717);
+    border-radius: var(--radius-sm);
+    color: var(--editorial-ink, #171717);
+    font-family: inherit;
     font-size: 0.75rem;
     font-weight: 700;
-    letter-spacing: 0.14em;
-    color: var(--color-text-soft);
-    margin-bottom: var(--sp-4);
-    padding-bottom: var(--sp-3);
-    border-bottom: 1px solid var(--color-border);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    text-decoration: none;
+    cursor: pointer;
+    transition: background-color var(--transition-base), color var(--transition-base),
+        border-color var(--transition-base);
 }
 
-.account-details {
+.account-link:hover,
+.account-link:focus-visible {
+    background: var(--editorial-ink, #171717);
+    color: var(--editorial-paper, #f5f2ec);
+    text-decoration: none;
+}
+
+.account-link--sm {
+    width: auto;
+    min-height: 40px;
+    padding: 0.5rem 0.75rem;
+    background: transparent;
+    border-color: var(--color-border-strong);
+    color: var(--editorial-ink, #171717);
+}
+
+.account-link--sm:hover,
+.account-link--sm:focus-visible {
+    background: var(--editorial-ink, #171717);
+    border-color: var(--editorial-ink, #171717);
+    color: var(--editorial-paper, #f5f2ec);
+}
+
+.account-link__arrow {
+    display: inline-flex;
+    align-items: center;
+    transition: transform var(--transition-base);
+}
+
+.account-link__arrow svg {
+    width: 15px;
+    height: 15px;
+}
+
+.account-link:hover .account-link__arrow,
+.account-link:focus-visible .account-link__arrow,
+.account-link--sm:hover .account-link__arrow,
+.account-link--sm:focus-visible .account-link__arrow {
+    transform: translateX(3px);
+}
+
+/* -------------------------------------------------------------- *
+ * Module grid
+ * -------------------------------------------------------------- */
+.account-grid {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-4);
+}
+
+.account-panel {
+    background: var(--account-surface);
+    border: 1px solid var(--account-border);
+    border-radius: var(--account-radius);
+    padding: var(--sp-5);
+    min-width: 0;
+}
+
+.account-panel__head {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    padding-bottom: var(--sp-3);
+    margin-bottom: var(--sp-4);
+    border-bottom: 1px solid var(--account-border);
+}
+
+.account-panel__icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+    color: var(--editorial-ink, #171717);
+}
+
+.account-panel__title {
+    font-size: 0.8125rem;
+    font-weight: 800;
+    letter-spacing: 0.16em;
+    line-height: 1;
+    color: var(--color-text);
+}
+
+/* Shown only for failures that belong to no single field, so a rejected
+   field never repeats its message below the form. */
+.account-panel__error {
+    margin-top: var(--sp-3);
+    padding-left: var(--sp-4);
+    border-left: 2px solid var(--color-danger);
+    font-size: 0.8125rem;
+    font-weight: 500;
+    color: var(--color-danger);
+}
+
+.account-panel__error:empty {
+    display: none;
+}
+
+.account-panel__actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: var(--sp-3);
+    margin-top: var(--sp-4);
+    padding-top: var(--sp-4);
+    border-top: 1px solid var(--account-border);
+}
+
+/* State ownership
+   ----------------
+   Read/edit visibility is driven by the root state classes rather than
+   by per-element `hidden` bookkeeping, so leaving a state can never
+   strand its controls. The state class is more specific than the
+   user-agent [hidden] rule, so it wins where a stale attribute remains. */
+.account-link[hidden],
+.account-panel__actions[hidden],
+.account-success[hidden] {
+    display: none;
+}
+
+.account-panel__actions[data-account-read-actions],
+.account-panel__actions[data-account-profile-actions] {
+    display: none;
+}
+
+.account-center.is-editing .account-panel__actions[data-account-profile-actions] {
+    display: flex;
+}
+
+.account-center.is-editing .account-panel__actions[data-account-read-actions] {
+    display: none;
+}
+
+.account-center:not(.is-editing) .account-panel__actions[data-account-read-actions] {
+    display: flex;
+}
+
+/* -------------------------------------------------------------- *
+ * Module success state
+ *
+ * One banner per module, so a profile save is never repeated in the
+ * Security panel and vice versa.
+ * -------------------------------------------------------------- */
+.account-success {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.6rem;
+    margin-bottom: var(--sp-4);
+    padding: 0.75rem 1rem;
+    background: var(--color-success-soft);
+    border: 1px solid #cfe3d6;
+    border-radius: var(--radius-sm);
+    color: #2f6142;
+    opacity: 0;
+    transform: translateY(-4px);
+    transition: opacity var(--transition-slow), transform var(--transition-slow);
+}
+
+.account-success.is-visible {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+.account-success__icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+    color: var(--color-success);
+}
+
+.account-success__icon svg {
+    width: 17px;
+    height: 17px;
+}
+
+.account-success__copy {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+    min-width: 0;
+}
+
+.account-success__title {
+    font-size: 0.6875rem;
+    font-weight: 800;
+    letter-spacing: 0.14em;
+    line-height: 1.2;
+}
+
+.account-success__detail {
+    font-size: 0.8125rem;
+    font-weight: 500;
+    letter-spacing: 0.01em;
+    line-height: 1.35;
+}
+
+/* -------------------------------------------------------------- *
+ * Editorial field rows
+ * -------------------------------------------------------------- */
+.account-fields,
+.account-password {
     display: flex;
     flex-direction: column;
     gap: 0;
     margin: 0;
 }
 
-.account-details__row {
+.account-field {
     display: flex;
     flex-direction: column;
     gap: var(--sp-2);
     padding: var(--sp-3) 0;
-    border-bottom: 1px solid var(--color-border);
+    border-bottom: 1px solid var(--account-border);
 }
 
-.account-details__row:first-child {
+.account-fields .account-field:first-of-type,
+.account-password .account-field:first-of-type {
     padding-top: 0;
 }
 
-.account-details__row:last-child {
-    padding-bottom: 0;
+.account-fields .account-field:last-of-type,
+.account-password .account-field:last-of-type {
     border-bottom: 0;
 }
 
-.account-details__label {
+.account-field__label {
     display: inline-flex;
     align-items: center;
-    gap: var(--sp-3);
+    gap: 0.6rem;
     color: var(--color-text-muted);
-    font-size: 0.75rem;
+    font-size: 0.6875rem;
     font-weight: 700;
-    letter-spacing: 0.1em;
+    letter-spacing: 0.14em;
     text-transform: uppercase;
-}
-
-.account-details__icon {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 36px;
-    height: 36px;
-    border: 1px solid var(--color-border-strong);
-    border-radius: 50%;
-    color: var(--color-text);
-    flex: 0 0 36px;
-}
-
-.account-details__icon svg {
-    width: 18px;
-    height: 18px;
-}
-
-.account-details__label-text {
     line-height: 1;
 }
 
-.account-details__value {
-    margin: 0;
-    padding-left: calc(36px + var(--sp-3));
+.account-field__icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+    color: var(--color-text-soft);
+}
+
+.account-field__icon svg {
+    width: 17px;
+    height: 17px;
+}
+
+.account-field__control {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-3);
+    min-width: 0;
+}
+
+.account-field__value {
     font-size: 1rem;
-    font-weight: 600;
+    font-weight: 650;
     color: var(--color-text);
     overflow-wrap: anywhere;
     word-break: break-word;
 }
 
-.account-details__value--text {
+.account-field__value--text {
     font-weight: 500;
 }
 
-.account-details__missing {
+.account-field__value--missing {
     color: var(--color-text-muted);
     font-style: italic;
     font-weight: 400;
 }
 
-/* Quick actions */
-.account-quick {
+.account-field__value--mask {
+    letter-spacing: 0.22em;
+    color: var(--color-text-soft);
+}
+
+/* One inline message per field, marked with a restrained warning glyph. */
+.account-field__error {
+    position: relative;
+    padding-left: var(--sp-4);
+    font-size: 0.8125rem;
+    font-weight: 500;
+    color: var(--color-danger);
+}
+
+.account-field__error:empty {
+    display: none;
+}
+
+.account-field__error:not(:empty)::before {
+    content: "\26A0";
+    position: absolute;
+    left: 0;
+    top: 0;
+    font-size: 0.75rem;
+    line-height: 1.7;
+}
+
+/* The inputs live in the same row position as the read-only values, so
+   entering edit mode does not reflow the section. Both are always in the
+   DOM: the value span carries no hidden attribute, and the input is
+   revealed by the is-editing state. Scoped to the personal-information
+   form so the security row's mask and CHANGE PASSWORD control are never
+   affected. */
+.account-fields .account-field__input {
+    display: none;
+    max-width: 100%;
+}
+
+.account-center.is-editing .account-fields .account-field__value {
+    display: none;
+}
+
+.account-center.is-editing .account-fields .account-field__input {
+    display: block;
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+/* Warm the native inputs so they sit inside the ivory panel rather than
+   reading as stark white registration fields. */
+.account-center .input {
+    background: var(--account-input-bg);
+    border-color: var(--account-border-strong);
+}
+
+.account-center .input.is-error {
+    border-color: var(--color-danger);
+}
+
+.account-center .input.is-error:focus {
+    border-color: var(--color-danger);
+    box-shadow: 0 0 0 3px rgba(168, 58, 52, 0.12);
+}
+
+/* The revealed eye sits a touch darker while the value is unmasked. */
+.input-password__toggle.is-revealed {
+    color: var(--color-text);
+}
+
+/* Email confirmation field, revealed only when the email actually changes. */
+.account-confirm {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-2);
+    padding: var(--sp-3) 0;
+    border-bottom: 1px solid var(--account-border);
+}
+
+.account-confirm[hidden] {
+    display: none;
+}
+
+.account-confirm .input-password {
+    max-width: 420px;
+}
+
+/* Security module: masked read row plus the expanding password form. */
+.account-field--security {
+    padding-top: 0;
+    border-bottom: 0;
+}
+
+.account-field__control--security {
+    justify-content: space-between;
+    gap: var(--sp-4);
+    flex-wrap: wrap;
+}
+
+/* Editorial inline reveal: the compact password read row folds away as
+   the inline editor unfolds in the same spot, so the Security section
+   transforms in place rather than swapping to a separate block. */
+.account-security-row {
+    overflow: hidden;
+    max-height: 220px;
+    opacity: 1;
+    visibility: visible;
+    transition: max-height var(--transition-slow), opacity var(--transition-base),
+        padding var(--transition-slow), visibility var(--transition-base);
+}
+
+.account-password {
+    margin: 0;
+}
+
+/* Collapsed by default. The 0fr track collapses the wrapper to zero
+   height, and `visibility: hidden` takes the closed form out of the tab
+   order and the accessibility tree while the track animates. */
+.account-reveal {
+    display: grid;
+    grid-template-rows: 0fr;
+    opacity: 0;
+    visibility: hidden;
+    transition: grid-template-rows var(--transition-slow), opacity var(--transition-base),
+        visibility var(--transition-base);
+}
+
+.account-reveal__inner {
+    overflow: hidden;
+    min-height: 0;
+}
+
+.account-reveal__inner > .account-password {
+    padding-top: var(--sp-4);
+    border-top: 1px solid var(--account-border);
+}
+
+.account-center.is-password-editing .account-reveal {
+    grid-template-rows: 1fr;
+    opacity: 1;
+    visibility: visible;
+}
+
+.account-center.is-password-editing .account-security-row {
+    max-height: 0;
+    opacity: 0;
+    visibility: hidden;
+    padding-top: 0;
+    padding-bottom: 0;
+    pointer-events: none;
+}
+
+/* -------------------------------------------------------------- *
+ * Actions
+ * -------------------------------------------------------------- */
+.account-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    min-height: 44px;
+    padding: 0.625rem 1.25rem;
+    border: 1px solid transparent;
+    border-radius: var(--radius-sm);
+    font-family: inherit;
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: background-color var(--transition-base), color var(--transition-base),
+        border-color var(--transition-base), opacity var(--transition-base);
+}
+
+.account-btn--primary {
+    background: var(--editorial-ink, #171717);
+    border-color: var(--editorial-ink, #171717);
+    color: var(--editorial-paper, #f5f2ec);
+}
+
+.account-btn--ghost {
+    background: transparent;
+    border-color: var(--color-border-strong);
+    color: var(--editorial-ink, #171717);
+}
+
+.account-btn--ghost:hover,
+.account-btn--ghost:focus-visible {
+    background: var(--color-surface-muted);
+    border-color: var(--editorial-ink, #171717);
+    color: var(--editorial-ink, #171717);
+}
+
+.account-btn:disabled {
+    opacity: 0.6;
+    cursor: progress;
+}
+
+.account-btn.is-loading {
+    opacity: 0.7;
+}
+
+/* Trailing arrow on the primary submit action, matching the editorial
+   action language used by the section links. */
+.account-btn__arrow {
+    display: inline-flex;
+    align-items: center;
+    transition: transform var(--transition-base);
+}
+
+.account-btn__arrow svg {
+    width: 15px;
+    height: 15px;
+}
+
+.account-btn--primary:hover .account-btn__arrow,
+.account-btn--primary:focus-visible .account-btn__arrow {
+    transform: translateX(3px);
+}
+
+/* -------------------------------------------------------------- *
+ * Quick actions — primary dark card + secondary light card
+ * (preserved destinations, icons, arrows and hover behavior)
+ * -------------------------------------------------------------- */
+.account-quick__list {
     display: flex;
     flex-direction: column;
     gap: var(--sp-3);
-    padding: var(--sp-5);
-    background: var(--color-surface);
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius);
-    box-shadow: var(--shadow-sm);
-}
-
-.account-quick__eyebrow {
-    font-size: 0.75rem;
-    font-weight: 700;
-    letter-spacing: 0.14em;
-    color: var(--color-text-soft);
-    margin-bottom: var(--sp-2);
-    padding-bottom: var(--sp-3);
-    border-bottom: 1px solid var(--color-border);
 }
 
 .account-quick__action {
     display: flex;
     align-items: center;
     gap: var(--sp-4);
+    min-height: 64px;
     padding: var(--sp-4);
-    border: 1px solid var(--color-border-strong);
-    border-radius: var(--radius-sm);
-    background: var(--color-surface);
+    border: 1px solid var(--account-border-strong);
+    border-radius: var(--account-radius-inner);
+    background: var(--account-surface);
     color: var(--color-text);
     text-decoration: none;
-    transition: background-color var(--transition), border-color var(--transition),
-        color var(--transition), transform var(--transition);
+    transition: background-color var(--transition-base), border-color var(--transition-base),
+        color var(--transition-base);
 }
 
 .account-quick__action:hover,
@@ -5834,8 +6750,8 @@ body.is-modal-open {
 }
 
 .account-quick__action--secondary {
-    background: var(--color-surface);
-    border-color: var(--color-border-strong);
+    background: var(--account-surface-soft);
+    border-color: var(--account-border-strong);
     color: var(--color-text);
 }
 
@@ -5843,56 +6759,53 @@ body.is-modal-open {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 44px;
-    height: 44px;
-    border: 1px solid currentColor;
-    border-radius: 50%;
-    flex: 0 0 44px;
-}
-
-.account-quick__action--primary .account-quick__icon {
-    border-color: rgba(245, 242, 236, 0.55);
-    color: var(--editorial-paper, #f5f2ec);
+    flex: 0 0 auto;
+    color: currentColor;
 }
 
 .account-quick__icon svg {
-    width: 20px;
-    height: 20px;
+    width: 19px;
+    height: 19px;
 }
 
 .account-quick__copy {
     display: flex;
     flex-direction: column;
-    gap: 0.2rem;
+    gap: 0.15rem;
     flex: 1 1 auto;
     min-width: 0;
 }
 
 .account-quick__label {
-    font-size: 0.8125rem;
+    font-size: 0.75rem;
     font-weight: 700;
     letter-spacing: 0.1em;
     text-transform: uppercase;
-    line-height: 1.1;
+    line-height: 1.2;
 }
 
 .account-quick__sub {
     font-size: 0.8125rem;
     font-weight: 400;
     color: var(--color-text-muted);
-    letter-spacing: 0.01em;
     line-height: 1.3;
 }
 
 .account-quick__action--primary .account-quick__sub {
-    color: rgba(245, 242, 236, 0.7);
+    color: rgba(245, 242, 236, 0.72);
 }
 
 .account-quick__arrow {
-    font-size: 1.125rem;
-    line-height: 1;
+    display: inline-flex;
+    align-items: center;
     flex: 0 0 auto;
-    transition: transform var(--transition);
+    color: currentColor;
+    transition: transform var(--transition-base), color var(--transition-base);
+}
+
+.account-quick__arrow svg {
+    width: 16px;
+    height: 16px;
 }
 
 .account-quick__action:hover .account-quick__arrow,
@@ -5908,12 +6821,6 @@ body.is-modal-open {
         color: var(--editorial-ink, #171717);
     }
 
-    .account-quick__action--primary:hover .account-quick__icon,
-    .account-quick__action--primary:focus-visible .account-quick__icon {
-        background-color: var(--editorial-ink, #171717);
-        color: var(--editorial-paper, #f5f2ec);
-    }
-
     .account-quick__action--primary:hover .account-quick__sub,
     .account-quick__action--primary:focus-visible .account-quick__sub {
         color: var(--color-text-muted);
@@ -5927,117 +6834,219 @@ body.is-modal-open {
     }
 }
 
-.account-quick__action:focus-visible {
-    outline: 2px solid var(--editorial-ink, #171717);
-    outline-offset: 2px;
-}
-
-/* Inline account actions (logout row) */
-.account-actions {
+/* -------------------------------------------------------------- *
+ * Log out — clearly separated from the modules above
+ * -------------------------------------------------------------- */
+.account-exit {
     display: flex;
     flex-direction: column;
     align-items: center;
     gap: var(--sp-3);
-    margin-top: var(--sp-4);
+    padding-top: var(--sp-2);
 }
 
-.account-actions__divider {
+.account-exit__rule {
     width: 100%;
     max-width: 220px;
     height: 1px;
-    background: var(--color-border);
+    background: var(--account-border);
 }
 
-.account-actions__logout {
-    display: inline-block;
-    padding: 0.5rem 0;
-    border: none;
-    background: none;
+.account-exit__logout {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    min-height: 44px;
+    padding: 0.5rem 1rem;
     color: var(--color-danger);
     font-size: 0.75rem;
     font-weight: 700;
     letter-spacing: 0.14em;
     text-transform: uppercase;
     text-decoration: none;
-    cursor: pointer;
-    transition: color var(--transition);
+    transition: color var(--transition-base);
 }
 
-.account-actions__logout:hover,
-.account-actions__logout:focus-visible {
+.account-exit__logout:hover,
+.account-exit__logout:focus-visible {
     color: var(--color-danger-dark);
     text-decoration: underline;
     text-underline-offset: 3px;
-    background: none;
 }
 
-/* Tablet — reduce gaps before columns get cramped */
+/* -------------------------------------------------------------- *
+ * Tablet — the identity area turns horizontal and the field rows
+ * become label/value pairs before the grid gains its second column
+ * -------------------------------------------------------------- */
 @media (min-width: 720px) {
-    .account-page {
-        padding-top: var(--sp-5);
-    }
-
-    .account-header h1 {
-        font-size: 2rem;
-    }
-
-    .account-dashboard {
+    .account-center {
+        padding-block: var(--sp-4) var(--sp-6);
         gap: var(--sp-5);
     }
 
-    .account-card__body {
-        padding: var(--sp-5) var(--sp-5);
-    }
-
-    .account-quick {
-        padding: var(--sp-5);
-    }
-}
-
-/* Desktop & wide — two-column editorial dashboard */
-@media (min-width: 960px) {
-    .account-dashboard {
-        display: grid;
-        grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+    .account-identity {
+        flex-direction: row;
+        align-items: center;
+        justify-content: space-between;
         gap: var(--sp-5);
-        align-items: start;
+        padding: var(--sp-5) var(--sp-6);
     }
 
-    .account-details__row {
+    .account-identity__actions {
+        flex: 0 0 auto;
+    }
+
+    /* The disc steps up once the identity area turns horizontal. */
+    .account-identity__avatar {
+        width: 72px;
+        height: 72px;
+    }
+
+    .account-identity__initials {
+        font-size: 1.375rem;
+    }
+
+    .account-link {
+        width: auto;
+    }
+
+    .account-grid {
+        gap: var(--sp-5);
+    }
+
+    .account-field {
         flex-direction: row;
         align-items: center;
         gap: var(--sp-4);
         padding: var(--sp-4) 0;
     }
 
-    .account-details__label {
-        flex: 0 0 auto;
-        min-width: 0;
+    /* Desktop row layout: the value/input takes the right side, with the
+       label and its icon held at a consistent width on the left. */
+    .account-field__label {
+        flex: 0 0 200px;
     }
 
-    .account-details__value {
-        padding-left: 0;
-        margin-left: auto;
+    .account-field__control {
+        flex: 1 1 auto;
+        justify-content: flex-end;
+    }
+
+    .account-field__value {
         text-align: right;
-        max-width: 60%;
+    }
+
+    .account-field--security .account-field__value {
+        text-align: left;
+    }
+
+    .account-confirm {
+        flex-direction: row;
+        align-items: flex-start;
+        gap: var(--sp-4);
+    }
+
+    .account-confirm .account-field__label {
+        flex: 0 0 200px;
+    }
+
+    .account-confirm .input-password {
+        width: 100%;
+        max-width: none;
+    }
+
+    .account-confirm .account-field__error {
+        flex: 1 1 100%;
+    }
+
+    .account-panel__actions {
+        gap: var(--sp-3);
+    }
+}
+
+/* Desktop & wide — personal information leads, quick actions supports
+   it, security spans the full width underneath. */
+@media (min-width: 960px) {
+    .account-grid {
+        display: grid;
+        grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
+        align-items: start;
+    }
+
+    .account-panel--personal {
+        grid-column: 1;
+        grid-row: 1;
+    }
+
+    .account-panel--quick {
+        grid-column: 2;
+        grid-row: 1;
+    }
+
+    .account-panel--security {
+        grid-column: 1 / -1;
+        grid-row: 2;
     }
 }
 
 @media (min-width: 1024px) {
-    .account-header h1 {
-        font-size: 2.25rem;
-    }
-
-    .account-card__body {
+    .account-identity {
         padding: var(--sp-6);
     }
 
-    .account-quick {
+    .account-identity__name {
+        font-size: 1.75rem;
+    }
+
+    .account-identity__avatar {
+        width: 84px;
+        height: 84px;
+    }
+
+    .account-identity__initials {
+        font-size: 1.625rem;
+    }
+
+    .account-panel {
         padding: var(--sp-6);
-        gap: var(--sp-4);
     }
 }
 
+/* Restrained microinteractions only, and never for reduced motion. */
+@media (prefers-reduced-motion: reduce) {
+    .account-link,
+    .account-link__arrow,
+    .account-btn,
+    .account-btn__arrow,
+    .account-quick__action,
+    .account-quick__arrow,
+    .account-exit__logout,
+    .account-success,
+    .account-security-row,
+    .account-reveal {
+        transition: none;
+    }
+
+    .account-link:hover .account-link__arrow,
+    .account-link:focus-visible .account-link__arrow,
+    .account-link--sm:hover .account-link__arrow,
+    .account-link--sm:focus-visible .account-link__arrow,
+    .account-btn--primary:hover .account-btn__arrow,
+    .account-btn--primary:focus-visible .account-btn__arrow,
+    .account-quick__action:hover .account-quick__arrow,
+    .account-quick__action:focus-visible .account-quick__arrow {
+        transform: none;
+    }
+
+    .account-success {
+        opacity: 1;
+        transform: none;
+    }
+
+    .account-reveal {
+        opacity: 1;
+    }
+}
 /* Admin Dashboard */
 .admin-dashboard {
     padding-block: var(--sp-2) var(--sp-4);
@@ -7301,8 +8310,9 @@ body.is-modal-open {
   box-shadow: 0 14px 32px rgba(31, 28, 24, 0.14);
   opacity: 0;
   pointer-events: none;
-  transform: translateY(-4px);
-  transition: opacity 140ms ease 90ms, transform 140ms ease 90ms, visibility 0s linear 230ms;
+  transform: translateY(-6px) scale(0.985);
+  transform-origin: top left;
+  transition: opacity var(--transition-base) 90ms, transform var(--transition-base) 90ms, visibility 0s linear 270ms;
   visibility: hidden;
 }
 
@@ -7320,7 +8330,7 @@ body.is-modal-open {
 .ui-store .nav-dropdown.is-open .nav-dropdown__menu {
   opacity: 1;
   pointer-events: auto;
-  transform: translateY(0);
+  transform: translateY(0) scale(1);
   transition-delay: 90ms;
   visibility: visible;
 }
@@ -7404,8 +8414,9 @@ body.is-modal-open {
   box-shadow: 0 14px 32px rgba(31, 28, 24, 0.14);
   opacity: 0;
   pointer-events: none;
-  transform: translateY(-4px);
-  transition: opacity 140ms ease 90ms, transform 140ms ease 90ms, visibility 0s linear 230ms;
+  transform: translateY(-6px) scale(0.985);
+  transform-origin: top right;
+  transition: opacity var(--transition-base) 90ms, transform var(--transition-base) 90ms, visibility 0s linear 270ms;
   visibility: hidden;
 }
 
@@ -7423,7 +8434,7 @@ body.is-modal-open {
 .ui-store .header-account.is-open .header-account__menu {
   opacity: 1;
   pointer-events: auto;
-  transform: translateY(0);
+  transform: translateY(0) scale(1);
   transition-delay: 90ms;
   visibility: visible;
 }
@@ -7666,6 +8677,10 @@ body.is-modal-open {
 }
 
 .ui-store .site-header.nav-open .nav-dropdown__menu a {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 0.45em;
   min-height: 42px;
   padding-left: 1rem;
   border-left: 1px solid var(--editorial-line);
@@ -7730,17 +8745,20 @@ body.is-modal-open {
   padding: clamp(4.5rem, 13vw, 9rem) max(var(--home-gutter), calc((100vw - var(--max-width)) / 2 + var(--home-gutter)));
   background: var(--editorial-ink);
   color: var(--editorial-paper);
+  overflow:hidden;
 }
 
-.home-hero__video {
-  position: absolute;
-  inset: 0;
-  z-index: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  object-position: center 35%;
-}
+ .home-hero__video {
+    position: absolute !important;
+    inset: 0 !important;
+    width: 100% !important;
+    height: 100% !important;
+    left: 0 !important;
+    transform: none !important;
+    object-fit: cover !important;
+    object-position: center 18% !important;
+    filter: brightness(1.15) !important;
+  }
 
 .home-hero__scrim {
   position: absolute;
@@ -8149,6 +9167,15 @@ body.is-modal-open {
   color: #fff;
   text-decoration: none;
   counter-increment: home-category-index;
+  /* Same floating shadow as the Why Hopia Fits cards, so the lift reads with
+     the same strength against the light section background. overflow: hidden
+     above still clips the image layers to the card. */
+  --home-category-shadow:
+    0 1px 1px rgba(31, 28, 24, 0.03),
+    0 2px 4px rgba(31, 28, 24, 0.04),
+    0 14px 30px -12px rgba(31, 28, 24, 0.13),
+    0 30px 60px -30px rgba(31, 28, 24, 0.16);
+  box-shadow: var(--home-category-shadow);
 }
 
 .home-category.is-clone {
@@ -8157,7 +9184,10 @@ body.is-modal-open {
 
 .home-category:hover {
   color: #fff;
-  box-shadow: none;
+  /* Hold the resting float shadow on hover (no hover elevation) so the card
+     keeps its lifted look; this also still overrides the legacy hover
+     box-shadow/translate declared further up the file. */
+  box-shadow: var(--home-category-shadow);
   transform: none;
 }
 
@@ -8185,14 +9215,13 @@ body.is-modal-open {
   -webkit-mask-composite: xor;
   mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
   mask-composite: exclude;
-  opacity: 0;
+  opacity: 1;
   pointer-events: none;
-  transition: opacity 320ms ease;
+  animation: home-category-sweep 6s linear infinite;
 }
 
 .home-category:hover::before {
   opacity: 1;
-  animation: home-category-sweep 5s linear infinite;
 }
 
 @keyframes home-category-sweep {
@@ -8211,11 +9240,38 @@ body.is-modal-open {
   height: 100%;
 }
 
+/* Crossfading image layers.
+   Every layer is already absolutely positioned and inset:0 by the shared rule
+   above, so they all occupy the exact same box as the card image box. Stacking
+   them changes only paint order and opacity, which cannot move any content or
+   alter layout, so the card, its overlay, and its content stay perfectly
+   stable while the photo underneath changes.
+
+   Only opacity and the existing hover transform are transitioned, so a
+   crossfade never slides, zooms, or distorts the photo. */
 .home-category__image img {
   border-radius: 0;
   object-fit: cover;
   object-position: center;
-  transition: transform 320ms cubic-bezier(0.25, 0.6, 0.3, 1);
+  opacity: 1;
+  transition:
+    opacity 900ms cubic-bezier(0.4, 0, 0.2, 1),
+    transform 320ms cubic-bezier(0.25, 0.6, 0.3, 1);
+}
+
+/* Layers beyond the first start hidden. `data-rotation-layer` is only emitted
+   for the secondary images, so a single-image card is never affected. */
+.home-category__image img[data-rotation-layer] {
+  opacity: 0;
+}
+
+/* The active layer is the only one painted on top. `data-rotation-active` is
+   maintained in JS; a card with no JS simply keeps the first layer visible.
+   Pausing needs no extra rule: the opacity change is a CSS transition that
+   always settles on its target, so a pause can never strand a half-faded
+   stack on screen. */
+.home-category__image img[data-rotation-active] {
+  opacity: 1;
 }
 
 .home-category:hover .home-category__image img,
@@ -8341,6 +9397,19 @@ body.is-modal-open {
   .home-category:focus-visible .home-category__icon {
     transform: none;
   }
+
+  /* Reduced motion: the automatic crossfade is disabled entirely. The first
+     layer is pinned fully opaque and every other layer fully transparent, so
+     the card shows one stable image with no fading. `transition: none` above
+     already makes that change instantaneous if it ever needs to apply, and
+     the card keeps its size, link, icon, title and action exactly as normal. */
+  .home-category__image img {
+    opacity: 1;
+  }
+
+  .home-category__image img[data-rotation-layer] {
+    opacity: 0;
+  }
 }
 
 .home-category-carousel__viewport {
@@ -8394,10 +9463,21 @@ body.is-modal-open {
   color: var(--editorial-accent, #a45c3b);
 }
 
+/* Carousel shell — desktop stays a static editorial grid; below 720px the grid
+   becomes a horizontal track. The viewport is the scroll container, so the
+   carousel can never widen the page. */
+.home-why__carousel {
+  position: relative;
+}
+
+.home-why__viewport {
+  min-width: 0;
+}
+
 .home-why__grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: clamp(2rem, 6vw, 2.75rem) clamp(1.5rem, 5vw, 2.5rem);
+  gap: clamp(1.25rem, 3vw, 1.75rem);
   margin: 0;
   padding: 0;
   list-style: none;
@@ -8406,59 +9486,509 @@ body.is-modal-open {
 .home-why__item {
   position: relative;
   display: flex;
+  min-width: 0;
+}
+
+/* Editorial feature card --------------------------------------------------- */
+.home-why__card {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  display: flex;
+  flex: 1 1 auto;
   flex-direction: column;
   align-items: flex-start;
-  gap: 0.85rem;
-  min-width: 0;
+  gap: 1rem;
+  min-height: clamp(220px, 46vw, 300px);
+  padding: clamp(1.35rem, 4.5vw, 1.9rem);
+  border: 1px solid rgba(23, 23, 23, 0.07);
+  border-radius: 24px;
+  /* Warm editorial surface: a soft ivory-to-cream wash so the card separates
+     from the light section background through warmth, not a new colour. */
+  background: linear-gradient(158deg, #fdfbf6 0%, #f7f2e9 100%);
+  color: var(--editorial-ink, #171717);
+  text-decoration: none;
+  /* Floating depth: layered, large-blur, low-opacity charcoal shadow — soft
+     ambient elevation, never a hard dark edge. */
+  box-shadow:
+    0 1px 1px rgba(31, 28, 24, 0.03),
+    0 2px 4px rgba(31, 28, 24, 0.04),
+    0 14px 30px -12px rgba(31, 28, 24, 0.13),
+    0 30px 60px -30px rgba(31, 28, 24, 0.16);
+  transition:
+    transform var(--transition-slow),
+    box-shadow var(--transition-slow),
+    border-color var(--transition-slow);
+}
+
+.home-why__card:focus-visible {
+  outline: 2px solid var(--editorial-accent, #a45c3b);
+  outline-offset: 3px;
+  border-color: rgba(23, 23, 23, 0.42);
+}
+
+/* Animated editorial reflection — a soft elongated light/sheen that drifts
+   diagonally across the surface on a slow loop, with a per-card offset
+   (--why-sheen-delay) so the four cards never sweep in lockstep. It sits at
+   the surface layer below the number, icon, copy and CTA, so it never
+   obscures content, and the card's overflow:hidden clips it to the rounded
+   corners. Transform + opacity only, so it stays GPU-cheap. */
+.home-why__card::before {
+  content: "";
+  position: absolute;
+  top: -30%;
+  left: -30%;
+  z-index: 1;
+  width: 60%;
+  height: 160%;
+  background: linear-gradient(
+    100deg,
+    rgba(255, 252, 246, 0) 0%,
+    rgba(164, 92, 59, 0.05) 38%,
+    rgba(255, 252, 246, 0.5) 50%,
+    rgba(164, 92, 59, 0.05) 62%,
+    rgba(255, 252, 246, 0) 100%
+  );
+  filter: blur(14px);
+  opacity: 0;
+  transform: translate3d(-120%, 0, 0) rotate(8deg);
+  pointer-events: none;
+  will-change: transform, opacity;
+  animation-name: home-why-sheen;
+  animation-duration: var(--why-sheen-duration, 8s);
+  animation-timing-function: ease-in-out;
+  animation-iteration-count: infinite;
+  animation-delay: var(--why-sheen-delay, 0s);
+}
+
+/* Enter from off the left, cross the card, fade out, then rest for the second
+   half of the loop so the sweep "breathes" instead of flashing. The position
+   reset happens only while fully transparent, so there is no abrupt snap.
+   --why-sheen-opacity scales the peak (lowered on mobile / lifted on hover). */
+@keyframes home-why-sheen {
+  0% {
+    opacity: 0;
+    transform: translate3d(-120%, 0, 0) rotate(8deg);
+  }
+  8% {
+    opacity: var(--why-sheen-opacity, 0.9);
+  }
+  42% {
+    opacity: var(--why-sheen-opacity, 0.9);
+  }
+  50% {
+    opacity: 0;
+    transform: translate3d(300%, 0, 0) rotate(8deg);
+  }
+  100% {
+    opacity: 0;
+    transform: translate3d(300%, 0, 0) rotate(8deg);
+  }
+}
+
+/* Off-black internal editorial accent (A) ---------------------------------
+   A small, deliberately cropped off-black slab anchored to the card's top-right
+   corner, tucked under the oversized index. It is NOT a panel: it spans only a
+   third of the card width and is clipped by the rounded corner, so the ivory
+   surface stays dominant. Its job is to separate the card from the white page
+   and to give the numeral somewhere to invert. Softened off-black (#1c1c1c),
+   never pure #000. Decorative only — aria-hidden in the markup and inert to
+   pointer events so it can never affect the card link or touch drags. */
+.home-why__accent-shape {
+  position: absolute;
+  top: 0;
+  right: 0;
+  z-index: 0;
+  width: 34%;
+  height: 58%;
+  border-bottom-left-radius: 42px;
+  background: linear-gradient(150deg, #1c1c1c 0%, #171717 100%);
+  opacity: 0.94;
+  pointer-events: none;
+  transition: opacity var(--transition-slow);
+}
+
+/* Oversized editorial number — the off-black index (B) ----------------------
+   Rendered in ivory and composited with `difference`, so the same numeral reads
+   as near-black where it crosses the ivory card and flips to light where it
+   overlaps the off-black accent. That single element carries both the dark
+   index and the layered overlap, with no second colour to keep in sync. It sits
+   above the accent shape and hover tint, but below the copy, which is layered
+   over it. Opacity stays low: the numeral should shape the silhouette, not
+   compete with the card's content. */
+.home-why__num {
+  position: absolute;
+  top: -0.3em;
+  right: -0.02em;
+  z-index: 3;
+  color: #e8e2d8;
+  mix-blend-mode: difference;
+  opacity: 0.9;
+  font-size: clamp(5.5rem, 20vw, 9rem);
+  font-weight: 900;
+  font-stretch: condensed;
+  letter-spacing: -0.06em;
+  line-height: 1;
+  pointer-events: none;
+  user-select: none;
+  transition: opacity var(--transition-slow);
+}
+
+/* Very light editorial light sweep, revealed gently on hover. */
+.home-why__card::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  background: linear-gradient(115deg, rgba(164, 92, 59, 0.07) 0%, rgba(164, 92, 59, 0) 44%);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--transition-slow);
+}
+
+.home-why__icon,
+.home-why__content,
+.home-why__cta {
+  position: relative;
+  /* Above the numeral so the copy always wins if the two ever meet, per the
+     intended hierarchy (accent → index → text). */
+  z-index: 4;
 }
 
 .home-why__icon {
   display: inline-flex;
   color: var(--editorial-ink, #171717);
+  transition: transform var(--transition-slow);
 }
 
 .home-why__svg {
-  width: 2rem;
-  height: 2rem;
+  width: 2.1rem;
+  height: 2.1rem;
+}
+
+.home-why__content {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.7rem;
 }
 
 .home-why__label {
   margin: 0;
   color: var(--editorial-ink, #171717);
-  font-size: 0.82rem;
+  font-size: clamp(0.82rem, 1.6vw, 0.95rem);
   font-weight: 800;
   letter-spacing: 0.14em;
-  line-height: 1.25;
+  line-height: 1.2;
   text-transform: uppercase;
 }
 
+.home-why__rule {
+  display: block;
+  width: 1.75rem;
+  height: 2px;
+  background: var(--editorial-accent, #a45c3b);
+  transition: width var(--transition-slow);
+}
+
 .home-why__text {
-  max-width: 24ch;
+  max-width: 26ch;
   margin: 0;
   color: #4f4a42;
   font-size: 0.95rem;
   line-height: 1.5;
+  transition: color var(--transition-base);
 }
 
-@media (min-width: 720px) {
-  .home-why__grid {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 2.5rem;
+.home-why__cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  margin-top: auto;
+  color: var(--color-text-muted, #7b786f);
+}
+
+.home-why__cta-label {
+  font-size: 0.64rem;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  transition: color var(--transition-base);
+}
+
+.home-why__arrow {
+  display: inline-flex;
+  color: var(--editorial-accent, #a45c3b);
+  transition: transform var(--transition-base);
+}
+
+.home-why__arrow-svg {
+  width: 1.25rem;
+  height: 1.25rem;
+}
+
+/* Hover interaction — restrained, no layout shift beyond a tiny lift. Gated to
+   real hover pointers so the state never sticks after a tap on touch devices.
+   The card rises a couple of pixels, the floating shadow deepens a little, and
+   the reflection is lifted to its full peak so the card simply feels "more
+   present" rather than animating. The warm wash is carried by ::after because
+   the ivory gradient surface would hide a background-color tint. */
+@media (hover: hover) {
+  .home-why__card:hover {
+    transform: translateY(-3px);
+    border-color: rgba(23, 23, 23, 0.14);
+    box-shadow:
+      0 2px 3px rgba(31, 28, 24, 0.04),
+      0 4px 10px rgba(31, 28, 24, 0.05),
+      0 20px 44px -14px rgba(31, 28, 24, 0.17),
+      0 44px 84px -34px rgba(31, 28, 24, 0.2);
+    --why-sheen-opacity: 1;
   }
 
-  .home-why__item + .home-why__item::before {
-    content: "";
-    position: absolute;
-    top: 0.3rem;
-    bottom: 0.3rem;
-    left: -1.25rem;
-    width: 1px;
-    background: var(--editorial-line, #c9c2b8);
+  .home-why__card:hover::before {
+    filter: blur(11px);
+  }
+}
+
+.home-why__card:hover .home-why__num,
+.home-why__card:focus-visible .home-why__num {
+  opacity: 0.98;
+}
+
+.home-why__card:hover .home-why__accent-shape,
+.home-why__card:focus-visible .home-why__accent-shape {
+  opacity: 1;
+}
+
+.home-why__card:hover .home-why__icon,
+.home-why__card:focus-visible .home-why__icon {
+  transform: translateY(-3px);
+}
+
+.home-why__card:hover .home-why__rule,
+.home-why__card:focus-visible .home-why__rule {
+  width: 2.75rem;
+}
+
+.home-why__card:hover .home-why__text,
+.home-why__card:focus-visible .home-why__text {
+  color: #2a2a2a;
+}
+
+.home-why__card:hover .home-why__cta-label,
+.home-why__card:focus-visible .home-why__cta-label {
+  color: var(--editorial-ink, #171717);
+}
+
+.home-why__card:hover .home-why__arrow,
+.home-why__card:focus-visible .home-why__arrow {
+  transform: translateX(4px);
+}
+
+.home-why__card:hover::after,
+.home-why__card:focus-visible::after {
+  opacity: 1;
+}
+
+/* Tablet — two balanced columns. */
+@media (min-width: 720px) {
+  .home-why__grid {
+    gap: clamp(1.5rem, 2.4vw, 2rem);
   }
 
   .home-why__svg {
-    width: 2.15rem;
-    height: 2.15rem;
+    width: 2.25rem;
+    height: 2.25rem;
+  }
+}
+
+/* Desktop — four-column editorial row with larger panels and numbers. */
+@media (min-width: 1024px) {
+  .home-why__grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .home-why__card {
+    gap: 1.1rem;
+    min-height: clamp(300px, 24vw, 360px);
+  }
+
+  .home-why__num {
+    font-size: clamp(7rem, 9vw, 9.5rem);
+  }
+}
+
+/* Mobile — manual horizontal editorial carousel (no auto-scroll).
+   The viewport is a real horizontal scroller: the track is wider than the
+   viewport, so the browser gives finger drags 1:1 following and native
+   momentum, and it does its own direction-aware axis locking.
+
+   `touch-action` is deliberately NOT declared on the track. That declaration
+   is what locks the carousel: `pan-y` (the previous value) tells the browser
+   this subtree may only pan vertically, so the compositor refuses every
+   horizontal pan and the row can never move. Removing it restores the default
+   `auto` (both axes), the only value that lets the browser apply its own axis
+   lock - a clearly horizontal drag pans the track, a clearly vertical drag is
+   handed to the page scroller. Nothing calls preventDefault(), so the browser
+   keeps full authority over the gesture.
+
+   The cards never move on their own; the reader controls the row entirely (see
+   the JS). The vertical padding gives the floating card shadow room before
+   overflow-y clips it. */
+@media (max-width: 719px) {
+  .home-why__viewport {
+    overflow-x: auto;
+    overflow-y: hidden;
+    margin-inline: calc(var(--home-gutter, 1rem) * -1);
+    padding-inline: var(--home-gutter, 1rem);
+    padding-block: 0.5rem 1.5rem;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+    overscroll-behavior-x: contain;
+  }
+
+  .home-why__viewport::-webkit-scrollbar {
+    display: none;
+  }
+
+  .home-why__grid {
+    display: flex;
+    width: max-content;
+    gap: 0.9rem;
+    grid-template-columns: none;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  .home-why__item {
+    flex: 0 0 78vw;
+    width: 78vw;
+  }
+
+  .home-why__card {
+    min-height: clamp(240px, 64vw, 340px);
+    /* Keep the rounded floating treatment, but a lighter, more compact shadow
+       and a slower, fainter reflection for touch-device performance. */
+    --why-sheen-duration: 11s;
+    --why-sheen-opacity: 0.6;
+    box-shadow:
+      0 1px 2px rgba(31, 28, 24, 0.04),
+      0 8px 18px -8px rgba(31, 28, 24, 0.11),
+      0 16px 28px -18px rgba(31, 28, 24, 0.12);
+  }
+
+  /* Wide, mostly-dark cards would otherwise take more of the `difference`
+     numeral than the desktop panels do, so the peak opacity is trimmed back to
+     hold the same ivory-dominant balance. The accent slab also narrows and
+     softens its corner radius to match the slimmer mobile card. */
+  .home-why__num {
+    font-size: clamp(6rem, 30vw, 10rem);
+    opacity: 0.72;
+  }
+
+  /* Hover raises the numeral to full strength; the mobile peak is trimmed back
+     to match so the two stay in balance. */
+  .home-why__card:hover .home-why__num,
+  .home-why__card:focus-visible .home-why__num {
+    opacity: 0.84;
+  }
+
+  .home-why__accent-shape {
+    width: 32%;
+    height: 54%;
+    border-bottom-left-radius: 34px;
+  }
+}
+
+/* Mobile swipe cue — a small, refined editorial hint that the row scrolls by
+   hand now that auto-scroll is gone. Hidden on wider screens (static grid);
+   the JS adds .is-dismissed to fade it once the reader has scrolled the row,
+   so it behaves like a one-time hint, not a permanent UI element. */
+.home-why__swipe-cue {
+  display: none;
+}
+
+@media (max-width: 719px) {
+  .home-why__swipe-cue {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.55rem;
+    margin-top: 0.9rem;
+    color: var(--color-text-muted, #7b786f);
+    opacity: 1;
+    transition: opacity 420ms var(--ease-standard, ease);
+  }
+
+  .home-why__swipe-cue.is-dismissed {
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .home-why__swipe-icon {
+    display: inline-flex;
+    color: var(--editorial-accent, #a45c3b);
+    /* A gentle, finite left/right nudge — a hint, not a forever loop. */
+    animation: home-why-swipe-nudge 2.4s var(--ease-standard, ease-in-out) 3;
+  }
+
+  .home-why__swipe-icon svg {
+    width: 2.5rem;
+    height: 1.35rem;
+  }
+
+  .home-why__swipe-label {
+    font-size: 0.62rem;
+    font-weight: 700;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+  }
+}
+
+@keyframes home-why-swipe-nudge {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-3px); }
+  75% { transform: translateX(3px); }
+}
+
+/* Motion / accessibility — with reduced motion the reflection sweep, the hover
+   lift and the swipe-cue nudge are all disabled; the cards stay visually
+   stable and manual scrolling plus every link/action is preserved. */
+@media (prefers-reduced-motion: reduce) {
+  .home-why__card,
+  .home-why__card::after,
+  .home-why__accent-shape,
+  .home-why__num,
+  .home-why__icon,
+  .home-why__rule,
+  .home-why__arrow,
+  .home-why__text,
+  .home-why__cta-label,
+  .home-why__swipe-cue {
+    transition: none;
+  }
+
+  .home-why__card::before {
+    animation: none;
+    opacity: 0;
+  }
+
+  .home-why__swipe-icon {
+    animation: none;
+  }
+
+  .home-why__card:hover {
+    transform: none;
+  }
+
+  .home-why__card:hover .home-why__icon,
+  .home-why__card:focus-visible .home-why__icon {
+    transform: none;
+  }
+
+  .home-why__card:hover .home-why__arrow,
+  .home-why__card:focus-visible .home-why__arrow {
+    transform: translateX(2px);
   }
 }
 
@@ -8565,6 +10095,12 @@ body.is-modal-open {
        read as a continuation of the footage instead of a darker CSS panel. */
     background: radial-gradient(130% 90% at 50% 50%, #1b1b1b 0%, #1c1c1c 45%, #1e1e1e 100%);
   }
+  
+  @media (max-width: 768px) {
+  .home-hero {
+    min-height: 85vh !important;
+  }
+}
 
   .home-hero__video {
     /* Portrait (9:16) source: preserve its native aspect ratio, no stretch, no crop. */
@@ -8573,6 +10109,9 @@ body.is-modal-open {
     height: 100%;
     object-fit: contain;
     object-position: center;
+    --hero-zoom: 1.25;
+    transform: scale(var(--hero-zoom));
+    transform-origin: center center;
   }
 
   .home-hero__scrim {
@@ -8620,18 +10159,42 @@ body.is-modal-open {
   }
 
   .home-category-carousel__viewport {
-    overflow: hidden;
+    /* Native horizontal scroll. The browser provides 1:1 finger-following and
+       momentum, and it does its own directional axis locking, so a vertical
+       swipe scrolls the page while a horizontal swipe moves the carousel.
+
+       `touch-action: pan-x` is deliberately NOT used here. It was the reason a
+       vertical swipe that started on a card photo did not scroll the page: the
+       value tells the browser the element may only pan horizontally, so the
+       compositor never hands a vertical pan to the document scroller and
+       `overflow-y: hidden` gives it nothing to scroll locally. Dropping the
+       declaration restores the browser default (`auto` — both axes), which is
+       the only way the page scroller can claim a vertical gesture that begins
+       over an image. Horizontal panning still works because the element is
+       genuinely horizontally scrollable and `auto` permits it.
+
+       `overscroll-behavior-x: contain` stops the horizontal scroll chaining to
+       the page or triggering back-swipe, and `touch-action: manipulation` is
+       left off entirely so pinch-zoom and scrolling are untouched. */
+    overflow-x: auto;
+    overflow-y: hidden;
     margin-inline: -1rem;
     padding-inline: 1rem;
+    overscroll-behavior-x: contain;
+    -webkit-overflow-scrolling: touch;
+    scroll-behavior: auto;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+
+  .home-category-carousel__viewport::-webkit-scrollbar {
+    display: none;
   }
 
   .home-category-grid[data-carousel-track] {
     display: flex;
     width: max-content;
     gap: 1rem;
-    transition: transform 360ms cubic-bezier(0.2, 0.75, 0.25, 1);
-    will-change: transform;
-    touch-action: none;
     user-select: none;
     -webkit-user-select: none;
   }
@@ -8639,6 +10202,16 @@ body.is-modal-open {
   .home-category-grid[data-carousel-track] .home-category {
     flex: 0 0 85vw;
     width: 85vw;
+  }
+
+  /* Keep the 01/02/03 badge consistent across the duplicated loop copies.
+     On mobile the track is cloned for seamless looping, so the CSS counter
+     would restart per copy. data-index is rendered server-side as an already
+     zero-padded label and copied into every clone by cloneNode, so the badge
+     is correct on first paint (before any script runs) and identical in each
+     copy. */
+  .home-category-grid[data-carousel-track] .home-category__content::before {
+    content: attr(data-index);
   }
 
   .home-category-carousel__dots {
@@ -9454,28 +11027,27 @@ body.is-modal-open {
 .feedback-card {
   display: flex;
   flex-direction: column;
-  gap: var(--sp-3);
+  gap: var(--card-gap);
   min-width: 0;
-  padding: var(--sp-4);
+  padding: var(--card-padding);
   background: var(--color-surface);
   border: 1px solid var(--color-border);
-  border-radius: 3px;
-  transition: border-color var(--transition), box-shadow var(--transition);
+  border-radius: var(--card-radius);
+  transition: border-color var(--transition);
 }
 
 .feedback-card:hover {
   border-color: var(--color-border-strong);
-  box-shadow: var(--shadow-sm);
 }
 
-/* Customer photo: small consistent frame; fixed ratio plus cap keeps every
-   card the same height regardless of the uploaded image dimensions. */
+/* Customer photo: the card's visual lead. Uses the shared portrait ratio
+   with no height cap so the uploaded photograph carries the composition
+   instead of reading as a small inset panel. */
 .feedback-card__photo {
   width: 100%;
-  aspect-ratio: 4 / 3;
-  max-height: 168px;
+  aspect-ratio: var(--card-media-ratio);
   overflow: hidden;
-  border-radius: 3px;
+  border-radius: var(--card-radius-media);
   background: var(--color-bg-alt);
 }
 
@@ -9658,21 +11230,21 @@ body.is-modal-open {
   }
 }
 
-/* Desktop: four compact editorial columns within the shared content width. */
+/* Desktop: three wider columns so the customer photography reads as the
+   lead of each card rather than a small inset. */
 @media (min-width: 1024px) {
   .feedback-grid {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: var(--sp-6) var(--sp-5);
   }
 }
 
-/* Small screens: keep cards compact without excessive horizontal padding. */
+/* Small screens: tighter padding only. The portrait ratio already keeps
+   the photo compact, so no height cap is needed — the customer's picture
+   stays uncropped at every size. */
 @media (max-width: 480px) {
   .feedback-card {
     padding: var(--sp-3);
-  }
-
-  .feedback-card__photo {
-    max-height: 150px;
   }
 }
 
@@ -9865,7 +11437,7 @@ body.is-modal-open {
   display: inline-flex;
   align-items: center;
   gap: var(--sp-3);
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   justify-content: center;
 }
 
@@ -9874,35 +11446,6 @@ body.is-modal-open {
   height: auto;
   border-radius: 0;
   flex-shrink: 0;
-}
-
-.about-header__hanger {
-  flex-shrink: 0;
-  width: 36px;
-  height: auto;
-  color: var(--editorial-ink, #171717);
-  animation: about-hanger-float 4s ease-in-out infinite;
-}
-
-.about-header__hanger-accent {
-  stroke: var(--editorial-accent, #a45c3b);
-}
-
-@keyframes about-hanger-float {
-  0%,
-  100% {
-    transform: translateY(0);
-  }
-
-  50% {
-    transform: translateY(-4px);
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .about-header__hanger {
-    animation: none;
-  }
 }
 
 .about-header__name {
@@ -9941,6 +11484,16 @@ body.is-modal-open {
   color: var(--color-primary);
 }
 
+@media (max-width: 480px) {
+  .about-header__logo {
+    width: 64px;
+  }
+
+  .about-header__mark {
+    gap: var(--sp-2);
+  }
+}
+
 @media (min-width: 720px) {
   .about-page {
     padding-block: var(--sp-7);
@@ -9948,10 +11501,6 @@ body.is-modal-open {
 
   .about-header__logo {
     width: 112px;
-  }
-
-  .about-header__hanger {
-    width: 44px;
   }
 
   .about-rule {
@@ -10090,12 +11639,12 @@ body.is-modal-open {
   display: block;
   width: 100%;
   height: auto;
-  aspect-ratio: 1 / 1;
+  aspect-ratio: var(--card-media-ratio);
   object-fit: cover;
   border: 1px solid var(--editorial-line, #c9c2b8);
-  border-radius: 2px;
+  border-radius: var(--card-radius-media);
   background: var(--color-bg-alt);
-  transition: transform 320ms cubic-bezier(0.25, 0.6, 0.3, 1);
+  transition: transform var(--card-media-lift) var(--ease-standard);
 }
 
 @media (hover: hover) and (pointer: fine) {
@@ -10127,7 +11676,7 @@ body.is-modal-open {
   line-height: 1.6;
 }
 
-/* Tablet: three consistent columns, uniform square tiles. */
+/* Tablet: three consistent columns on the shared portrait ratio. */
 @media (min-width: 720px) {
   .gallery-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -10136,7 +11685,10 @@ body.is-modal-open {
 }
 
 /* Desktop: four columns; quiet emphasis only when the set is large
-   enough to support the repeating feature rhythm. */
+   enough to support the repeating feature rhythm. Base tiles stay on
+   the shared portrait ratio; the large formats get their own wider
+   proportions so the quilt reads as deliberate editorial composition
+   rather than a stretched square. */
 @media (min-width: 1024px) {
   .gallery-grid {
     grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -10148,7 +11700,19 @@ body.is-modal-open {
     grid-row: span 2;
   }
 
+  /* A feature reads as a 2x2 block of the same portrait shape, so the
+     quilt stays flush instead of leaving a gap under the large tile. */
+  .gallery-item--feature .gallery-item__image {
+    aspect-ratio: var(--card-media-ratio);
+  }
+
   .gallery-item--wide {
     grid-column: span 2;
+  }
+
+  /* The wide companion closes a single row: a wider landscape panel from
+     the same family, proportioned to sit flush beside three base tiles. */
+  .gallery-item--wide .gallery-item__image {
+    aspect-ratio: 5 / 3;
   }
 }

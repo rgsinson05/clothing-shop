@@ -5,28 +5,51 @@ session_start();
 require_once __DIR__ . '/includes/database.php';
 
 /*
- * Category card images: collect up to three distinct real product photos per
+ * Category card images: collect up to five distinct real product photos per
  * category so each card can crossfade through its own images only.
  *
- * One row per image (no product-level LIMIT), so a product that already
- * contributed an image cannot consume a second slot for a sibling image. Only
- * the first three distinct paths are kept; a category with fewer real images
- * simply cycles fewer and is never padded with a duplicate.
+ * ROW_NUMBER() ranks each product's own gallery, so `image_rank = 1` is that
+ * product's primary photo (lowest sort_order, then lowest id). Ranking those
+ * ahead of every sibling shot lets the collector below take one photo per
+ * distinct product first; a product's secondary images are only reached when
+ * the category has fewer distinct products than there are slots to fill, which
+ * keeps the card on distinct products wherever the data allows it.
+ *
+ * Ordering is fully deterministic (category, image rank, newest product,
+ * product id), so a category always cycles the same sequence.
+ *
+ * The count is never fixed: a category contributes however many real, distinct
+ * photos it has, capped at five, and is never padded with a repeat.
  */
 $categoryImages = [];
+$categoryImageFingerprints = [];
+$categoryImageLimit = 5;
 $categoryImageStmt = $pdo->query(
-    "SELECT p.category, pi.image_path
-     FROM products p
-     INNER JOIN product_images pi
-         ON pi.product_id = p.id
-     WHERE p.status IN ('AVAILABLE', 'SOLD')
-       AND p.category IN ('SHIRTS', 'PANTS', 'SHORTS')
-     ORDER BY p.category ASC, p.created_at DESC, pi.sort_order ASC, pi.id ASC"
+    "SELECT ranked.category, ranked.image_path
+     FROM (
+         SELECT p.category,
+                p.created_at,
+                p.id AS product_id,
+                pi.image_path,
+                ROW_NUMBER() OVER (
+                    PARTITION BY p.id
+                    ORDER BY pi.sort_order ASC, pi.id ASC
+                ) AS image_rank
+         FROM products p
+         INNER JOIN product_images pi
+             ON pi.product_id = p.id
+         WHERE p.status IN ('AVAILABLE', 'SOLD')
+           AND p.category IN ('SHIRTS', 'PANTS', 'SHORTS')
+     ) ranked
+     ORDER BY ranked.category ASC,
+              ranked.image_rank ASC,
+              ranked.created_at DESC,
+              ranked.product_id ASC"
 );
 
 foreach ($categoryImageStmt->fetchAll() as $categoryImage) {
     $category = (string) $categoryImage['category'];
-    $path = trim((string) $categoryImage['image_path']);
+    $path = ltrim(trim((string) $categoryImage['image_path']), '/');
     if ($path === '') {
         continue;
     }
@@ -34,13 +57,22 @@ foreach ($categoryImageStmt->fetchAll() as $categoryImage) {
     if (!isset($categoryImages[$category])) {
         $categoryImages[$category] = [];
     }
-    // Case-sensitive path compare, so distinct files are never collapsed.
-    if (in_array($path, $categoryImages[$category], true)) {
+    if (count($categoryImages[$category]) >= $categoryImageLimit) {
         continue;
     }
-    if (count($categoryImages[$category]) >= 3) {
+
+    // Separate products can point at byte-identical files. Fading between two
+    // copies of the same photo would read as a broken crossfade, so identity
+    // is compared by content rather than by path. Each candidate is hashed at
+    // most once per request, and only while a free slot remains.
+    $fingerprint = is_file(__DIR__ . '/' . $path)
+        ? (string) md5_file(__DIR__ . '/' . $path)
+        : 'path:' . $path;
+
+    if (isset($categoryImageFingerprints[$category][$fingerprint])) {
         continue;
     }
+    $categoryImageFingerprints[$category][$fingerprint] = true;
     $categoryImages[$category][] = $path;
 }
 
@@ -87,23 +119,36 @@ require __DIR__ . '/includes/ui.header.php';
     <div class="home-category-carousel" data-category-carousel>
         <div class="home-category-carousel__viewport">
             <div class="home-category-grid" id="category-carousel-track" data-carousel-track>
-                <?php foreach (['SHIRTS', 'PANTS', 'SHORTS'] as $category): ?>
+                <?php foreach (['SHIRTS', 'PANTS', 'SHORTS'] as $categoryIndex => $category): ?>
                     <?php
                     $imagePaths = $categoryImages[$category] ?? [];
                     $imageAlt = hopia_e(ucfirst(strtolower($category)));
                     // A single real image still renders as a static card.
                     $rotates = count($imagePaths) > 1;
+                    // Zero-padded two-digit position label, rendered server-side
+                    // so the badge is correct before any script runs and stays
+                    // correct in every clone the carousel makes. The wider-screen
+                    // layout keeps its own CSS counter; this attribute is only
+                    // read by the mobile rule.
+                    $positionLabel = str_pad((string) ($categoryIndex + 1), 2, '0', STR_PAD_LEFT);
                     ?>
-                    <a class="home-category" href="customer/products.php?category=<?= hopia_e($category) ?>"<?= $rotates ? ' data-image-rotation' : '' ?>>
+                    <a class="home-category" href="customer/products.php?category=<?= hopia_e($category) ?>" data-index="<?= $positionLabel ?>"<?= $rotates ? ' data-image-rotation' : '' ?>>
                         <span class="home-category__image">
                             <?php if ($imagePaths !== []): ?>
                                 <?php foreach ($imagePaths as $imageIndex => $imagePath): ?>
-                                    <img
-                                        src="<?= hopia_e(ltrim($imagePath, '/')) ?>"
-                                        alt="<?= $imageIndex === 0 ? $imageAlt : '' ?>"
-                                        <?= $imageIndex === 0 ? 'loading="lazy"' : 'loading="lazy" aria-hidden="true"' ?>
-                                        <?= $imageIndex === 0 ? '' : 'data-rotation-layer' ?>
-                                    >
+                                    <?php
+                                    // The first layer keeps the accessible name and is
+                                    // the card's real image. Every later layer is a
+                                    // decorative repeat of the same product, so it
+                                    // carries no alt text and stays out of the
+                                    // accessibility tree.
+                                    if ($imageIndex === 0) {
+                                        $layerAttrs = 'loading="lazy"';
+                                    } else {
+                                        $layerAttrs = 'loading="lazy" aria-hidden="true" data-rotation-layer';
+                                    }
+                                    ?>
+                                    <img src="<?= hopia_e($imagePath) ?>" alt="<?= $imageIndex === 0 ? $imageAlt : '' ?>" <?= $layerAttrs ?>>
                                 <?php endforeach; ?>
                             <?php else: ?>
                                 <span class="home-category__fallback" aria-hidden="true"></span>
@@ -142,6 +187,7 @@ require __DIR__ . '/includes/ui.header.php';
     $homeWhyCards = [
         [
             'num'   => '01',
+            'delay' => '-0.8s',
             'href'  => 'customer/products.php',
             'title' => 'Unique Finds',
             'text'  => 'Every piece is different.',
@@ -151,6 +197,7 @@ require __DIR__ . '/includes/ui.header.php';
         ],
         [
             'num'   => '02',
+            'delay' => '-3.6s',
             'href'  => 'about.php',
             'title' => 'Wholesale + Retail',
             'text'  => 'Shop for one or shop for more.',
@@ -160,6 +207,7 @@ require __DIR__ . '/includes/ui.header.php';
         ],
         [
             'num'   => '03',
+            'delay' => '-6.2s',
             'href'  => 'gallery.php',
             'title' => 'Real Thrift Finds',
             'text'  => 'Curated secondhand pieces.',
@@ -169,6 +217,7 @@ require __DIR__ . '/includes/ui.header.php';
         ],
         [
             'num'   => '04',
+            'delay' => '-2.1s',
             'href'  => 'contact.php',
             'title' => 'Local Shop',
             'text'  => 'Discover Hopia Fits online.',
@@ -184,7 +233,8 @@ require __DIR__ . '/includes/ui.header.php';
             <ul class="home-why__grid" data-why-track>
                 <?php foreach ($homeWhyCards as $card): ?>
                     <li class="home-why__item">
-                        <a class="home-why__card" href="<?= hopia_e($card['href']) ?>" aria-label="<?= hopia_e($card['aria']) ?>">
+                        <a class="home-why__card" href="<?= hopia_e($card['href']) ?>" aria-label="<?= hopia_e($card['aria']) ?>" style="--why-sheen-delay: <?= hopia_e($card['delay']) ?>;">
+                            <span class="home-why__accent-shape" aria-hidden="true"></span>
                             <span class="home-why__num" aria-hidden="true"><?= hopia_e($card['num']) ?></span>
                             <span class="home-why__icon" aria-hidden="true"><?= $card['icon'] ?></span>
                             <span class="home-why__content">
@@ -205,6 +255,17 @@ require __DIR__ . '/includes/ui.header.php';
                     </li>
                 <?php endforeach; ?>
             </ul>
+        </div>
+        <div class="home-why__swipe-cue" data-why-cue aria-hidden="true">
+            <span class="home-why__swipe-icon">
+                <svg viewBox="0 0 44 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" focusable="false" aria-hidden="true">
+                    <polyline points="8 6 2.5 12 8 18"/>
+                    <line x1="2.5" y1="12" x2="15" y2="12"/>
+                    <polyline points="36 6 41.5 12 36 18"/>
+                    <line x1="41.5" y1="12" x2="29" y2="12"/>
+                </svg>
+            </span>
+            <span class="home-why__swipe-label">Swipe to explore</span>
         </div>
     </div>
 </section>
@@ -251,6 +312,16 @@ require __DIR__ . '/includes/ui.header.php';
         // after an interaction before the drift resumes.
         var AUTO_SPEED = 16;
         var RESUME_DELAY = 2000;
+
+        // Gesture classification thresholds, in CSS pixels of finger travel.
+        // A gesture is only decided once movement clears the slop distance, so
+        // a tap (or a slightly shaky one) is never mistaken for a swipe and can
+        // never be turned into a suppressed navigation.
+        var GESTURE_SLOP = 8;
+        // How much further one axis must travel than the other before it wins.
+        // The bias favours the page: a diagonal swipe resolves to vertical
+        // scrolling rather than to a carousel drag.
+        var AXIS_BIAS = 1.2;
 
         var state = null;
 
@@ -413,6 +484,55 @@ require __DIR__ . '/includes/ui.header.php';
             carousel.dispatchEvent(new CustomEvent('categorycarousel:interact'));
         }
 
+        /* Gesture axis classification.
+           Decided during movement, not on release, so the carousel understands
+           a swipe while it is happening. Nothing here calls preventDefault() and
+           every listener stays passive, so the browser keeps full authority over
+           scrolling; this only records which axis the gesture belongs to.
+
+           - Below the slop distance the gesture is still undecided, so the page
+             keeps scrolling naturally until the reader commits to a direction.
+           - Vertical dominance yields to the page: the browser's native scroll
+             is never blocked, and the ambient drift stops for the swipe.
+           - Horizontal dominance belongs to the carousel, whose own native
+             horizontal scroll is what actually moves the cards.
+           - If the gesture never clears the slop distance it stays a tap, and
+             the card link fires normally. */
+        function trackGesture(event) {
+            if (!state || state.gestureStart === null) {
+                return;
+            }
+            var touch = event.touches && event.touches.length ? event.touches[0] : event;
+            var x = touch.clientX;
+            var y = touch.clientY;
+            if (typeof x !== 'number' || typeof y !== 'number') {
+                return;
+            }
+
+            var dx = Math.abs(x - state.gestureStart.x);
+            var dy = Math.abs(y - state.gestureStart.y);
+            if (dx < GESTURE_SLOP && dy < GESTURE_SLOP) {
+                return;
+            }
+
+            if (state.axis === 'undecided') {
+                if (dy >= dx * AXIS_BIAS) {
+                    state.axis = 'vertical';
+                } else if (dx >= dy * AXIS_BIAS) {
+                    state.axis = 'horizontal';
+                } else {
+                    // Genuinely diagonal so far: stay undecided and keep
+                    // sampling until one axis separates. No side is taken early.
+                    return;
+                }
+                // Announce the verdict so the image rotation can freeze an
+                // in-flight crossfade for the rest of the swipe.
+                carousel.dispatchEvent(new CustomEvent('categorycarousel:axis', {
+                    detail: { axis: state.axis }
+                }));
+            }
+        }
+
         // Interaction end (finger lifted / button released). Queue the idle resume.
         // For touch this is driven by touchend/touchcancel, because the browser
         // fires pointercancel at the START of a native scroll, not the end.
@@ -421,8 +541,28 @@ require __DIR__ . '/includes/ui.header.php';
                 return;
             }
             state.interacting = false;
+            state.gestureStart = null;
+            state.axis = 'undecided';
             scheduleResume();
             carousel.dispatchEvent(new CustomEvent('categorycarousel:idle'));
+        }
+
+        function onPointerDown(event) {
+            if (!state) {
+                return;
+            }
+            state.gestureStart = { x: event.clientX, y: event.clientY };
+            state.axis = 'undecided';
+            onInteractStart();
+        }
+
+        function onTouchStart(event) {
+            if (!state || !event.touches || !event.touches.length) {
+                return;
+            }
+            state.gestureStart = { x: event.touches[0].clientX, y: event.touches[0].clientY };
+            state.axis = 'undecided';
+            onInteractStart();
         }
 
         function onPointerCancel(event) {
@@ -476,8 +616,10 @@ require __DIR__ . '/includes/ui.header.php';
 
         function bindEvents() {
             viewport.addEventListener('scroll', onScroll, { passive: true });
-            viewport.addEventListener('pointerdown', onInteractStart, { passive: true });
-            viewport.addEventListener('touchstart', onInteractStart, { passive: true });
+            viewport.addEventListener('pointerdown', onPointerDown, { passive: true });
+            viewport.addEventListener('pointermove', trackGesture, { passive: true });
+            viewport.addEventListener('touchstart', onTouchStart, { passive: true });
+            viewport.addEventListener('touchmove', trackGesture, { passive: true });
             window.addEventListener('pointerup', onInteractEnd, { passive: true });
             window.addEventListener('pointercancel', onPointerCancel, { passive: true });
             window.addEventListener('touchend', onInteractEnd, { passive: true });
@@ -492,8 +634,10 @@ require __DIR__ . '/includes/ui.header.php';
 
         function unbindEvents() {
             viewport.removeEventListener('scroll', onScroll);
-            viewport.removeEventListener('pointerdown', onInteractStart);
-            viewport.removeEventListener('touchstart', onInteractStart);
+            viewport.removeEventListener('pointerdown', onPointerDown);
+            viewport.removeEventListener('pointermove', trackGesture);
+            viewport.removeEventListener('touchstart', onTouchStart);
+            viewport.removeEventListener('touchmove', trackGesture);
             window.removeEventListener('pointerup', onInteractEnd);
             window.removeEventListener('pointercancel', onPointerCancel);
             window.removeEventListener('touchend', onInteractEnd);
@@ -518,10 +662,8 @@ require __DIR__ . '/includes/ui.header.php';
                 return;
             }
 
-            // Number the cards so each copy shows 01/02/03 consistently.
-            originals.forEach(function (card, i) {
-                card.setAttribute('data-index', String(i + 1));
-            });
+            // The 01/02/03 badge is rendered server-side and copied into every
+            // clone by cloneNode, so nothing here needs to renumber the cards.
 
             // Duplicate the set before and after the originals so the loop can run
             // in either direction without ever reaching a hard scroll edge. Built
@@ -548,6 +690,8 @@ require __DIR__ . '/includes/ui.header.php';
                 hovered: false,
                 focused: false,
                 interacting: false,
+                gestureStart: null,
+                axis: 'undecided',
                 resumeTimer: 0,
                 activeDot: -1
             };
@@ -581,7 +725,9 @@ require __DIR__ . '/includes/ui.header.php';
             }
             var cards = track.querySelectorAll('.home-category');
             for (var j = 0; j < cards.length; j++) {
-                cards[j].removeAttribute('data-index');
+                // data-index is server-rendered, not carousel-owned, so it is
+                // deliberately left in place: rotating back to the mobile
+                // breakpoint must still find the 01/02/03 labels waiting.
                 cards[j].removeAttribute('aria-hidden');
                 cards[j].classList.remove('is-active');
                 var link = cards[j].matches('a') ? cards[j] : cards[j].querySelector('a');
@@ -805,6 +951,7 @@ require __DIR__ . '/includes/ui.header.php';
 
         carousel.addEventListener('categorycarousel:interact', pauseFor);
         carousel.addEventListener('categorycarousel:idle', pauseFor);
+        carousel.addEventListener('categorycarousel:axis', pauseFor);
 
         function onMotionChange() {
             if (motionQuery.matches) {
@@ -863,20 +1010,17 @@ require __DIR__ . '/includes/ui.header.php';
         }
     }());
 
-    /* "Why Hopia Fits?" editorial cards — mobile horizontal carousel.
-       Mirrors the category carousel's architecture so both carousels share one
-       interaction language:
+    /* "Why Hopia Fits?" editorial cards — manual mobile carousel.
+       Auto-scroll has been removed: on small screens the viewport is a native
+       horizontal scroller the reader controls entirely. The browser handles
+       the finger drag directly, and `touch-action: pan-y` (set in CSS) keeps
+       vertical swipes scrolling the page while horizontal swipes move the
+       cards; a tap still navigates. There is no autoplay, no idle drift and no
+       clone loop — nothing moves the row on its own.
 
-       - The viewport is a genuine horizontal scroller, so a finger drag is
-         handled by the browser and follows the finger immediately, while
-         `touch-action: pan-y` leaves vertical gestures to scroll the page.
-         Because the scroll is native, the browser suppresses the click that
-         follows a drag, so a tap navigates and a swipe never mis-fires a link.
-       - A duplicated set before and after the originals gives the loop a full
-         copy of runway on each side; the clones are built once here and are
-         hidden from assistive tech and from the tab order.
-       - Scrolling by exactly one copy width is invisible because every copy is
-         identical, which is what makes the loop seamless. */
+       A small swipe cue hints that the row scrolls, then fades the first time
+       the reader actually scrolls it, so it reads as a one-time hint rather
+       than permanent chrome. */
     (function () {
         var carousel = document.querySelector('[data-why-carousel]');
         if (!carousel) {
@@ -884,355 +1028,63 @@ require __DIR__ . '/includes/ui.header.php';
         }
 
         var viewport = carousel.querySelector('.home-why__viewport');
-        var track = carousel.querySelector('[data-why-track]');
-        if (!viewport || !track) {
+        if (!viewport) {
             return;
         }
 
+        var cue = carousel.querySelector('[data-why-cue]');
         var mobileQuery = window.matchMedia('(max-width: 719px)');
-        var motionQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
+        var dismissed = false;
 
-        // Very slow ambient drift (px/second) and the idle delay before the
-        // drift resumes after the reader lets go.
-        var AUTO_SPEED = 14;
-        var RESUME_DELAY = 2000;
-
-        var state = null;
-
-        function makeClone(item) {
-            var clone = item.cloneNode(true);
-            clone.classList.add('is-clone');
-            clone.setAttribute('aria-hidden', 'true');
-            var link = clone.matches('a') ? clone : clone.querySelector('a');
-            if (link) {
-                link.setAttribute('tabindex', '-1');
+        function dismissCue() {
+            if (dismissed || !cue) {
+                return;
             }
-            return clone;
+            dismissed = true;
+            cue.classList.add('is-dismissed');
         }
 
-        // Distance that maps a card onto the identical card in the neighbouring
-        // copy: the repeat cycle of the whole set.
-        function measure() {
-            if (!state) {
-                return;
-            }
-            var beforeFirst = track.children[0];
-            var middleFirst = state.originals[0];
-            var width = middleFirst.offsetLeft - beforeFirst.offsetLeft;
-            state.singleWidth = width > 0 ? width : 0;
-        }
-
-        // Seamless infinite loop: keep the scroll position inside the middle
-        // copy. Stepping by one copy width lands on identical pixels, so the
-        // correction is never visible and there is no jump or pause at the seam.
-        function normalizeScroll() {
-            if (!state || !state.singleWidth) {
-                return;
-            }
-            var sw = state.singleWidth;
-            var sl = viewport.scrollLeft;
-            if (sl < sw) {
-                viewport.scrollLeft = sl + sw;
-            } else if (sl >= sw * 2) {
-                viewport.scrollLeft = sl - sw;
-            }
-        }
-
-        function tick(now) {
-            if (!state || state.paused) {
-                if (state) {
-                    state.raf = 0;
-                }
-                return;
-            }
-            if (state.lastTime === null) {
-                state.lastTime = now;
-            }
-            var dt = (now - state.lastTime) / 1000;
-            state.lastTime = now;
-            if (dt > 0.1) {
-                dt = 0.1; // clamp long frames (tab switch) so it never lurches
-            }
-
-            // Float accumulator, so sub-pixel steps are not lost on browsers
-            // that round scrollLeft to whole pixels.
-            state.target += AUTO_SPEED * dt;
-            if (state.singleWidth && state.target >= state.singleWidth * 2) {
-                state.target -= state.singleWidth;
-            }
-            viewport.scrollLeft = state.target;
-
-            state.raf = requestAnimationFrame(tick);
-        }
-
-        function startAuto() {
-            if (!state || !state.paused) {
-                return;
-            }
-            // Reduced motion disables the ambient drift entirely. Manual
-            // swiping still works, and the cards stay fully usable.
-            if (motionQuery.matches || state.focused || state.interacting) {
-                return;
-            }
-            state.paused = false;
-            state.lastTime = null;
-            state.target = viewport.scrollLeft;
-            if (!state.raf) {
-                state.raf = requestAnimationFrame(tick);
-            }
-        }
-
-        function stopAuto() {
-            if (!state) {
-                return;
-            }
-            state.paused = true;
-            state.lastTime = null;
-            if (state.raf) {
-                cancelAnimationFrame(state.raf);
-                state.raf = 0;
-            }
-        }
-
-        // Manual control always wins: stop the drift the instant a finger,
-        // wheel or key touches the track, so it never fights the reader.
-        function pauseForInteraction() {
-            if (!state) {
-                return;
-            }
-            stopAuto();
-            if (state.resumeTimer) {
-                clearTimeout(state.resumeTimer);
-                state.resumeTimer = 0;
-            }
-        }
-
-        function scheduleResume() {
-            if (!state) {
-                return;
-            }
-            if (state.resumeTimer) {
-                clearTimeout(state.resumeTimer);
-                state.resumeTimer = 0;
-            }
-            if (state.focused || state.interacting || motionQuery.matches) {
-                return;
-            }
-            state.resumeTimer = setTimeout(function () {
-                state.resumeTimer = 0;
-                startAuto();
-            }, RESUME_DELAY);
-        }
-
-        function onInteractStart() {
-            if (!state) {
-                return;
-            }
-            state.interacting = true;
-            pauseForInteraction();
-        }
-
-        // touchend/touchcancel own the end of a touch gesture: the browser fires
-        // pointercancel at the START of a native scroll, not at the end.
-        function onInteractEnd() {
-            if (!state || !state.interacting) {
-                return;
-            }
-            state.interacting = false;
-            scheduleResume();
-        }
-
-        function onPointerCancel(event) {
-            if (event && event.pointerType === 'touch') {
-                return;
-            }
-            onInteractEnd();
-        }
-
+        // The row scroll is entirely user-driven (nothing scrolls it in code),
+        // so any meaningful horizontal offset means the reader has found the
+        // interaction and the hint has done its job.
         function onScroll() {
-            normalizeScroll();
+            if (viewport.scrollLeft > 24) {
+                dismissCue();
+            }
         }
 
-        function onFocusIn() {
-            if (!state) {
+        // Only hint when there is hidden content to reach: the mobile carousel.
+        // On the desktop grid (or if everything already fits) the cue stays
+        // hidden. Once dismissed it never returns.
+        function syncCue() {
+            if (!cue || dismissed) {
                 return;
             }
-            state.focused = true;
-            pauseForInteraction();
-        }
-
-        function onFocusOut() {
-            if (!state) {
-                return;
-            }
-            state.focused = false;
-            scheduleResume();
-        }
-
-        function onKeyDown() {
-            pauseForInteraction();
-            scheduleResume();
-        }
-
-        function onWheel() {
-            pauseForInteraction();
-            scheduleResume();
-        }
-
-        function bindEvents() {
-            viewport.addEventListener('scroll', onScroll, { passive: true });
-            viewport.addEventListener('pointerdown', onInteractStart, { passive: true });
-            viewport.addEventListener('touchstart', onInteractStart, { passive: true });
-            window.addEventListener('pointerup', onInteractEnd, { passive: true });
-            window.addEventListener('pointercancel', onPointerCancel, { passive: true });
-            window.addEventListener('touchend', onInteractEnd, { passive: true });
-            window.addEventListener('touchcancel', onInteractEnd, { passive: true });
-            viewport.addEventListener('wheel', onWheel, { passive: true });
-            viewport.addEventListener('keydown', onKeyDown);
-            viewport.addEventListener('focusin', onFocusIn);
-            viewport.addEventListener('focusout', onFocusOut);
-        }
-
-        function unbindEvents() {
-            viewport.removeEventListener('scroll', onScroll);
-            viewport.removeEventListener('pointerdown', onInteractStart);
-            viewport.removeEventListener('touchstart', onInteractStart);
-            window.removeEventListener('pointerup', onInteractEnd);
-            window.removeEventListener('pointercancel', onPointerCancel);
-            window.removeEventListener('touchend', onInteractEnd);
-            window.removeEventListener('touchcancel', onInteractEnd);
-            viewport.removeEventListener('wheel', onWheel);
-            viewport.removeEventListener('keydown', onKeyDown);
-            viewport.removeEventListener('focusin', onFocusIn);
-            viewport.removeEventListener('focusout', onFocusOut);
-        }
-
-        function initCarousel() {
-            if (state) {
-                return;
-            }
-
-            var originals = Array.prototype.slice.call(track.children).filter(function (el) {
-                return el.classList && el.classList.contains('home-why__item') && !el.classList.contains('is-clone');
-            });
-            if (originals.length < 2) {
-                return;
-            }
-
-            // Build the flanking copies once. The DOM is never rebuilt while
-            // scrolling; only scrollLeft moves.
-            var beforeFrag = document.createDocumentFragment();
-            var afterFrag = document.createDocumentFragment();
-            originals.forEach(function (item) {
-                beforeFrag.appendChild(makeClone(item));
-                afterFrag.appendChild(makeClone(item));
-            });
-            track.insertBefore(beforeFrag, originals[0]);
-            track.appendChild(afterFrag);
-
-            state = {
-                originals: originals,
-                singleWidth: 0,
-                target: 0,
-                lastTime: null,
-                raf: 0,
-                paused: true,
-                focused: false,
-                interacting: false,
-                resumeTimer: 0
-            };
-
-            measure();
-            // Open on the real (middle) copy so the focusable originals are the
-            // cards in view, with a full copy of runway on each side.
-            viewport.scrollLeft = state.singleWidth;
-            state.target = viewport.scrollLeft;
-
-            bindEvents();
-            startAuto();
-        }
-
-        function destroyCarousel() {
-            if (!state) {
-                return;
-            }
-
-            stopAuto();
-            if (state.resumeTimer) {
-                clearTimeout(state.resumeTimer);
-                state.resumeTimer = 0;
-            }
-            unbindEvents();
-
-            var clones = track.querySelectorAll('.home-why__item.is-clone');
-            for (var i = 0; i < clones.length; i++) {
-                clones[i].parentNode.removeChild(clones[i]);
-            }
-            var items = track.querySelectorAll('.home-why__item');
-            for (var j = 0; j < items.length; j++) {
-                items[j].removeAttribute('aria-hidden');
-                var link = items[j].matches('a') ? items[j] : items[j].querySelector('a');
-                if (link) {
-                    link.removeAttribute('tabindex');
-                }
-            }
-            viewport.scrollLeft = 0;
-
-            state = null;
-        }
-
-        function updateMode() {
-            // Desktop keeps the static four-card editorial grid.
-            if (mobileQuery.matches) {
-                initCarousel();
+            var scrollable = viewport.scrollWidth - viewport.clientWidth > 8;
+            if (mobileQuery.matches && scrollable) {
+                cue.classList.remove('is-dismissed');
             } else {
-                destroyCarousel();
+                cue.classList.add('is-dismissed');
             }
         }
+
+        viewport.addEventListener('scroll', onScroll, { passive: true });
 
         var resizeTimer = 0;
         window.addEventListener('resize', function () {
-            if (!state) {
-                return;
-            }
             if (resizeTimer) {
                 clearTimeout(resizeTimer);
             }
-            resizeTimer = setTimeout(function () {
-                resizeTimer = 0;
-                if (!state) {
-                    return;
-                }
-                measure();
-                normalizeScroll();
-                state.target = viewport.scrollLeft;
-            }, 150);
+            resizeTimer = setTimeout(syncCue, 150);
         });
 
-        function onMotionChange() {
-            if (!state) {
-                return;
-            }
-            if (motionQuery.matches) {
-                pauseForInteraction();
-            } else {
-                scheduleResume();
-            }
-        }
-
         if (mobileQuery.addEventListener) {
-            mobileQuery.addEventListener('change', updateMode);
+            mobileQuery.addEventListener('change', syncCue);
         } else if (mobileQuery.addListener) {
-            mobileQuery.addListener(updateMode);
+            mobileQuery.addListener(syncCue);
         }
 
-        if (motionQuery.addEventListener) {
-            motionQuery.addEventListener('change', onMotionChange);
-        } else if (motionQuery.addListener) {
-            motionQuery.addListener(onMotionChange);
-        }
-
-        updateMode();
+        syncCue();
     }());
 </script>
 

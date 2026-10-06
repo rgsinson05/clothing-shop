@@ -357,6 +357,22 @@ CREATE TABLE payments (
 --
 -- The admin can manually enter the J&T tracking number
 -- and update shipment/order status.
+--
+-- delivery_method:
+--   How the order is delivered. V1 supports exactly one value:
+--     LOCAL_COURIER
+--   Nullable with no default so that shipments created before
+--   this field existed stay NULL ("not yet recorded") instead of
+--   being assigned a method they never actually used at checkout.
+--   Newly created shipments always store LOCAL_COURIER.
+--
+--   Delivery method ONLY. This field does NOT imply a shipping,
+--   courier, or delivery fee; no such fee is calculated, stored,
+--   or displayed. orders.subtotal and orders.total_amount are
+--   unaffected by the delivery method.
+--
+-- There is intentionally NO delivery_methods table; the allowed
+-- values are constrained by the ENUM on this column.
 -- ============================================================
 
 CREATE TABLE shipments (
@@ -372,6 +388,13 @@ CREATE TABLE shipments (
         'OUT_FOR_DELIVERY',
         'DELIVERED'
     ) NOT NULL DEFAULT 'NOT_SHIPPED',
+
+    -- Delivery method selected at checkout. V1 only allows
+    -- LOCAL_COURIER. Nullable so pre-existing shipments are not
+    -- given a delivery method that was never recorded for them.
+    delivery_method ENUM(
+        'LOCAL_COURIER'
+    ) NULL DEFAULT NULL,
 
     tracking_number VARCHAR(100),
 

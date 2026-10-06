@@ -270,17 +270,31 @@ require __DIR__ . '/../includes/ui.head.php';
                                             <input type="hidden" name="csrf_token" value="<?= hopia_e($csrfTokenCart) ?>">
                                             <input type="hidden" name="product_id" value="<?= $productId ?>">
                                             <button type="submit" class="catalog-card__cart" aria-label="Add <?= hopia_e($product['name']) ?> to cart">
-                                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                                                    <path d="M5.5 8.5h13l-1.05 11.3a1.6 1.6 0 0 1-1.59 1.45H8.14a1.6 1.6 0 0 1-1.59-1.45z"></path>
-                                                    <path d="M8.5 8.5V7a3.5 3.5 0 0 1 7 0v1.5"></path>
+                                                <span class="catalog-card__cart-drop">
+                                                    <svg class="catalog-card__cart-arrow" width="14" height="12.25" viewBox="0 0 24 21" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                                        <path d="M12 5v14"></path>
+                                                        <path d="M5 12l7 7 7-7"></path>
+                                                    </svg>
+                                                </span>
+                                                <svg class="catalog-card__cart-bag" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                                    <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"></path>
+                                                    <path d="M3 6h18"></path>
+                                                    <path d="M16 10a4 4 0 0 1-8 0"></path>
                                                 </svg>
                                             </button>
                                         </form>
                                     <?php else: ?>
                                         <a class="catalog-card__cart" href="login.php" aria-label="Log in to add <?= hopia_e($product['name']) ?> to cart">
-                                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                                                <path d="M5.5 8.5h13l-1.05 11.3a1.6 1.6 0 0 1-1.59 1.45H8.14a1.6 1.6 0 0 1-1.59-1.45z"></path>
-                                                <path d="M8.5 8.5V7a3.5 3.5 0 0 1 7 0v1.5"></path>
+                                            <span class="catalog-card__cart-drop">
+                                                <svg class="catalog-card__cart-arrow" width="14" height="12.25" viewBox="0 0 24 21" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                                    <path d="M12 5v14"></path>
+                                                    <path d="M5 12l7 7 7-7"></path>
+                                                </svg>
+                                            </span>
+                                            <svg class="catalog-card__cart-bag" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                                <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"></path>
+                                                <path d="M3 6h18"></path>
+                                                <path d="M16 10a4 4 0 0 1-8 0"></path>
                                             </svg>
                                         </a>
                                     <?php endif; ?>
@@ -486,6 +500,14 @@ require __DIR__ . '/../includes/ui.head.php';
     var items = [];
     var activeIndex = -1;
 
+    // Touch handling: tell a tap (select) apart from a vertical scroll (ignore),
+    // so dragging over the list scrolls it instead of selecting a suggestion.
+    var TAP_MOVE_THRESHOLD = 10;
+    var pointerStartX = 0;
+    var pointerStartY = 0;
+    var pointerMoved = false;
+    var trackedPointerId = null;
+
     function matchesCard(card, terms) {
         var searchable = [
             card.getAttribute('data-name') || '',
@@ -546,10 +568,42 @@ require __DIR__ . '/../includes/ui.head.php';
             item.id = 'catalog-suggestion-' + i;
             item.setAttribute('role', 'option');
             item.textContent = name;
-            // pointerdown + preventDefault keeps focus in the input and beats blur.
+            // Select on a genuine tap/click. Selection is deferred to pointerup so a
+            // drag/scroll can cancel it, and only non-touch pointers preventDefault
+            // (to keep input focus and beat the blur timer); touch must stay default
+            // so the browser can scroll the list natively.
             item.addEventListener('pointerdown', function(e) {
-                e.preventDefault();
-                selectSuggestion(name);
+                trackedPointerId = e.pointerId;
+                pointerStartX = e.clientX;
+                pointerStartY = e.clientY;
+                pointerMoved = false;
+                if (e.pointerType !== 'touch') {
+                    e.preventDefault();
+                }
+            });
+            item.addEventListener('pointermove', function(e) {
+                if (trackedPointerId !== e.pointerId || pointerMoved) {
+                    return;
+                }
+                if (Math.abs(e.clientX - pointerStartX) > TAP_MOVE_THRESHOLD ||
+                    Math.abs(e.clientY - pointerStartY) > TAP_MOVE_THRESHOLD) {
+                    pointerMoved = true;
+                }
+            });
+            item.addEventListener('pointerup', function(e) {
+                if (trackedPointerId !== e.pointerId) {
+                    return;
+                }
+                trackedPointerId = null;
+                if (!pointerMoved) {
+                    selectSuggestion(name);
+                }
+            });
+            item.addEventListener('pointercancel', function(e) {
+                if (trackedPointerId === e.pointerId) {
+                    trackedPointerId = null;
+                    pointerMoved = false;
+                }
             });
             panel.appendChild(item);
             items.push(item);

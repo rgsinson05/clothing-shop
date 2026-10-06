@@ -99,6 +99,18 @@ if (!function_exists('hopia_checkout_icon')) {
                 '<rect x="5" y="2" width="14" height="20" rx="2"/>'
                 . '<circle cx="12" cy="9" r="2.5"/>'
                 . '<path d="M10 18 14 18"/>',
+            // Delivery option heading - courier truck outline.
+            'delivery' =>
+                '<path d="M10 17h4V5H2v12h3"/>'
+                . '<path d="M20 17h2v-3.34a4 4 0 0 0-1.17-2.83L19 9h-5"/>'
+                . '<circle cx="7.5" cy="17.5" r="2.5"/>'
+                . '<circle cx="17.5" cy="17.5" r="2.5"/>',
+            // Local courier option - parcel outline.
+            'courier' =>
+                '<path d="m7.5 4.27 9 5.15"/>'
+                . '<path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/>'
+                . '<path d="m3.3 7 8.7 5 8.7-5"/>'
+                . '<path d="M12 22V12"/>',
         ];
 
         if (!isset($paths[$key])) {
@@ -314,5 +326,125 @@ if (!function_exists('hopia_order_icon')) {
             . ' stroke-linejoin="round" aria-hidden="true" focusable="false">'
             . $paths[$key]
             . '</svg>';
+    }
+}
+
+if (!function_exists('hopia_account_icon')) {
+    // Premium bold-outline icons for the Customer Account Center. Same shape
+    // language and shared stroke weight as hopia_checkout_icon,
+    // hopia_confirmation_icon, hopia_orders_icon, and hopia_order_icon, so the
+    // account page reads as part of the same editorial icon system. Charcoal by
+    // default; currentColor inside buttons and inverse surfaces.
+    // Returns trusted, static inline SVG markup (no user input).
+    function hopia_account_icon($name)
+    {
+        $key = strtolower(trim((string) $name));
+
+        $paths = [
+            // Profile identity area / section heading - person inside a ring.
+            'profile' =>
+                '<circle cx="12" cy="12" r="9"/>'
+                . '<circle cx="12" cy="10" r="3"/>'
+                . '<path d="M6.9 18.4a6.4 6.4 0 0 1 10.2 0"/>',
+            // First name / last name rows - person outline.
+            'user' =>
+                '<circle cx="12" cy="8" r="3.5"/>'
+                . '<path d="M5.5 20c.8-3.5 3.2-5.3 6.5-5.3s5.7 1.8 6.5 5.3"/>',
+            // EMAIL row - envelope outline.
+            'mail' =>
+                '<rect x="2.5" y="5" width="19" height="14" rx="2"/>'
+                . '<path d="m3 7 9 6.5L21 7"/>',
+            // PHONE row - handset outline.
+            'phone' =>
+                '<path d="M5 3.5h4l1.5 4.5-2.2 1.6a12.5 12.5 0 0 0 6.1 6.1l1.6-2.2 4.5 1.5v4a1.5 1.5 0 0 1-1.5 1.5C10.4 19.8 4.2 13.6 3.5 5.1A1.5 1.5 0 0 1 5 3.5z"/>',
+            // SECURITY heading / PASSWORD row - padlock outline.
+            'lock' =>
+                '<rect x="4" y="10" width="16" height="11" rx="2"/>'
+                . '<path d="M8 10V7a4 4 0 0 1 8 0v3"/>'
+                . '<path d="M12 14.5v2.5"/>',
+            // CHANGE PASSWORD action - key outline.
+            'key' =>
+                '<circle cx="7.5" cy="15.5" r="4"/>'
+                . '<path d="m10.4 12.6 9.1-9.1"/>'
+                . '<path d="m16.4 6.6 2 2"/>'
+                . '<path d="m13.6 9.4 2 2"/>',
+            // EDIT PROFILE action - pencil outline.
+            'edit' =>
+                '<path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/>'
+                . '<path d="m15 5 4 4"/>',
+            // QUICK ACTIONS heading - layered grid outline.
+            'layers' =>
+                '<path d="m12 3 9 5-9 5-9-5 9-5Z"/>'
+                . '<path d="m3 12 9 5 9-5"/>'
+                . '<path d="m3 16 9 5 9-5"/>',
+            // VIEW MY ORDERS - package / parcel outline.
+            'package' =>
+                '<path d="M21 7.5 12 3 3 7.5"/>'
+                . '<path d="m3 7.5 9 5 9-5"/>'
+                . '<path d="M12 12.5v8.5"/>'
+                . '<path d="M21 7.5v9L12 21"/>'
+                . '<path d="M3 7.5v9l9 4.5"/>',
+            // CONTINUE SHOPPING - shopping bag / tote outline with handle.
+            'bag' =>
+                '<path d="M6 8h12l1 12.5H5L6 8Z"/>'
+                . '<path d="M9 8V6.5a3 3 0 0 1 6 0V8"/>',
+            // Action arrows - arrow-right outline.
+            'arrow-right' =>
+                '<path d="M4.5 12h13"/>'
+                . '<path d="m12.5 7 5 5-5 5"/>',
+            // LOG OUT - door with exit arrow outline.
+            'sign-out' =>
+                '<path d="M15 4h2.5A1.5 1.5 0 0 1 19 5.5v13a1.5 1.5 0 0 1-1.5 1.5H15"/>'
+                . '<path d="M10 16.5 14.5 12 10 7.5"/>'
+                . '<path d="M14.5 12H3.5"/>',
+            // Success feedback - check outline.
+            'check' =>
+                '<path d="m5 12 4.5 4.5L19 7"/>',
+            // Error feedback - circled exclamation outline.
+            'alert' =>
+                '<circle cx="12" cy="12" r="9"/>'
+                . '<path d="M12 7.5v5"/>'
+                . '<path d="M12 16h.01"/>',
+        ];
+
+        if (!isset($paths[$key])) {
+            return '';
+        }
+
+        return '<svg class="account-icon" viewBox="0 0 24 24" fill="none"'
+            . ' stroke="currentColor" stroke-width="2" stroke-linecap="round"'
+            . ' stroke-linejoin="round" aria-hidden="true" focusable="false">'
+            . $paths[$key]
+            . '</svg>';
+    }
+}
+
+if (!function_exists('hopia_account_initials')) {
+    // Initials for the Account Center profile identity area, derived from the
+    // authenticated customer's stored first and last name. Uses the same
+    // mb-aware single-character slicing as hopia_feedback_display_name so
+    // multi-byte names are never cut mid-character. Falls back to the site
+    // initial when both names are empty.
+    function hopia_account_initials($firstName, $lastName)
+    {
+        $initial = function ($value) {
+            $value = trim((string) $value);
+
+            if ($value === '') {
+                return '';
+            }
+
+            $character = function_exists('mb_substr')
+                ? mb_substr($value, 0, 1, 'UTF-8')
+                : substr($value, 0, 1);
+
+            return function_exists('mb_strtoupper')
+                ? mb_strtoupper($character, 'UTF-8')
+                : strtoupper($character);
+        };
+
+        $initials = $initial($firstName) . $initial($lastName);
+
+        return $initials === '' ? 'H' : $initials;
     }
 }

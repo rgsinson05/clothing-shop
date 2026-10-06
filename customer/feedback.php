@@ -61,6 +61,15 @@ $page_description = 'What our customers say about their Hopia Fits finds.';
 $ui_active = 'feedback.php';
 $body_class = 'feedback-page-body';
 
+/*
+ * Load the shared feedback overlay (ui.footer.php includes it when this flag
+ * is set). The owner-only EDIT action rendered on the cards above relies on
+ * the overlay's delegated [data-feedback-open] click handler; without it the
+ * EDIT button has no listener and clicking it does nothing. The same handler
+ * also covers cards appended later by LOAD MORE.
+ */
+$ui_feedback_overlay = true;
+
 require __DIR__ . '/../includes/ui.head.php';
 require __DIR__ . '/../includes/ui.header.php';
 
