@@ -35,7 +35,7 @@ require __DIR__ . '/includes/ui.header.php';
                 through any of the channels listed and we will get back to you.
             </p>
 
-            <p class="contact-card__meta">Hopia Fits — Curated Resale</p>
+            <p class="contact-card__meta">HOPIA FITS - CURATED THRIFT FINDS</p>
         </div>
 
         <div class="contact-card__details">

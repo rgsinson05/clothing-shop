@@ -9161,7 +9161,6 @@ body.is-modal-open {
   min-height: 0;
   aspect-ratio: 4 / 5;
   overflow: hidden;
-  border: 1px solid rgba(23, 23, 23, 0.85);
   border-radius: 0;
   background: #d8d0c5;
   color: #fff;
@@ -9500,9 +9499,18 @@ body.is-modal-open {
   align-items: flex-start;
   gap: 1rem;
   min-height: clamp(220px, 46vw, 300px);
-  padding: clamp(1.35rem, 4.5vw, 1.9rem);
+  /* The card padding is exposed as a token so the off-black accent can cancel it
+     exactly and sit flush against the card's true outer top/right edges. */
+  --why-card-pad: clamp(1.35rem, 4.5vw, 1.9rem);
+  padding: var(--why-card-pad);
   border: 1px solid rgba(23, 23, 23, 0.07);
   border-radius: 24px;
+  /* Query container: the oversized index and the off-black accent below are
+     sized from the CARD's own width (cqw) instead of the viewport (vw), so the
+     pair stays one responsive unit at any card width — four-up, two-up or the
+     narrow mobile panel — and never breaks out of its box. `inline-size` keeps
+     the containment to the width axis, which is all that is needed. */
+  container-type: inline-size;
   /* Warm editorial surface: a soft ivory-to-cream wash so the card separates
      from the light section background through warmth, not a new colour. */
   background: linear-gradient(158deg, #fdfbf6 0%, #f7f2e9 100%);
@@ -9586,22 +9594,77 @@ body.is-modal-open {
   }
 }
 
+/* Upper visual zone -------------------------------------------------------
+   The card is split into two vertical zones:
+
+     - .home-why__visual — the upper zone: off-black accent + oversized index +
+       icon. It stays in flow (so the card reserves its height) but is pulled to
+       the card's outer top-right corner, and it `overflow: hidden`, so the accent
+       and the numeral are boxed inside it and can never spill down into the lower
+       text zone or out of the card.
+     - the copy block + CTA flow directly below it, so the lower text area is
+       structurally clean and the two can never overlap.
+
+   The zone's height and the numeral's size are both derived from the CARD's own
+   inline size (cqw), so the pair behaves as one responsive unit at any card
+   width, and the numeral is always shorter than the zone it sits in. */
+.home-why__visual {
+  /* Stays in flow (so the card's flex column still reserves its height) but is
+     pulled to the card's true top-right corner with negative margins that cancel
+     the card's padding AND its 1px border. Margins — not offsets — are used
+     deliberately: a positioned box would drop out of flow and collapse the card's
+     vertical rhythm.
+
+     Because the zone itself now owns the flush edge, the off-black block and the
+     numeral are placed at plain `top: 0; right: 0` INSIDE it, with no inset and
+     no negative offset. Nothing is pushed out of a clipping ancestor, so the block
+     reaches the card's top and right edge uncut, and the numeral has no padding
+     on its top or right within the block. Bottom / left spacing is unchanged.
+
+     Deliberately NO z-index / isolation: the index inside uses
+     `mix-blend-mode: difference`, which blends against the nearest ancestor
+     stacking context — the card (it has `isolation: isolate`). Creating a
+     stacking context here would re-home the blending group and the numeral
+     would stop compositing against the ivory surface. `overflow: hidden` alone
+     gives the required clipping without creating one. */
+  position: relative;
+  display: block;
+  margin-top: calc((var(--why-card-pad) + 1px) * -1);
+  margin-right: calc((var(--why-card-pad) + 1px) * -1);
+  /* The card is a flex column with `align-items: flex-start`, so an auto-width
+     flex item would shrink-wrap instead of spanning. The extra width on the
+     right matches the negative margin, so the zone's right edge lands exactly on
+     the card's outer edge. */
+  width: calc(100% + var(--why-card-pad) + 1px);
+  height: calc(clamp(9rem, 34cqw, 15rem) + var(--why-card-pad) + 1px);
+  overflow: hidden;
+}
+
 /* Off-black internal editorial accent (A) ---------------------------------
    A small, deliberately cropped off-black slab anchored to the card's top-right
-   corner, tucked under the oversized index. It is NOT a panel: it spans only a
-   third of the card width and is clipped by the rounded corner, so the ivory
-   surface stays dominant. Its job is to separate the card from the white page
-   and to give the numeral somewhere to invert. Softened off-black (#1c1c1c),
-   never pure #000. Decorative only — aria-hidden in the markup and inert to
-   pointer events so it can never affect the card link or touch drags. */
+   corner, tucked under the oversized index. It is NOT a panel: it spans part of
+   the card width and is clipped by the upper zone, so the ivory surface stays
+   dominant. Its job is to separate the card from the white page and to give the
+   numeral somewhere to invert. Softened off-black (#1c1c1c), never pure #000.
+   Decorative only — aria-hidden in the markup and inert to pointer events so it
+   can never affect the card link or touch drags. */
 .home-why__accent-shape {
   position: absolute;
+  /* Flush to the card's true outer top-right corner. The visual zone has been
+     pulled to that corner, so a plain `top: 0; right: 0` places this block
+     directly on the card's top and right edge — no padding, no gap, and nothing
+     pushed outside a clipping ancestor, so the block stays fully intact. The
+     card's own `border-radius: 24px` and `overflow: hidden` clip the slab into
+     the rounded corner, so it reads as part of the card's outer composition. */
   top: 0;
   right: 0;
   z-index: 0;
-  width: 34%;
-  height: 58%;
-  border-bottom-left-radius: 42px;
+  /* Sized as a share of the UPPER ZONE (not the whole card), so the slab always
+     fully contains the numeral and stops at the top-zone boundary. Because the
+     zone is sized from the card, this scales with the card automatically. */
+  width: 46%;
+  height: 100%;
+  border-bottom-left-radius: clamp(24px, 7cqw, 46px);
   background: linear-gradient(150deg, #1c1c1c 0%, #171717 100%);
   opacity: 0.94;
   pointer-events: none;
@@ -9612,23 +9675,39 @@ body.is-modal-open {
    Rendered in ivory and composited with `difference`, so the same numeral reads
    as near-black where it crosses the ivory card and flips to light where it
    overlaps the off-black accent. That single element carries both the dark
-   index and the layered overlap, with no second colour to keep in sync. It sits
-   above the accent shape and hover tint, but below the copy, which is layered
-   over it. Opacity stays low: the numeral should shape the silhouette, not
-   compete with the card's content. */
+   index and the layered overlap, with no second colour to keep in sync. The zone
+   above deliberately creates no stacking context, so the blend still resolves
+   against the card surface. The numeral sits above the accent shape and hover
+   tint, but below the copy, which is layered over it. Opacity stays low: the
+   numeral should shape the silhouette, not compete with the card's content. */
 .home-why__num {
   position: absolute;
-  top: -0.3em;
-  right: -0.02em;
+  /* No inset on the top or right: the figure sits flush against the block's top
+     and right edges, filling the available black area rather than floating in it.
+     Bottom / left spacing is unchanged. Size still scales with the card. */
+  top: 0;
+  right: 0;
   z-index: 3;
+  /* The figure is sized from the CARD's own inline size (cqw), not the viewport,
+     so the numeral always fits the card and the accent that contains it — wide
+     two-up panels or the narrow mobile card both self-scale. The upper bound is
+     expressed in cqw too, so the "oversized" character scales with the card
+     rather than breaking at a fixed breakpoint. At 30cqw the two-digit figure is
+     always shorter than the 34cqw visual zone, so it sits fully contained above
+     the text. */
   color: #e8e2d8;
   mix-blend-mode: difference;
   opacity: 0.9;
-  font-size: clamp(5.5rem, 20vw, 9rem);
+  font-size: min(30cqw, 8.5rem);
   font-weight: 900;
   font-stretch: condensed;
   letter-spacing: -0.06em;
-  line-height: 1;
+  /* Tight leading removes the half-leading gap that sat between the block's top
+     edge and the top of the digits, so the figure reads flush against the black
+     instead of inset within it. Adjusting the line box — rather than a negative
+     `top` — lifts the ink by the same amount but keeps it inside the box, so the
+     visual zone can never clip the top of the numerals. */
+  line-height: 0.82;
   pointer-events: none;
   user-select: none;
   transition: opacity var(--transition-slow);
@@ -9655,7 +9734,17 @@ body.is-modal-open {
   z-index: 4;
 }
 
+/* The icon anchors to the top-left of the upper visual zone, but keeps the card's
+   normal padding on the top and left — the zone is pulled to the card's outer
+   corner for the off-black block, so the icon re-applies that inset to sit exactly
+   where it did before. Absolutely positioned inside the (positioned,
+   overflow-hidden) zone so it never contributes to the card's vertical rhythm,
+   and layered above the index so the mark stays legible against the accent. */
 .home-why__icon {
+  position: absolute;
+  top: calc(var(--why-card-pad) + 1px);
+  left: 0;
+  z-index: 4;
   display: inline-flex;
   color: var(--editorial-ink, #171717);
   transition: transform var(--transition-slow);
@@ -9802,19 +9891,18 @@ body.is-modal-open {
   }
 }
 
-/* Desktop — four-column editorial row with larger panels and numbers. */
+/* Desktop — two-column editorial grid, two rows of wider cards. The cards gain
+   width and breathing room without a redesign: the same surface, radius, shadow,
+   reflection and copy. The minimum height is nudged up so the 4/5-style
+   proportion still reads on the wider panel. */
 @media (min-width: 1024px) {
   .home-why__grid {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .home-why__card {
     gap: 1.1rem;
-    min-height: clamp(300px, 24vw, 360px);
-  }
-
-  .home-why__num {
-    font-size: clamp(7rem, 9vw, 9.5rem);
+    min-height: clamp(320px, 30vw, 400px);
   }
 }
 
@@ -9879,10 +9967,9 @@ body.is-modal-open {
 
   /* Wide, mostly-dark cards would otherwise take more of the `difference`
      numeral than the desktop panels do, so the peak opacity is trimmed back to
-     hold the same ivory-dominant balance. The accent slab also narrows and
-     softens its corner radius to match the slimmer mobile card. */
+     hold the same ivory-dominant balance. The size stays on the cqw scale so the
+     numeral still tracks the card width; only the tone is trimmed. */
   .home-why__num {
-    font-size: clamp(6rem, 30vw, 10rem);
     opacity: 0.72;
   }
 
@@ -9891,12 +9978,6 @@ body.is-modal-open {
   .home-why__card:hover .home-why__num,
   .home-why__card:focus-visible .home-why__num {
     opacity: 0.84;
-  }
-
-  .home-why__accent-shape {
-    width: 32%;
-    height: 54%;
-    border-bottom-left-radius: 34px;
   }
 }
 

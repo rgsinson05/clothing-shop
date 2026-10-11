@@ -98,7 +98,7 @@ require __DIR__ . '/includes/ui.header.php';
     <div class="home-hero__content">
         <p class="home-hero__eyebrow">Wholesale &amp; retail</p>
         <h1 id="home-title">Find your<br>next fit.</h1>
-        <p class="home-hero__copy">Browse thrift finds in shirts, pants, and shorts.</p>
+        <p class="home-hero__copy">Curated thrift finds for you - shirts, pants, and shorts.</p>
         <a class="home-hero__cta" href="customer/products.php">Shop now</a>
     </div>
     <a class="home-hero__cue" href="#shop-by-category">
@@ -210,7 +210,7 @@ require __DIR__ . '/includes/ui.header.php';
             'delay' => '-6.2s',
             'href'  => 'gallery.php',
             'title' => 'Real Thrift Finds',
-            'text'  => 'Curated secondhand pieces.',
+            'text'  => 'Curated thrift pieces.',
             'cta'   => 'View gallery',
             'aria'  => 'Real Thrift Finds, view the clothing gallery',
             'icon'  => '<svg class="home-why__svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" focusable="false" aria-hidden="true"><path d="M12 8.2 L5 13.9 C4.4 14.4 4.7 15.4 5.5 15.4 L18.5 15.4 C19.3 15.4 19.6 14.4 19 13.9 Z"/><path d="M12 8.2 V6.9 C12 5.9 11.1 5.2 10.1 5.7"/></svg>',
@@ -234,9 +234,11 @@ require __DIR__ . '/includes/ui.header.php';
                 <?php foreach ($homeWhyCards as $card): ?>
                     <li class="home-why__item">
                         <a class="home-why__card" href="<?= hopia_e($card['href']) ?>" aria-label="<?= hopia_e($card['aria']) ?>" style="--why-sheen-delay: <?= hopia_e($card['delay']) ?>;">
-                            <span class="home-why__accent-shape" aria-hidden="true"></span>
-                            <span class="home-why__num" aria-hidden="true"><?= hopia_e($card['num']) ?></span>
-                            <span class="home-why__icon" aria-hidden="true"><?= $card['icon'] ?></span>
+                            <span class="home-why__visual">
+                                <span class="home-why__accent-shape" aria-hidden="true"></span>
+                                <span class="home-why__num" aria-hidden="true"><?= hopia_e($card['num']) ?></span>
+                                <span class="home-why__icon" aria-hidden="true"><?= $card['icon'] ?></span>
+                            </span>
                             <span class="home-why__content">
                                 <h3 class="home-why__label"><?= hopia_e($card['title']) ?></h3>
                                 <span class="home-why__rule" aria-hidden="true"></span>

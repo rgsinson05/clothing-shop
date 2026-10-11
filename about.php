@@ -34,7 +34,7 @@ require __DIR__ . '/includes/ui.header.php';
     <hr class="about-rule" aria-hidden="true">
 
     <div class="about-body">
-        <p>Hopia Fits is a local thrift shop offering wholesale and retail secondhand clothing, including shirts, pants, and shorts. Each piece is unique, with its own available size, color, price, and condition.</p>
+        <p>Hopia Fits is a local thrift shop offering wholesale and retail curated apparel, including shirts, pants, and shorts. Each piece is unique, with its own available size, color, price, and condition.</p>
         <p>We make it easier to discover thrift finds online while keeping the individuality that makes every piece different.</p>
     </div>
 

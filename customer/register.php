@@ -178,7 +178,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     <svg class="field-label__icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                         <path d="M5 3.5h4l1.5 4.5-2.2 1.6a12.5 12.5 0 0 0 6.1 6.1l1.6-2.2 4.5 1.5v4a1.5 1.5 0 0 1-1.6 1.5C10.4 19.8 4.2 13.6 3.5 5.1A1.5 1.5 0 0 1 5 3.5z"></path>
                     </svg>
-                    Phone Number
+                    Phone Number (Optional)
                 </label>
                 <input
                     class="input"
