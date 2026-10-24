@@ -111,6 +111,12 @@ if (!function_exists('hopia_checkout_icon')) {
                 . '<path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/>'
                 . '<path d="m3.3 7 8.7 5 8.7-5"/>'
                 . '<path d="M12 22V12"/>',
+            // Store pickup option - storefront outline.
+            'pickup' =>
+                '<path d="M3 9 4.5 4h15L21 9"/>'
+                . '<path d="M4 9v11h16V9"/>'
+                . '<path d="M9 20v-6h6v6"/>'
+                . '<path d="M3 9h18"/>',
         ];
 
         if (!isset($paths[$key])) {

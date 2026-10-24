@@ -1,0 +1,340 @@
+/* Admin-only presentation. Existing styles remain authoritative in light mode.
+   Dark tokens are screen-only: print uses the original light palette and layout. */
+[data-admin-theme] .admin-topbar__utilities {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-left: auto;
+  flex: 0 0 auto;
+}
+
+[data-admin-theme] .admin-topbar__utilities .admin-notifications { margin-left: 0; }
+
+[data-admin-theme] .admin-theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  min-width: 44px;
+  height: 44px;
+  padding: 0 0.75rem;
+  border: 1px solid var(--admin-border, var(--color-border));
+  border-radius: 10px;
+  background: var(--admin-surface, #fff);
+  color: var(--admin-text, #0f172a);
+  font: 600 0.8125rem var(--font-sans);
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color 150ms ease, border-color 150ms ease;
+}
+
+[data-admin-theme] .admin-theme-toggle:hover {
+  background: var(--admin-surface-alt, #f1f5f9);
+  border-color: var(--admin-success, #15803d);
+}
+
+[data-admin-theme] .admin-theme-toggle:focus-visible {
+  outline: 2px solid var(--admin-success, #15803d);
+  outline-offset: 3px;
+}
+
+[data-admin-theme] .admin-theme-toggle[hidden],
+[data-admin-theme="dark"] .admin-theme-toggle__sun,
+[data-admin-theme="light"] .admin-theme-toggle__moon { display: none; }
+
+[data-admin-theme] .admin-theme-toggle svg { flex: 0 0 20px; }
+[data-admin-theme] .admin-login__theme { display: flex; justify-content: center; margin-top: 1rem; }
+
+@media (max-width: 540px) {
+  [data-admin-theme] .admin-topbar__utilities { gap: 0.65rem; }
+  [data-admin-theme] .admin-topbar__brand { min-width: 0; }
+  [data-admin-theme] .admin-topbar__toggle { flex: 0 0 42px; }
+  [data-admin-theme] .admin-topbar .admin-theme-toggle { padding-inline: 0; }
+  [data-admin-theme] .admin-topbar [data-admin-theme-label] { display: none; }
+}
+
+@media (max-width: 360px) {
+  [data-admin-theme] .admin-topbar__brand span { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-admin-theme] .admin-theme-toggle { transition: none; }
+}
+
+@media screen {
+  [data-admin-theme="dark"] {
+    color-scheme: dark;
+    background: #0b1120;
+    --admin-bg: #0b1120;
+    --admin-surface: #111c30;
+    --admin-surface-alt: #172338;
+    --admin-input: #0e192b;
+    --admin-text: #f1f5f9;
+    --admin-text-soft: #b8c5d6;
+    --admin-text-muted: #9aaac0;
+    --admin-border: #2b3b52;
+    --admin-border-strong: #526580;
+    --admin-action: #15803d;
+    --admin-action-hover: #166534;
+    --admin-on-action: #fff;
+    --admin-success: #86efac;
+    --admin-success-bg: #102f26;
+    --admin-success-border: #286747;
+    --admin-warning: #fcd34d;
+    --admin-warning-bg: #342a16;
+    --admin-warning-border: #78602b;
+    --admin-danger: #fda4af;
+    --admin-danger-bg: #361d2c;
+    --admin-danger-border: #804054;
+    --admin-danger-action: #9f1239;
+    --admin-info: #93c5fd;
+    --admin-info-bg: #172c49;
+    --admin-info-border: #355d88;
+    --admin-purple: #c4b5fd;
+    --admin-purple-bg: #2a2446;
+    --admin-overlay: rgb(2 6 23 / 78%);
+  }
+
+  /* Alias the existing system rather than duplicating its layout stylesheet.
+     Body aliases also take precedence over the existing .ui-admin variables. */
+  [data-admin-theme="dark"] :is(.ui-admin, .admin-login-page) {
+    --color-bg: var(--admin-bg);
+    --color-bg-alt: var(--admin-surface-alt);
+    --color-surface: var(--admin-surface);
+    --color-surface-muted: var(--admin-surface-alt);
+    --color-border: var(--admin-border);
+    --color-border-strong: var(--admin-border-strong);
+    --color-text: var(--admin-text);
+    --color-text-soft: var(--admin-text-soft);
+    --color-text-muted: var(--admin-text-muted);
+    --color-primary: var(--admin-success);
+    --color-primary-dark: #bbf7d0;
+    --color-primary-soft: var(--admin-success-bg);
+    --color-on-primary: var(--admin-on-action);
+    --color-success: var(--admin-success);
+    --color-success-soft: var(--admin-success-bg);
+    --color-warning: var(--admin-warning);
+    --color-warning-soft: var(--admin-warning-bg);
+    --color-danger: var(--admin-danger);
+    --color-danger-dark: #fecdd3;
+    --color-danger-soft: var(--admin-danger-bg);
+    --color-info: var(--admin-info);
+    --color-info-soft: var(--admin-info-bg);
+    --admin-content-bg: var(--admin-bg);
+    --admin-ink: var(--admin-text);
+    --admin-accent: var(--admin-action);
+    --admin-accent-strong: var(--admin-success);
+    --admin-accent-bright: #4ade80;
+    --admin-accent-soft: var(--admin-success-bg);
+    --admin-sidebar-bg: #0f172a;
+    --admin-sidebar-border: var(--admin-border);
+    --admin-sidebar-text: var(--admin-text-soft);
+    --admin-sidebar-text-strong: var(--admin-text);
+    --admin-sidebar-muted: var(--admin-text-muted);
+    --editorial-ink: var(--admin-text);
+    --editorial-paper: var(--admin-surface);
+    --editorial-line: var(--admin-border);
+    --editorial-accent: var(--admin-success);
+    --card-radius: 12px;
+    --shadow-sm: 0 2px 5px rgb(2 6 23 / 16%);
+    --shadow: 0 12px 30px rgb(2 6 23 / 28%);
+    --shadow-md: 0 8px 20px rgb(2 6 23 / 25%);
+    --ring: 0 0 0 3px rgb(74 222 128 / 24%);
+    color: var(--admin-text);
+    background: var(--admin-bg);
+    scrollbar-color: var(--admin-border-strong) var(--admin-bg);
+  }
+
+  /* Shell, notifications, dashboard and inventory surfaces. */
+  [data-admin-theme="dark"] .ui-admin :is(
+    .admin-topbar--notifications, .admin-notifications__panel,
+    .admin-notifications-history, .dash-kpi, .dash-card, .dash-attn,
+    .inv-kpi, .inv-card, .leg-steps, .leg-card, .leg-empty
+  ) {
+    background: var(--admin-surface);
+    border-color: var(--admin-border);
+    box-shadow: var(--shadow-sm);
+  }
+
+  [data-admin-theme="dark"] .ui-admin .admin-topbar--notifications { background: var(--admin-sidebar-bg); }
+  [data-admin-theme="dark"] .ui-admin .admin-topbar__brand img { background: #fff; border-radius: 8px; }
+  [data-admin-theme="dark"] .ui-admin .admin-sidebar { border-right: 1px solid var(--admin-border); }
+  [data-admin-theme="dark"] .ui-admin .admin-sidebar__avatar { background: var(--admin-action); }
+  [data-admin-theme="dark"] .ui-admin .admin-nav__link.is-active { box-shadow: none; }
+  [data-admin-theme="dark"] .ui-admin .admin-nav__link.is-active:hover { background: var(--admin-action-hover); }
+  [data-admin-theme="dark"] .ui-admin .admin-nav__group { font-size: 0.7rem; }
+  [data-admin-theme="dark"] .ui-admin .admin-shell__backdrop { background: var(--admin-overlay); }
+
+  [data-admin-theme="dark"] .ui-admin :is(.admin-topbar__toggle, .admin-notifications__bell, .dash__actions .btn-ghost) {
+    background: var(--admin-surface);
+    color: var(--admin-text);
+    border-color: var(--admin-border-strong);
+  }
+
+  [data-admin-theme="dark"] .ui-admin :is(.admin-topbar__toggle:hover, .admin-notifications__bell:hover, .admin-notifications__bell[aria-expanded="true"]) {
+    background: var(--admin-surface-alt);
+    border-color: var(--admin-success);
+  }
+
+  [data-admin-theme="dark"] .ui-admin .admin-notifications__badge { background: var(--admin-action); }
+  [data-admin-theme="dark"] .ui-admin .admin-notifications__item.is-unread { background: var(--admin-success-bg); border-left-color: var(--admin-success); }
+  [data-admin-theme="dark"] .ui-admin .admin-notifications__item:hover { background: var(--admin-surface-alt); }
+  [data-admin-theme="dark"] .ui-admin :is(.admin-notifications__heading p, .admin-notifications__status, .admin-notifications__meta) { color: var(--admin-text-muted); }
+  [data-admin-theme="dark"] .ui-admin .admin-notifications__item.is-unread .admin-notifications__meta { color: var(--admin-success); }
+
+  /* Controls: do not override dimensions, validation, or disabled behavior. */
+  [data-admin-theme="dark"] :is(.ui-admin, .admin-login-page) :where(
+    input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="hidden"]):not([type="submit"]):not([type="button"]),
+    select, textarea
+  ) {
+    background-color: var(--admin-input);
+    border-color: var(--admin-border-strong);
+    color: var(--admin-text);
+  }
+
+  [data-admin-theme="dark"] :is(.ui-admin, .admin-login-page) :is(input, textarea)::placeholder { color: var(--admin-text-muted); opacity: 1; }
+  [data-admin-theme="dark"] :is(.ui-admin, .admin-login-page) :is(input, select, textarea):disabled {
+    background-color: var(--admin-surface-alt);
+    color: var(--admin-text-muted);
+  }
+  [data-admin-theme="dark"] :is(.ui-admin, .admin-login-page) :is(input, select, textarea):focus {
+    border-color: var(--admin-success);
+    box-shadow: var(--ring);
+  }
+  [data-admin-theme="dark"] :is(.ui-admin, .admin-login-page) :is(input, select, textarea):is([aria-invalid="true"], .is-error, :user-invalid) {
+    border-color: var(--admin-danger);
+  }
+  [data-admin-theme="dark"] :is(.ui-admin, .admin-login-page) :is(input[type="checkbox"], input[type="radio"], input[type="range"]) { accent-color: var(--admin-action); }
+  [data-admin-theme="dark"] :is(.ui-admin, .admin-login-page) input::file-selector-button {
+    background: var(--admin-surface-alt);
+    border: 1px solid var(--admin-border-strong);
+    border-radius: 6px;
+    color: var(--admin-text);
+    padding: 0.4rem 0.6rem;
+    margin-right: 0.65rem;
+    cursor: pointer;
+  }
+  [data-admin-theme="dark"] .ui-admin select {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='none' stroke='%23b8c5d6' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' d='M2.5 4.5 6 8l3.5-3.5'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 0.875rem center;
+    background-size: 12px;
+    padding-right: 2.25rem;
+  }
+  [data-admin-theme="dark"] .ui-admin :is(option, optgroup) { background: var(--admin-input); color: var(--admin-text); }
+  [data-admin-theme="dark"] :is(.ui-admin, .admin-login-page) :focus-visible { outline-color: var(--admin-success); }
+
+  [data-admin-theme="dark"] :is(.ui-admin, .admin-login-page) :is(.btn-primary, .admin-login__submit, button:not([class]), input[type="submit"]) {
+    background: var(--admin-action);
+    border-color: var(--admin-action);
+    border-radius: 8px;
+    color: var(--admin-on-action);
+  }
+  [data-admin-theme="dark"] :is(.ui-admin, .admin-login-page) :is(.btn-primary, .admin-login__submit, button:not([class]), input[type="submit"]):is(:hover, :active) {
+    background: var(--admin-action-hover);
+    border-color: var(--admin-success-border);
+    color: var(--admin-on-action);
+  }
+  [data-admin-theme="dark"] .ui-admin .btn { border-radius: 8px; }
+  [data-admin-theme="dark"] .ui-admin .btn-danger { background: var(--admin-danger-action); border-color: var(--admin-danger-action); color: #fff; }
+  [data-admin-theme="dark"] .ui-admin .btn-danger:hover { background: #be123c; border-color: #be123c; }
+  [data-admin-theme="dark"] .ui-admin .btn:disabled { opacity: 0.7; }
+
+  /* Semantic statuses retain their labels and distinct color families. */
+  [data-admin-theme="dark"] .ui-admin :is(.badge-success, .badge-available, .alert-success, .admin-success, .leg__notice, .leg__notice-count, .leg-projected, .leg-badge--available, .inv-badge--available, .dash-chip--walkin) {
+    background: var(--admin-success-bg); color: var(--admin-success); border-color: var(--admin-success-border);
+  }
+  [data-admin-theme="dark"] .ui-admin :is(.badge-info, .badge-pending, .alert-info, .leg-badge--category, .dash-chip--online) {
+    background: var(--admin-info-bg); color: var(--admin-info); border-color: var(--admin-info-border);
+  }
+  [data-admin-theme="dark"] .ui-admin :is(.badge-warning, .badge-cancellation-requested, .alert-warning, .leg-warning, .leg-ack, .leg-badge--unassigned, .leg-bundle__reason, .inv-badge--held) {
+    background: var(--admin-warning-bg); color: var(--admin-warning); border-color: var(--admin-warning-border);
+  }
+  [data-admin-theme="dark"] :is(.ui-admin, .admin-login-page) :is(.badge-danger, .badge-cancelled, .badge-cancellation-approved, .badge-cancellation-rejected, .alert-error, .inv-toolbar__clear-all) {
+    background: var(--admin-danger-bg); color: var(--admin-danger); border-color: var(--admin-danger-border);
+  }
+  [data-admin-theme="dark"] .ui-admin :is(.inv-badge--sold, .inv-badge--retired, .leg-badge--sold, .leg-badge--retired, .leg-badge--muted) {
+    background: var(--admin-surface-alt); color: var(--admin-text-soft); border-color: var(--admin-border);
+  }
+  [data-admin-theme="dark"] .ui-admin .inv-toolbar__clear-all:hover { background: #4c2436; color: #fecdd3; }
+  [data-admin-theme="dark"] .ui-admin :is(.inv-card__defects, .inv-card__unassigned, .leg-table__hint, .leg-ack__label) { color: var(--admin-warning); }
+  [data-admin-theme="dark"] .ui-admin .admin-pickup-card.is-overdue { border-color: var(--admin-danger-border); box-shadow: inset 3px 0 var(--admin-danger-border); }
+
+  /* Dashboard and inventory icon tiles, including negative/pending states. */
+  [data-admin-theme="dark"] .ui-admin :is(.dash-kpi--sales .dash-kpi__icon, .inv-kpi--available .inv-kpi__icon) { background: var(--admin-success-bg); color: var(--admin-success); }
+  [data-admin-theme="dark"] .ui-admin .dash-kpi--profit .dash-kpi__icon { background: #123332; color: #5eead4; }
+  [data-admin-theme="dark"] .ui-admin :is(.dash-kpi--items .dash-kpi__icon, .dash-attn--info .dash-attn__icon, .dash-attn--info .dash-attn__count) { background: var(--admin-info-bg); color: var(--admin-info); }
+  [data-admin-theme="dark"] .ui-admin :is(.dash-kpi--orders .dash-kpi__icon, .inv-kpi--total .inv-kpi__icon) { background: var(--admin-purple-bg); color: var(--admin-purple); }
+  [data-admin-theme="dark"] .ui-admin :is(.inv-kpi--held .inv-kpi__icon, .dash-attn--warn .dash-attn__icon, .dash-attn--warn .dash-attn__count) { background: var(--admin-warning-bg); color: var(--admin-warning); }
+  [data-admin-theme="dark"] .ui-admin :is(.dash-attn--danger .dash-attn__icon, .dash-attn--danger .dash-attn__count) { background: var(--admin-danger-bg); color: var(--admin-danger); }
+  [data-admin-theme="dark"] .ui-admin :is(.inv-kpi--legacy .inv-kpi__icon, .dash-attn--neutral .dash-attn__icon, .dash-attn--neutral .dash-attn__count) { background: var(--admin-surface-alt); color: var(--admin-text-soft); }
+  [data-admin-theme="dark"] .ui-admin .dash-attn--warn { border-left-color: var(--admin-warning); }
+  [data-admin-theme="dark"] .ui-admin .dash-attn--danger { border-left-color: var(--admin-danger); }
+  [data-admin-theme="dark"] .ui-admin .dash-attn--info { border-left-color: var(--admin-info); }
+  [data-admin-theme="dark"] .ui-admin .dash-attn--neutral { border-left-color: var(--admin-text-muted); }
+  [data-admin-theme="dark"] .ui-admin .dash-attn:hover { background: var(--admin-surface-alt); }
+  [data-admin-theme="dark"] .ui-admin .dash-chart__bar { background: #22c55e; }
+  [data-admin-theme="dark"] .ui-admin .dash-chart__col.is-today .dash-chart__bar { background: #86efac; }
+  [data-admin-theme="dark"] .ui-admin .dash-chart__amount { font-size: 0.7rem; }
+
+  [data-admin-theme="dark"] .ui-admin :is(.inv-card.is-sold, .inv-card.is-retired) { background: var(--admin-surface-alt); }
+  [data-admin-theme="dark"] .ui-admin .inv-card.is-held { background: var(--admin-surface); border-color: var(--admin-warning-border); }
+  [data-admin-theme="dark"] .ui-admin .inv-card.is-retired { opacity: 1; border-style: dashed; }
+  [data-admin-theme="dark"] .ui-admin .bp-inv-tile--retired { opacity: 1; }
+  [data-admin-theme="dark"] .ui-admin .inv-card__gender { color: var(--admin-text-muted); border-color: var(--admin-border-strong); }
+  [data-admin-theme="dark"] .ui-admin .inv-card__barcode code { color: var(--admin-text-soft); background: var(--admin-surface-alt); }
+  [data-admin-theme="dark"] .ui-admin :is(.inv-card__placeholder, .inv-empty svg) { color: var(--admin-text-muted); }
+  [data-admin-theme="dark"] .ui-admin :is(.inv-pagination__btn, .inv-pagination__num) { background: var(--admin-surface); }
+  [data-admin-theme="dark"] .ui-admin :is(.inv-pagination__btn:hover, .inv-pagination__num:hover) { background: var(--admin-surface-alt); }
+  [data-admin-theme="dark"] .ui-admin .inv-pagination__num.is-current { background: var(--admin-action); color: var(--admin-on-action); }
+
+  /* Legacy assignment has separate list, selection, review and success views. */
+  [data-admin-theme="dark"] .ui-admin :is(.leg__title, .leg-card__title, .leg-table__name, .leg-table__price, .leg-product__name, .leg-product__price, .leg-bundle__code, .leg-bundle__price, .leg-review dd, .leg-projected__barcode) { color: var(--admin-text); }
+  [data-admin-theme="dark"] .ui-admin :is(.leg__lead, .leg-card__hint, .leg-card__eyebrow, .leg__breadcrumb > span, .leg-steps__label, .leg__results-bar p, .leg-table__id, .leg-table__sub, .leg-product__statusline, .leg-product__meta dt, .leg-bundle__meta-label, .leg-empty, .leg-empty p, .leg-review dt, .leg-projected__note, .leg-filter__search-icon) { color: var(--admin-text-muted); }
+  [data-admin-theme="dark"] .ui-admin :is(.leg__breadcrumb a, .leg-filter__label, .leg-product__meta dd, .leg-steps__item.is-done .leg-steps__label) { color: var(--admin-text-soft); }
+  [data-admin-theme="dark"] .ui-admin .leg__breadcrumb a:hover { color: var(--admin-success); }
+  [data-admin-theme="dark"] .ui-admin :is(.leg-steps__marker, .leg-bundle__body) { background: var(--admin-surface); border-color: var(--admin-border-strong); color: var(--admin-text-soft); }
+  [data-admin-theme="dark"] .ui-admin .leg-steps__item.is-current .leg-steps__marker { background: var(--admin-action); color: var(--admin-on-action); }
+  [data-admin-theme="dark"] .ui-admin .leg-steps__item.is-current .leg-steps__label { color: var(--admin-success); }
+  [data-admin-theme="dark"] .ui-admin :is(.leg-steps__item.is-done .leg-steps__marker, .leg-bundle input:checked + .leg-bundle__body) { background: var(--admin-success-bg); border-color: var(--admin-success); color: var(--admin-success); }
+  [data-admin-theme="dark"] .ui-admin .leg-bundle:hover:not(.is-disabled) .leg-bundle__body { border-color: var(--admin-success); }
+  [data-admin-theme="dark"] .ui-admin .leg-bundle input:focus-visible + .leg-bundle__body { outline-color: var(--admin-success); }
+  [data-admin-theme="dark"] .ui-admin .leg-bundle.is-disabled .leg-bundle__body { background: var(--admin-surface-alt); }
+  [data-admin-theme="dark"] .ui-admin :is(.leg-table thead th, .leg-table__thumb, .leg-product__image, .leg-note) { background: var(--admin-surface-alt); border-color: var(--admin-border); color: var(--admin-text-soft); }
+  [data-admin-theme="dark"] .ui-admin :is(.leg-steps__divider, .leg-bundle__meter) { background: var(--admin-border); }
+  [data-admin-theme="dark"] .ui-admin :is(.leg-form__actions, .leg-review > div) { border-color: var(--admin-border); }
+  [data-admin-theme="dark"] .ui-admin .leg-success { border-color: var(--admin-success-border); }
+  [data-admin-theme="dark"] .ui-admin .leg-warning__icon { background: var(--admin-warning-bg); color: var(--admin-warning); }
+
+  /* White paper islands: never recolor photographs, SVG bars or proof images. */
+  [data-admin-theme="dark"] .ui-admin :is(.receipt, .label-card, .leg-barcode) {
+    color-scheme: light;
+    --admin-ink: #0f172a;
+    --admin-accent-strong: #15803d;
+    --color-text: #2a2a2a;
+    --color-text-soft: #55534f;
+    --color-text-muted: #625f58;
+    --color-surface: #fff;
+    --color-surface-muted: #f7f6f3;
+    --color-bg-alt: #eceae5;
+    --color-border: #e5e2db;
+    --color-border-strong: #d5d0c7;
+    --color-primary: #15803d;
+    --color-primary-dark: #166534;
+    color: #2a2a2a;
+    background: #fff;
+  }
+  [data-admin-theme="dark"] .ui-admin .label-card__meta { color: #625f58; }
+  [data-admin-theme="dark"] .ui-admin .receipt { border-radius: 12px; }
+
+  /* Standalone admin authentication retains its own layout, not the sidebar. */
+  [data-admin-theme="dark"] .admin-login-page .admin-login__card { border-radius: 16px; border-color: var(--admin-border); box-shadow: var(--shadow); }
+  [data-admin-theme="dark"] .admin-login-page .admin-login__logo { background: #fff; border-radius: 8px; }
+}
+
+@media print {
+  [data-admin-theme] { color-scheme: light; }
+  [data-admin-theme] .admin-theme-toggle,
+  [data-admin-theme] .admin-login__theme,
+  [data-admin-theme] .ui-admin .no-print { display: none; }
+}

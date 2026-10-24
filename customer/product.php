@@ -14,7 +14,7 @@ if ($productId !== false && $productId !== null && $productId > 0) {
         'SELECT id, name, category, description, condition_label, defects,
                 price, size, color, status
          FROM products
-         WHERE id = :id'
+         WHERE id = :id AND retired_at IS NULL'
     );
 
     $stmt->execute([':id' => $productId]);

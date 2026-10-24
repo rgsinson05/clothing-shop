@@ -3,6 +3,8 @@
 session_start();
 
 require_once __DIR__ . '/../includes/database.php';
+require_once __DIR__ . '/../includes/gcash.php';
+require_once __DIR__ . '/../includes/payment.php';
 
 /*
  * Require the customer to be logged in.
@@ -16,6 +18,28 @@ if (!isset($_SESSION['customer_id'])) {
 $customerId = (int) $_SESSION['customer_id'];
 
 /*
+ * Customer CSRF token for the GCash reference submission form.
+ */
+if (empty($_SESSION['csrf_token'])) {
+    $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+}
+$csrfToken = $_SESSION['csrf_token'];
+
+$gcashConfig = gcash_config();
+
+/*
+ * Submission feedback flags from payment-submit.php (PRG). The reason, when
+ * present, is mapped to a safe message; an unknown code falls back to generic.
+ */
+$gcashFlash = '';
+if (isset($_GET['gcash'])) {
+    $gcashFlash = in_array($_GET['gcash'], ['submitted', 'resubmitted', 'error'], true) ? $_GET['gcash'] : '';
+}
+$gcashFlashMessage = ($gcashFlash === 'error' && isset($_GET['gcash_reason']) && is_string($_GET['gcash_reason']))
+    ? payment_message($_GET['gcash_reason'])
+    : '';
+
+/*
  * Validate the requested order ID.
  */
 
@@ -24,11 +48,14 @@ $requestedOrderId = filter_input(INPUT_GET, 'id', FILTER_VALIDATE_INT);
 $order = false;
 $orderItems = [];
 $payment = false;
+$shipment = null;
 
 if ($requestedOrderId !== null && $requestedOrderId !== false && $requestedOrderId > 0) {
 
     $orderStmt = $pdo->prepare(
-        'SELECT id, subtotal, shipping_fee, total_amount
+        'SELECT id, subtotal, shipping_fee, total_amount, status, cancellation_status,
+                received_at, pickup_status, picked_up_at,
+                EXISTS(SELECT 1 FROM sales_transactions st WHERE st.order_id = orders.id) AS has_completed_sale
          FROM orders
          WHERE id = :order_id
            AND customer_id = :customer_id
@@ -69,22 +96,20 @@ if ($requestedOrderId !== null && $requestedOrderId !== false && $requestedOrder
 
         $orderItems = $itemsStmt->fetchAll();
 
-        $paymentStmt = $pdo->prepare(
-            'SELECT payment_method, payment_status
-             FROM payments
-             WHERE order_id = :order_id
-             LIMIT 1'
+        $payment = payment_load($pdo, $orderId) ?? false;
+        $shipmentStmt = $pdo->prepare(
+            'SELECT delivery_method, shipment_status, shipped_at, delivered_at
+             FROM shipments WHERE order_id = :order_id LIMIT 1'
         );
-
-        $paymentStmt->execute([':order_id' => $orderId]);
-
-        $payment = $paymentStmt->fetch();
+        $shipmentStmt->execute([':order_id' => $orderId]);
+        $shipment = $shipmentStmt->fetch() ?: null;
     }
 }
 
 $paymentMethodLabel = ($payment !== false && $payment['payment_method'] !== null)
     ? ($payment['payment_method'] === 'COD' ? 'Cash on Delivery'
-       : ($payment['payment_method'] === 'GCASH' ? 'GCash' : 'Card'))
+       : ($payment['payment_method'] === 'GCASH' ? 'GCash'
+       : ($payment['payment_method'] === 'CASH_ON_PICKUP' ? 'Cash on Pickup' : 'Card')))
     : '';
 
 $paymentStatusLabel = ($payment !== false && $payment['payment_status'] !== null)
@@ -92,6 +117,48 @@ $paymentStatusLabel = ($payment !== false && $payment['payment_status'] !== null
        : ($payment['payment_status'] === 'PAID' ? 'Paid'
        : ($payment['payment_status'] === 'FAILED' ? 'Failed' : 'Refunded')))
     : '';
+
+/* Semantic badge for the payment status (fixes the previously hardcoded one). */
+$paymentStatusBadgeMap = [
+    'PENDING' => 'badge-pending',
+    'PAID' => 'badge-success',
+    'FAILED' => 'badge-danger',
+    'REFUNDED' => 'badge-info',
+];
+$paymentStatusBadgeClass = ($payment !== false && isset($paymentStatusBadgeMap[$payment['payment_status']]))
+    ? $paymentStatusBadgeMap[$payment['payment_status']]
+    : 'badge-pending';
+
+$isGcashOrder = ($payment !== false && ($payment['payment_method'] ?? '') === 'GCASH');
+$gcashState = $isGcashOrder ? payment_gcash_state($payment) : 'NA';
+
+/*
+ * A GCash order whose reference AND uploaded proof are present is
+ * submitted-but-unverified (derived state AWAITING), so the post-order
+ * "complete your payment" modal is obsolete for it. Legacy orders that
+ * genuinely lack either value keep the existing submission path.
+ */
+$gcashReferenceSubmitted = $isGcashOrder
+    && trim((string) ($payment['gcash_reference'] ?? '')) !== '';
+$gcashProofSubmitted = $isGcashOrder
+    && trim((string) ($payment['proof_path'] ?? '')) !== '';
+$gcashSubmissionComplete = $gcashState === 'AWAITING'
+    && $gcashReferenceSubmitted
+    && $gcashProofSubmitted
+    /* A resubmission flash must still reach the existing panel/form so a
+     * legacy correction attempt can show its result. New checkout orders
+     * arrive here without a flash and therefore suppress the panel. */
+    && $gcashFlash === '';
+
+/*
+ * The payment row stays PENDING until an admin verifies the transfer. For a
+ * submitted-at-checkout order, present that derived state explicitly instead
+ * of the bare database word "Pending", without ever claiming verification.
+ */
+if ($gcashSubmissionComplete) {
+    $paymentStatusLabel = 'Paid — Awaiting Admin Confirmation';
+    $paymentStatusBadgeClass = 'badge-pending';
+}
 
 ?>
 
@@ -195,12 +262,12 @@ require __DIR__ . '/../includes/ui.header.php';
 
                     <div class="confirmation-totals">
                         <div class="confirmation-total-row">
-                            <span>Order total before shipping</span>
+                            <span>Merchandise subtotal</span>
                             <span>₱<?= number_format((float) $order['subtotal'], 2) ?></span>
                         </div>
                         <div class="confirmation-total-row confirmation-total-row--muted">
                             <span>Shipping</span>
-                            <span>To be confirmed</span>
+                            <span>₱<?= number_format((float) $order['shipping_fee'], 2) ?></span>
                         </div>
                         <div class="confirmation-total-row confirmation-total-row--grand">
                             <span>Order total</span>
@@ -225,10 +292,46 @@ require __DIR__ . '/../includes/ui.header.php';
                         </div>
                         <div>
                             <dt>Payment status</dt>
-                            <dd><span class="badge badge-pending"><?= hopia_e($paymentStatusLabel) ?></span></dd>
+                            <dd><span class="badge <?= hopia_e($paymentStatusBadgeClass) ?>"><?= hopia_e($paymentStatusLabel) ?></span></dd>
                         </div>
                     </dl>
+
+                    <?php if ($gcashSubmissionComplete): ?>
+                        <div class="alert alert-info" role="status">
+                            <strong>GCash payment submitted</strong>
+                            <p>Your GCash reference number and payment proof were submitted with this order and are awaiting admin confirmation. Our team will confirm the transfer before the payment is marked verified.</p>
+                        </div>
+                    <?php endif; ?>
                 </section>
+
+                <?php if ($isGcashOrder && !$gcashSubmissionComplete): ?>
+                    <?php
+                    /*
+                     * The GCash panel renders inside an automatically opened,
+                     * centered modal here so the customer immediately sees how
+                     * to pay and submit their proof without scrolling. It is
+                     * the same single panel/form used on order-detail.php; a
+                     * clearly visible reopen button restores the modal if it
+                     * was closed without submitting.
+                     */
+                    $gcashPanel = [
+                        'order_id' => (int) $order['id'],
+                        'amount' => $order['total_amount'],
+                        'config' => $gcashConfig,
+                        'payment' => $payment,
+                        'order' => $order,
+                        'shipment' => $shipment,
+                        'state' => $gcashState,
+                        'csrf' => $csrfToken,
+                        'return' => 'order-confirmation.php',
+                        'proof_endpoint' => 'payment-proof.php',
+                        'flash' => $gcashFlash,
+                        'flash_message' => $gcashFlashMessage,
+                        'modal' => true,
+                    ];
+                    require __DIR__ . '/../includes/ui.gcash-panel.php';
+                    ?>
+                <?php endif; ?>
 
             </div>
 

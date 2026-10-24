@@ -702,8 +702,15 @@ require_once __DIR__ . '/ui.php';
                 /* FormData lets the optional photo ride along as a real file
                    upload; the browser sets the multipart boundary itself. In
                    edit mode photo_action tells the update endpoint whether
-                   the stored photo is kept, replaced, or removed. */
+                   the stored photo is kept, replaced, or removed.
+                   CSRF token is included so the backend can validate the
+                   request; the server uses hash_equals for timing-safe
+                   comparison. */
                 var body = new FormData();
+                body.append('csrf_token', '<?php
+                    $overlayCsrfToken = $_SESSION['csrf_token'] ?? '';
+                    echo hopia_e($overlayCsrfToken);
+                ?>');
                 body.append('order_id', currentOrderId);
                 body.append('order_item_id', currentOrderItemId);
                 body.append('rating', String(currentRating));

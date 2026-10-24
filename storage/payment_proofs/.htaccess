@@ -1,0 +1,18 @@
+# Private payment-proof store (Phase 2).
+#
+# These GCash payment screenshots are private financial evidence. They are
+# NEVER linked directly and are served only through the authenticated
+# streaming endpoints customer/payment-proof.php and admin/payment-proof.php.
+# Deny all direct web access as defense-in-depth (works on Apache; the
+# streaming endpoints are the portable guarantee on any server).
+
+# Apache 2.4+
+<IfModule mod_authz_core.c>
+    Require all denied
+</IfModule>
+
+# Apache 2.2
+<IfModule !mod_authz_core.c>
+    Order allow,deny
+    Deny from all
+</IfModule>

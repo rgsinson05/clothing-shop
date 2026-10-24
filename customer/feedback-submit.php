@@ -18,8 +18,10 @@ require_once __DIR__ . '/../includes/image-upload.php';
  *   3. feedback_text must not be empty after trimming.
  *   4. order_id must belong to the authenticated customer.
  *   5. order_item_id must belong to that order.
- *   6. The order must be DELIVERED.
+ *   6. The order must be DELIVERED and the customer must have
+ *      confirmed receipt (orders.received_at IS NOT NULL).
  *   7. The order item must not already have a feedback row.
+ *   8. CSRF token must be valid (Phase C addition).
  *
  * The photo is optional. When one is attached it is validated and stored
  * server-side using the project's shared image upload conventions
@@ -60,6 +62,27 @@ if (!isset($_SESSION['customer_id'])) {
 }
 
 $customerId = (int) $_SESSION['customer_id'];
+
+/*
+ * CSRF validation (Phase C addition).
+ */
+if (empty($_SESSION['csrf_token'])) {
+    $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+}
+
+$submittedToken = $_POST['csrf_token'] ?? '';
+
+if (
+    !is_string($submittedToken)
+    || $submittedToken === ''
+    || !hash_equals($_SESSION['csrf_token'], $submittedToken)
+) {
+    feedbackRespondJson([
+        'ok' => false,
+        'reason' => 'csrf',
+        'message' => 'The request could not be verified. Please reload the page and try again.',
+    ], 403);
+}
 
 /*
  * 2. Input reception and server-side validation.
@@ -108,15 +131,16 @@ $feedbackText = trim((string) $feedbackText);
 
 try {
     /*
-     * 3. Ownership + 6. Order status. The order must belong to the
-     * authenticated customer and must be DELIVERED. Both conditions
+     * 3. Ownership + 6. Order status + receipt confirmation. The order
+     * must belong to the authenticated customer, must be DELIVERED,
+     * and the customer must have confirmed receipt. All three conditions
      * are checked in a single query, so an order that exists but
-     * belongs to someone else is reported the same way as an order
-     * that does not exist at all.
+     * belongs to someone else, or has not been confirmed, is reported
+     * the same way as an order that does not exist at all.
      */
 
     $orderStmt = $pdo->prepare(
-        'SELECT id, status
+        'SELECT id, status, received_at
          FROM orders
          WHERE id = :order_id
            AND customer_id = :customer_id
@@ -143,6 +167,14 @@ try {
             'ok' => false,
             'reason' => 'not_delivered',
             'message' => 'Feedback can only be submitted for delivered orders.',
+        ], 409);
+    }
+
+    if ($order['received_at'] === null) {
+        feedbackRespondJson([
+            'ok' => false,
+            'reason' => 'not_confirmed',
+            'message' => 'Please confirm you received your order before leaving feedback.',
         ], 409);
     }
 
@@ -195,7 +227,7 @@ try {
     }
 
     /*
-     * 7. Optional photo. Stored only after every other rule has passed, so
+     * 6. Optional photo. Stored only after every other rule has passed, so
      * an invalid order, item, or duplicate never leaves a file on disk. A
      * validation failure returns a clean error and no record is created; a
      * storage failure is reported as a generic server error. The returned
@@ -223,7 +255,7 @@ try {
     }
 
     /*
-     * 8. Insert. photo_path holds the stored relative path, or NULL when no
+     * 7. Insert. photo_path holds the stored relative path, or NULL when no
      * photo was attached. created_at and updated_at are populated by the
      * table defaults.
      */
@@ -245,7 +277,7 @@ try {
     ]);
 } catch (PDOException $e) {
     /*
-     * 9/10/11. Prepared statements are used throughout, and no SQL error,
+     * 8/9/10. Prepared statements are used throughout, and no SQL error,
      * stack trace, or credential is ever exposed to the customer. A
      * duplicate-key violation from a concurrent submission that raced
      * past the duplicate check is reported as a clean duplicate error.

@@ -47,14 +47,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 ?>
 
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-admin-theme="dark">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="theme-color" content="#f5f4f1">
+    <meta name="theme-color" content="#0b1120">
     <meta name="description" content="Sign in to manage Hopia Fits.">
     <title>Admin Login - Hopia's Ukay-Ukay</title>
+    <script src="../js/admin-theme.js"></script>
     <link rel="stylesheet" href="../css/styles.css">
+    <link rel="stylesheet" href="../css/admin-theme.css">
 </head>
 <body class="admin-login-page">
 
@@ -147,6 +149,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             </form>
 
             <p class="admin-login__note">Authorized administrators only.</p>
+            <div class="admin-login__theme">
+                <?php require __DIR__ . '/../includes/ui.admin-theme-toggle.php'; ?>
+            </div>
 
         </div>
     </main>

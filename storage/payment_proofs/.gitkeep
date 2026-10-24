@@ -1,0 +1,3 @@
+Private payment-proof store. Uploaded files here are git-ignored; this
+file only keeps the directory present in the repository. Access is gated
+by the authenticated streaming endpoints, never by a direct URL.

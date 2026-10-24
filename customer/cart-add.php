@@ -78,12 +78,14 @@ if ($productId === false || $productId === null || $productId < 1) {
  * Fetch the product and only allow AVAILABLE products.
  * Availability is re-checked here because hidden form
  * fields cannot be trusted.
+ * Retired products are also excluded (bundle-linked items that
+ * have been permanently removed from the catalog).
  */
 
 $productStmt = $pdo->prepare(
     "SELECT id
      FROM products
-     WHERE id = :id AND status = 'AVAILABLE'"
+     WHERE id = :id AND status = 'AVAILABLE' AND retired_at IS NULL"
 );
 
 $productStmt->execute([':id' => $productId]);

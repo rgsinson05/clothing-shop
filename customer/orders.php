@@ -4,6 +4,8 @@ session_start();
 
 require_once __DIR__ . '/../includes/database.php';
 require_once __DIR__ . '/../includes/feedback-data.php';
+require_once __DIR__ . '/../includes/pickup.php';
+require_once __DIR__ . '/../includes/customer_delivery.php';
 
 /*
  * Require the customer to be logged in.
@@ -21,10 +23,13 @@ $customerId = (int) $_SESSION['customer_id'];
  */
 
 $orderStatusLabels = [
-    'PENDING' => 'Order Placed',
-    'CONFIRMED' => 'Order Confirmed',
-    'PACKED' => 'Being Prepared',
+    'PENDING' => 'Pending',
+    'CONFIRMED' => 'Confirmed',
+    'PACKED' => 'Packed',
     'SHIPPED' => 'Shipped',
+    'IN_TRANSIT' => 'In Transit',
+    'RETURN_TO_SELLER' => 'Return to Seller',
+    'RETURNED_TO_SHOP' => 'Returned to Shop',
     'DELIVERED' => 'Delivered',
     'CANCELLED' => 'Cancelled'
 ];
@@ -48,6 +53,9 @@ $orderStatusBadgeClasses = [
     'CONFIRMED' => 'badge-info',
     'PACKED' => 'badge-warning',
     'SHIPPED' => 'badge-info',
+    'IN_TRANSIT' => 'badge-info',
+    'RETURN_TO_SELLER' => 'badge-warning',
+    'RETURNED_TO_SHOP' => 'badge-info',
     'DELIVERED' => 'badge-success',
     'CANCELLED' => 'badge-cancelled'
 ];
@@ -63,6 +71,9 @@ $orderStatusIconKeys = [
     'CONFIRMED' => 'package',
     'PACKED' => 'package',
     'SHIPPED' => 'package',
+    'IN_TRANSIT' => 'package',
+    'RETURN_TO_SELLER' => 'package',
+    'RETURNED_TO_SHOP' => 'package',
     'DELIVERED' => 'check',
     'CANCELLED' => 'x'
 ];
@@ -82,15 +93,19 @@ if (!in_array($orderFilter, ['ALL', 'IN PROGRESS', 'DELIVERED', 'CANCELLED'], tr
 
 /*
  * Retrieve only the orders belonging to the authenticated
- * customer, newest first. The query is unchanged from the
- * previous version; filtering happens on the fetched rows.
+ * customer, newest first. Shipment and payment facts support display-only
+ * status and receipt gating; filtering happens on the fetched rows.
  */
 
 $ordersStmt = $pdo->prepare(
-    'SELECT id, status, cancellation_status, total_amount, created_at
-     FROM orders
-     WHERE customer_id = :customer_id
-     ORDER BY created_at DESC, id DESC'
+    'SELECT o.id, o.status, o.cancellation_status, o.total_amount, o.created_at, o.received_at,
+            o.pickup_status, o.ready_for_pickup_at, o.pickup_deadline_at, o.picked_up_at,
+            s.delivery_method, s.shipment_status, p.payment_method, p.payment_status
+     FROM orders o
+     LEFT JOIN shipments s ON s.order_id = o.id
+     LEFT JOIN payments p ON p.order_id = o.id
+     WHERE o.customer_id = :customer_id
+     ORDER BY o.created_at DESC, o.id DESC'
 );
 
 $ordersStmt->execute([':customer_id' => $customerId]);
@@ -233,19 +248,46 @@ require __DIR__ . '/../includes/ui.header.php';
      * orders. No additional database query required.
      */
 
-    $inProgressStatuses = ['PENDING', 'CONFIRMED', 'PACKED', 'SHIPPED'];
+    $inProgressStatuses = ['PENDING', 'CONFIRMED', 'PACKED', 'SHIPPED', 'IN_TRANSIT'];
 
-    $filteredOrders = array_filter($orders, function ($order) use ($orderFilter, $inProgressStatuses) {
+    /*
+     * Pickup-aware progress per order (Phase 3). A Store Pickup order is
+     * displayed (and filtered) by its pickup lifecycle; courier orders keep
+     * the courier statuses. Computed once here with the shared helper.
+     */
+    $pickupProgressByOrder = [];
+    $customerTimelinesByOrder = [];
+    foreach ($orders as $orderRow) {
+        $progress = pickup_progress($orderRow, $orderRow);
+        if ($progress !== null) {
+            $pickupProgressByOrder[(int) $orderRow['id']] = $progress;
+        } else {
+            $customerTimelinesByOrder[(int) $orderRow['id']] = customer_order_timeline($orderRow, $orderRow, $orderRow, null);
+        }
+    }
+
+    $filteredOrders = array_filter($orders, function ($order) use ($orderFilter, $inProgressStatuses, $pickupProgressByOrder, $customerTimelinesByOrder) {
         if ($orderFilter === 'ALL') {
             return true;
         }
+        $pickup = $pickupProgressByOrder[(int) $order['id']] ?? null;
+        $cancelled = $order['status'] === 'CANCELLED' || $order['cancellation_status'] === 'APPROVED';
+        if ($cancelled) return $orderFilter === 'CANCELLED';
+        $timeline = $customerTimelinesByOrder[(int) $order['id']] ?? null;
         if ($orderFilter === 'IN PROGRESS') {
-            return in_array($order['status'], $inProgressStatuses, true);
+            if ($pickup !== null) {
+                return $pickup['stage'] !== 'PICKED_UP' && !$pickup['cancelled'];
+            }
+            return $timeline['closure'] !== 'RETURNED_TO_SHOP'
+                && in_array($timeline['stage'], $inProgressStatuses, true);
         }
         if ($orderFilter === 'DELIVERED') {
-            return $order['status'] === 'DELIVERED';
+            if ($pickup !== null) {
+                return $pickup['stage'] === 'PICKED_UP';
+            }
+            return $timeline['stage'] === 'DELIVERED';
         }
-        return $order['status'] === 'CANCELLED';
+        return false;
     });
 
     ?>
@@ -272,13 +314,44 @@ require __DIR__ . '/../includes/ui.header.php';
                 $orderId = (int) $order['id'];
                 $orderStatus = (string) $order['status'];
                 $cancellationStatus = (string) $order['cancellation_status'];
-                $statusLabel = $orderStatusLabels[$orderStatus] ?? $orderStatus;
-                $badgeClass = $orderStatusBadgeClasses[$orderStatus] ?? 'badge';
-                $statusIconKey = $orderStatusIconKeys[$orderStatus] ?? '';
+                $pickupProgress = $pickupProgressByOrder[$orderId] ?? null;
+                $orderTimeline = $customerTimelinesByOrder[$orderId] ?? null;
+                $isCancelled = $orderStatus === 'CANCELLED' || $cancellationStatus === 'APPROVED';
+                $displayStatus = $isCancelled ? 'CANCELLED' : ($orderTimeline['badge_stage'] ?? null);
+                /*
+                 * Pickup orders display their pickup stage; courier orders keep
+                 * the courier label. A cancelled order keeps the Cancelled label
+                 * regardless of fulfillment (cancellation is its own terminal
+                 * outcome).
+                 */
+                $statusLabel = $isCancelled
+                    ? 'Cancelled'
+                    : ($pickupProgress !== null
+                        ? $pickupProgress['stage_label']
+                        : ($orderStatusLabels[$displayStatus ?? ''] ?? 'Status unavailable'));
+                $badgeClass = $isCancelled
+                    ? 'badge-cancelled'
+                    : ($pickupProgress !== null
+                        ? $pickupProgress['badge_class']
+                        : ($orderStatusBadgeClasses[$displayStatus ?? ''] ?? 'badge'));
+                $statusIconKey = $isCancelled
+                    ? 'x'
+                    : ($pickupProgress !== null
+                        ? pickup_stage_icon($pickupProgress['stage'])
+                        : ($orderStatusIconKeys[$displayStatus ?? ''] ?? ''));
                 $item = $orderItemsMap[$orderId] ?? null;
                 $productName = $item !== null ? (string) $item['product_name'] : 'Order #' . $orderId;
                 $viewUrl = 'order-detail.php?id=' . $orderId;
-                $showFeedbackAction = $orderStatus === 'DELIVERED';
+                $receivedAt = $order['received_at'] ?? null;
+                $isDelivered = !$isCancelled && $pickupProgress === null
+                    && $orderStatus === 'DELIVERED' && $order['shipment_status'] === 'DELIVERED'
+                    && in_array($order['delivery_method'], [null, 'LOCAL_COURIER'], true) && $orderTimeline['stage'] === 'DELIVERED';
+                $hasConfirmedReceipt = $receivedAt !== null;
+                /* Feedback gating requires DELIVERED + confirmed receipt (Phase C). */
+                $showFeedbackAction = $isDelivered && $hasConfirmedReceipt;
+                $showOrderReceived = $isDelivered && !$hasConfirmedReceipt
+                    && in_array($cancellationStatus, ['NONE', 'REJECTED'], true)
+                    && ($order['payment_method'] !== 'GCASH' || $order['payment_status'] === 'PAID');
                 $feedbackRow = $item !== null ? ($feedbackByItem[(int) $item['order_item_id']] ?? null) : null;
                 $feedbackSubmitted = $feedbackRow !== null;
                 $feedbackLabel = $feedbackSubmitted ? 'EDIT FEEDBACK' : 'LEAVE FEEDBACK';
@@ -287,7 +360,7 @@ require __DIR__ . '/../includes/ui.header.php';
                 $feedbackText = $feedbackSubmitted ? (string) $feedbackRow['feedback_text'] : '';
                 $feedbackPhoto = $feedbackSubmitted ? hopia_feedback_photo_src($feedbackRow['photo_path']) : '';
                 $feedbackPhotoName = $feedbackSubmitted ? basename((string) $feedbackRow['photo_path']) : '';
-                $hasCancellationNote = $cancellationStatus !== 'NONE'
+                $hasCancellationNote = !$isCancelled && $cancellationStatus !== 'NONE'
                     && isset($cancellationStatusLabels[$cancellationStatus]);
 
                 $metaParts = [];
@@ -317,9 +390,21 @@ require __DIR__ . '/../includes/ui.header.php';
                                 <?php endif; ?>
                                 <span class="badge__label"><?= hopia_e($statusLabel) ?></span>
                             </span>
+                            <?php if ($displayStatus === 'DELIVERED'): ?>
+                                <span class="badge <?= $hasConfirmedReceipt ? 'badge-success' : 'badge-warning' ?>"><?= hopia_e($orderTimeline['courier_label']) ?></span>
+                            <?php endif; ?>
+                            <?php if ($displayStatus === 'IN_TRANSIT' && $orderTimeline['courier_label'] !== null
+                                && $orderTimeline['courier_label'] !== 'In Transit'): ?>
+                                <span class="order-card__cancel-note"><?= hopia_e($orderTimeline['courier_label']) ?></span>
+                            <?php endif; ?>
                             <?php if ($hasCancellationNote): ?>
                                 <span class="order-card__cancel-note">
                                     <?= hopia_e($cancellationStatusLabels[$cancellationStatus]) ?>
+                                </span>
+                            <?php endif; ?>
+                            <?php if ($pickupProgress !== null && $pickupProgress['stage'] === 'READY_FOR_PICKUP' && $pickupProgress['deadline_at'] !== null && !$isCancelled): ?>
+                                <span class="order-card__cancel-note">
+                                    Pickup by <?= hopia_e(date('M j, Y g:i A', strtotime($pickupProgress['deadline_at']))) ?>
                                 </span>
                             <?php endif; ?>
                         </div>
@@ -351,6 +436,9 @@ require __DIR__ . '/../includes/ui.header.php';
                         <?php if ($metaText !== ''): ?>
                             <p class="order-card__meta"><?= hopia_e($metaText) ?></p>
                         <?php endif; ?>
+                        <?php if ($orderTimeline !== null && $orderTimeline['closure'] !== null): ?>
+                            <p class="order-card__meta"><?= hopia_e($orderTimeline['message']) ?></p>
+                        <?php endif; ?>
                         <p class="order-card__price price">
                             ₱<?= number_format((float) $order['total_amount'], 2) ?>
                         </p>
@@ -361,7 +449,11 @@ require __DIR__ . '/../includes/ui.header.php';
                             <span class="order-card__view-label">VIEW ORDER</span>
                             <span class="order-card__view-arrow" aria-hidden="true"><?= hopia_orders_icon('arrow-right') ?></span>
                         </a>
-                        <?php if ($showFeedbackAction): ?>
+                        <?php if ($showOrderReceived): ?>
+                            <a class="btn btn-success btn-sm order-card__confirm-receipt" href="<?= hopia_e($viewUrl) ?>" aria-label="Confirm receipt for order #<?= $orderId ?>">
+                                <span>CONFIRM RECEIPT</span>
+                            </a>
+                        <?php elseif ($showFeedbackAction): ?>
                             <?php
                             $feedbackImagePath = $item !== null ? trim((string) $item['image_path']) : '';
                             $ui_feedback_overlay = true;

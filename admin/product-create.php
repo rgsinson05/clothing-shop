@@ -21,7 +21,40 @@ $price = '';
 $size = '';
 $color = '';
 
+/*
+ * Bundle-based item registration.
+ * The product-create page is only accessible when a valid bundle_id is
+ * present in the query string.  Access without a bundle_id redirects
+ * the admin to the bundles page.
+ *
+ * Legacy product creation (unbundled) is removed from this flow.
+ * All new physical garments must be registered through a bundle.
+ */
+$bundleId = filter_input(INPUT_GET, 'bundle_id', FILTER_VALIDATE_INT);
+
+if (!$bundleId) {
+    header('Location: bundles.php');
+    exit;
+}
+
+/*
+ * Load the selected bundle so the form can show its details.
+ * The actual capacity and category checks happen inside the
+ * transactional registration path below.
+ */
+$bundleStmt = $pdo->prepare('SELECT id, category FROM purchase_bundles WHERE id = :id');
+$bundleStmt->execute([':id' => $bundleId]);
+$selectedBundle = $bundleStmt->fetch();
+
+if (!$selectedBundle) {
+    header('Location: bundles.php?error=invalid_bundle');
+    exit;
+}
+
+$bundleCategory = $selectedBundle['category'];
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+
     $name = trim($_POST['name'] ?? '');
     $category = $_POST['category'] ?? '';
     $gender = $_POST['gender'] ?? '';
@@ -83,9 +116,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         for ($i = 0; $i < $imageCount; $i++) {
 
-            /*
-             * Ignore empty upload fields.
-             */
             if (
                 $uploadedImages['error'][$i] === UPLOAD_ERR_NO_FILE ||
                 $uploadedImages['name'][$i] === ''
@@ -103,10 +133,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 continue;
             }
 
-            /*
-             * Check the actual MIME type of the file.
-             * Do not rely only on the filename extension.
-             */
             $finfo = new finfo(FILEINFO_MIME_TYPE);
             $mimeType = $finfo->file($uploadedImages['tmp_name'][$i]);
 
@@ -117,123 +143,250 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     /*
-     * Create the product and save its images.
+     * Register the item through the selected bundle.
+     * All steps run inside a single transaction with a FOR UPDATE lock
+     * on the bundle row so concurrent registrations cannot allocate
+     * the same bundle_item_number.
      */
 
     if (empty($errors)) {
 
-        $stmt = $pdo->prepare(
-            'INSERT INTO products
-                (name, category, gender, description, condition_label, defects, price, size, color)
-             VALUES
-                (:name, :category, :gender, :description, :condition_label, :defects, :price, :size, :color)'
-        );
+        try {
 
-        $stmt->execute([
-            'name' => $name,
-            'category' => $category,
-            'gender' => $gender,
-            'description' => $description !== '' ? $description : null,
-            'condition_label' => $conditionLabel,
-            'defects' => $defects !== '' ? $defects : null,
-            'price' => $price,
-            'size' => $size !== '' ? $size : null,
-            'color' => $color !== '' ? $color : null,
-        ]);
+            $pdo->beginTransaction();
 
-        $productId = (int) $pdo->lastInsertId();
+            /*
+             * 1. Lock the bundle row and re-confirm it still exists.
+             */
+            $lockBundleStmt = $pdo->prepare(
+                'SELECT id, category, original_quantity
+                 FROM purchase_bundles
+                 WHERE id = :id
+                 FOR UPDATE'
+            );
+            $lockBundleStmt->execute([':id' => $bundleId]);
+            $lockedBundle = $lockBundleStmt->fetch();
 
-        /*
-         * Make sure the product image directory exists.
-         */
-        $imageDirectory = __DIR__ . '/../images/products';
+            if (!$lockedBundle) {
+                throw new RuntimeException('Bundle not found.');
+            }
 
-        if (!is_dir($imageDirectory)) {
-            mkdir($imageDirectory, 0755, true);
-        }
+            /*
+             * 2. Confirm product category matches bundle category exactly.
+             */
+            if ($category !== $lockedBundle['category']) {
+                throw new RuntimeException(
+                    'Product category must match the bundle category (' . $lockedBundle['category'] . ').'
+                );
+            }
 
-        /*
-         * Save uploaded images.
-         */
-        if ($uploadedImages && isset($uploadedImages['name'])) {
+            /*
+             * 3. Count registered items in this bundle.
+             */
+            $countStmt = $pdo->prepare(
+                'SELECT COUNT(*)
+                 FROM products
+                 WHERE bundle_id = :bundle_id'
+            );
+            $countStmt->execute([':bundle_id' => $bundleId]);
+            $registeredCount = (int) $countStmt->fetchColumn();
 
-            $imageInsert = $pdo->prepare(
-                'INSERT INTO product_images
-                    (product_id, image_path, sort_order)
+            /*
+             * 4. Reject if bundle capacity is already reached.
+             */
+            if ($registeredCount >= (int) $lockedBundle['original_quantity']) {
+                throw new RuntimeException(
+                    'This bundle is already at full capacity (' . (int) $lockedBundle['original_quantity'] . ' items).'
+                );
+            }
+
+            /*
+             * 5. Allocate the next bundle_item_number for this bundle.
+             *    MAX(bundle_item_number) + 1 is safe because the bundle row
+             *    is locked, preventing any concurrent registration from
+             *    allocating the same number.
+             */
+            $seqStmt = $pdo->prepare(
+                'SELECT COALESCE(MAX(bundle_item_number), 0) + 1
+                 FROM products
+                 WHERE bundle_id = :bundle_id'
+            );
+            $seqStmt->execute([':bundle_id' => $bundleId]);
+            $nextItemNumber = (int) $seqStmt->fetchColumn();
+
+            /*
+             * 6. Generate the barcode.
+             *    Format: HOPEBUNDLE-<6-digit bundle id>-<2-digit item number>
+             *    Both paddings are minimum widths; values expand naturally.
+             */
+            $barcodeValue = 'HOPEBUNDLE-'
+                . str_pad((string) $bundleId, 6, '0', STR_PAD_LEFT)
+                . '-'
+                . str_pad((string) $nextItemNumber, 2, '0', STR_PAD_LEFT);
+
+            /*
+             * 7. Insert the product with bundle assignment fields.
+             */
+            $insertStmt = $pdo->prepare(
+                'INSERT INTO products
+                    (name, category, gender, description, condition_label, defects,
+                     price, size, color, bundle_id, bundle_item_number, barcode_value)
                  VALUES
-                    (:product_id, :image_path, :sort_order)'
+                    (:name, :category, :gender, :description, :condition_label, :defects,
+                     :price, :size, :color, :bundle_id, :bundle_item_number, :barcode_value)'
             );
 
-            $sortOrder = 0;
+            $insertStmt->execute([
+                'name' => $name,
+                'category' => $category,
+                'gender' => $gender,
+                'description' => $description !== '' ? $description : null,
+                'condition_label' => $conditionLabel,
+                'defects' => $defects !== '' ? $defects : null,
+                'price' => $price,
+                'size' => $size !== '' ? $size : null,
+                'color' => $color !== '' ? $color : null,
+                'bundle_id' => $bundleId,
+                'bundle_item_number' => $nextItemNumber,
+                'barcode_value' => $barcodeValue,
+            ]);
 
-            for ($i = 0; $i < count($uploadedImages['name']); $i++) {
+            $productId = (int) $pdo->lastInsertId();
 
-                if (
-                    $uploadedImages['error'][$i] === UPLOAD_ERR_NO_FILE ||
-                    $uploadedImages['name'][$i] === ''
-                ) {
-                    continue;
-                }
+            /*
+             * 8. Save uploaded images.
+             */
+            $imageDirectory = __DIR__ . '/../images/products';
 
-                /*
-                 * Determine a safe extension from the actual MIME type.
-                 */
-                $finfo = new finfo(FILEINFO_MIME_TYPE);
-                $mimeType = $finfo->file($uploadedImages['tmp_name'][$i]);
-
-                $extensions = [
-                    'image/jpeg' => 'jpg',
-                    'image/png' => 'png',
-                    'image/webp' => 'webp',
-                ];
-
-                $extension = $extensions[$mimeType];
-
-                /*
-                 * Generate a unique filename.
-                 */
-                $filename = bin2hex(random_bytes(16)) . '.' . $extension;
-
-                $destination = $imageDirectory . '/' . $filename;
-
-                if (!move_uploaded_file(
-                    $uploadedImages['tmp_name'][$i],
-                    $destination
-                )) {
-                    $errors[] = 'One of the images could not be saved.';
-                    continue;
-                }
-
-                /*
-                 * Store the relative path in the database.
-                 */
-                $imagePath = 'images/products/' . $filename;
-
-                $imageInsert->execute([
-                    'product_id' => $productId,
-                    'image_path' => $imagePath,
-                    'sort_order' => $sortOrder,
-                ]);
-
-                $sortOrder++;
+            if (!is_dir($imageDirectory)) {
+                mkdir($imageDirectory, 0755, true);
             }
-        }
 
-        /*
-         * Return to the product list.
-         */
-        header('Location: products.php');
-        exit;
+            if ($uploadedImages && isset($uploadedImages['name'])) {
+
+                $imageInsert = $pdo->prepare(
+                    'INSERT INTO product_images
+                        (product_id, image_path, sort_order)
+                     VALUES
+                        (:product_id, :image_path, :sort_order)'
+                );
+
+                $sortOrder = 0;
+                $savedFilePaths = [];
+
+                for ($i = 0; $i < count($uploadedImages['name']); $i++) {
+
+                    if (
+                        $uploadedImages['error'][$i] === UPLOAD_ERR_NO_FILE ||
+                        $uploadedImages['name'][$i] === ''
+                    ) {
+                        continue;
+                    }
+
+                    $finfo = new finfo(FILEINFO_MIME_TYPE);
+                    $mimeType = $finfo->file($uploadedImages['tmp_name'][$i]);
+
+                    $extensions = [
+                        'image/jpeg' => 'jpg',
+                        'image/png' => 'png',
+                        'image/webp' => 'webp',
+                    ];
+
+                    $extension = $extensions[$mimeType] ?? 'jpg';
+
+                    $filename = bin2hex(random_bytes(16)) . '.' . $extension;
+                    $destination = $imageDirectory . '/' . $filename;
+
+                    if (!move_uploaded_file(
+                        $uploadedImages['tmp_name'][$i],
+                        $destination
+                    )) {
+                        throw new RuntimeException('One of the images could not be saved.');
+                    }
+
+                    $savedFilePaths[] = $destination;
+
+                    $imagePath = 'images/products/' . $filename;
+
+                    $imageInsert->execute([
+                        'product_id' => $productId,
+                        'image_path' => $imagePath,
+                        'sort_order' => $sortOrder,
+                    ]);
+
+                    $sortOrder++;
+                }
+            }
+
+            /*
+             * 9. If image save encountered errors, roll back.
+             */
+            if (!empty($errors)) {
+                throw new RuntimeException('Image save failed.');
+            }
+
+            $pdo->commit();
+
+            header('Location: products.php?registered=1');
+            exit;
+
+        } catch (Throwable $e) {
+
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+
+            /*
+             * Clean up image files that were written to disk before the
+             * database operation failed.  $savedFilePaths is in-memory and
+             * survives the rollback, so it is safe to use here.
+             * No database query is made here because the product INSERT
+             * and any prior image INSERTs were rolled back.
+             */
+            foreach ($savedFilePaths ?? [] as $filePath) {
+                if (file_exists($filePath)) {
+                    @unlink($filePath);
+                }
+            }
+
+            $errors[] = 'Something went wrong while registering the item. Please try again.';
+        }
     }
+}
+
+/*
+ * For form display, show live bundle capacity.
+ */
+$formBundleStmt = $pdo->prepare(
+    'SELECT pb.id, pb.category, pb.original_quantity,
+            COUNT(p.id) AS registered_count
+     FROM purchase_bundles pb
+     LEFT JOIN products p ON p.bundle_id = pb.id
+     WHERE pb.id = :id
+     GROUP BY pb.id'
+);
+$formBundleStmt->execute([':id' => $bundleId]);
+$formBundle = $formBundleStmt->fetch();
+
+$bundleCapacityRemaining = 0;
+if ($formBundle) {
+    $bundleCapacityRemaining = (int) $formBundle['original_quantity'] - (int) $formBundle['registered_count'];
 }
 
 $adminName = $_SESSION['admin_name'] ?? 'Admin';
 
-$page_title = "Add Product - Admin - Hopia's Ukay-Ukay";
-$page_description = "Add a product to Hopia's inventory.";
+$page_title = "Register Item - Admin - Hopia's Ukay-Ukay";
+$page_description = "Register a new item through a purchase bundle.";
 $ui_section = 'admin';
-$ui_active = 'products.php';
+$ui_active = 'bundles.php';
 $body_class = 'admin-product-form-page';
+
+$bundleCode = 'HOPEBUNDLE-' . str_pad((string) $bundleId, 6, '0', STR_PAD_LEFT);
+$categoryLabel = [
+    'SHIRTS' => 'Shirts',
+    'PANTS' => 'Pants',
+    'SHORTS' => 'Shorts',
+][$bundleCategory] ?? $bundleCategory;
 
 ?>
 
@@ -243,11 +396,18 @@ $body_class = 'admin-product-form-page';
 <div class="admin-product-form-page">
     <header class="admin-page-header">
         <div>
-            <a class="admin-page-header__back" href="products.php">&larr; Back to Products</a>
-            <p class="admin-page-header__eyebrow">Inventory management</p>
-            <h1>ADD PRODUCT</h1>
+            <a class="admin-page-header__back" href="bundles.php">&larr; Back to Bundles</a>
+            <p class="admin-page-header__eyebrow">Bundle item registration</p>
+            <h1>REGISTER ITEM</h1>
             <p class="admin-page-header__copy">
-                Add one unique secondhand item to the shop's inventory.
+                Registering item for bundle
+                <code class="bundle-code-inline"><?= htmlspecialchars($bundleCode) ?></code>
+                &mdash; <?= htmlspecialchars($categoryLabel) ?>.
+                <?php if ($bundleCapacityRemaining > 0): ?>
+                    <span class="badge badge-available"><?= (int) $bundleCapacityRemaining ?> slot<?= $bundleCapacityRemaining === 1 ? '' : 's' ?> remaining</span>.
+                <?php else: ?>
+                    <span class="badge badge-sold">Bundle is at full capacity</span>.
+                <?php endif; ?>
             </p>
         </div>
     </header>
@@ -266,8 +426,8 @@ $body_class = 'admin-product-form-page';
 
     <form class="admin-form-layout" method="POST" enctype="multipart/form-data">
         <section class="admin-form-card" aria-labelledby="product-details-title">
-            <h2 id="product-details-title">Product details</h2>
-            <p class="admin-form-card__intro">Use the existing product information fields below.</p>
+            <h2 id="product-details-title">Item details</h2>
+            <p class="admin-form-card__intro">Enter the details for this unique item. Its barcode and bundle assignment are assigned automatically.</p>
 
             <div class="admin-form-grid">
                 <div class="field field--wide">
@@ -326,8 +486,8 @@ $body_class = 'admin-product-form-page';
             </div>
 
             <div class="admin-form-actions">
-                <button class="btn btn-primary" type="submit">Save Product</button>
-                <a class="btn btn-secondary" href="products.php">Cancel</a>
+                <button class="btn btn-primary" type="submit"<?= $bundleCapacityRemaining <= 0 ? ' disabled' : '' ?>>Register Item</button>
+                <a class="btn btn-secondary" href="bundles.php">Cancel</a>
             </div>
         </section>
 
@@ -449,4 +609,4 @@ $body_class = 'admin-product-form-page';
     </script>
 </div>
 
-<?php require __DIR__ . '/../includes/ui.footer.php'; ?>
+<?php require __DIR__ . '/../includes/ui.footer.php';

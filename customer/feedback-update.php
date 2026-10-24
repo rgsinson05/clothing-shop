@@ -29,6 +29,7 @@ require_once __DIR__ . '/../includes/image-upload.php';
  *      contain the row's original order item. The row's stored
  *      order_id/order_item_id are used for this check, never the
  *      browser-supplied ones.
+ *   6. CSRF token must be valid (Phase C addition).
  *
  * Photo editing behavior, driven by the optional photo upload plus the
  * photo_action field the overlay sends:
@@ -111,6 +112,27 @@ if (!isset($_SESSION['customer_id'])) {
 }
 
 $customerId = (int) $_SESSION['customer_id'];
+
+/*
+ * CSRF validation (Phase C addition).
+ */
+if (empty($_SESSION['csrf_token'])) {
+    $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+}
+
+$submittedToken = $_POST['csrf_token'] ?? '';
+
+if (
+    !is_string($submittedToken)
+    || $submittedToken === ''
+    || !hash_equals($_SESSION['csrf_token'], $submittedToken)
+) {
+    feedbackUpdateRespondJson([
+        'ok' => false,
+        'reason' => 'csrf',
+        'message' => 'The request could not be verified. Please reload the page and try again.',
+    ], 403);
+}
 
 /*
  * 2. Input reception and server-side validation.
@@ -321,7 +343,7 @@ try {
     feedbackUpdateRespondJson([
         'ok' => false,
         'reason' => 'error',
-        'message' => 'Something went wrong. Please try again later.',
+        'message' => 'Something went wrong. Please try again.',
     ], 500);
 }
 

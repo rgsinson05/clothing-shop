@@ -7,7 +7,8 @@ require_once __DIR__ . '/../includes/database.php';
 $allowedCategories = ['SHIRTS', 'PANTS', 'SHORTS'];
 $allowedGenders = ['MEN', 'WOMEN'];
 
-$search = trim($_GET['search'] ?? '');
+$searchParam = $_GET['search'] ?? '';
+$search = is_string($searchParam) ? trim($searchParam) : '';
 
 $focusSearch = ($_GET['focus'] ?? '') === '1';
 
@@ -36,7 +37,7 @@ $sql = "SELECT p.id, p.name, p.category, p.gender, p.price, p.size, p.color, p.d
              ORDER BY pi2.sort_order ASC, pi2.id ASC
              LIMIT 1
          )
-     WHERE p.status = 'AVAILABLE'";
+     WHERE p.status = 'AVAILABLE' AND p.retired_at IS NULL";
 
 $params = [];
 
@@ -64,6 +65,74 @@ $products = $stmt->fetchAll();
 
 $hasFilters = ($search !== '' || $category !== '' || $gender !== '');
 
+$initialSearchTerms = $search !== ''
+    ? preg_split('/\s+/', strtolower($search), -1, PREG_SPLIT_NO_EMPTY)
+    : [];
+
+$categoryOptions = [];
+$sizeOptions = [];
+$colorOptionsByKey = [];
+
+foreach ($products as $product) {
+    $productCategory = trim((string) ($product['category'] ?? ''));
+    $productSize = trim((string) ($product['size'] ?? ''));
+    $productColor = trim((string) ($product['color'] ?? ''));
+
+    if ($productCategory !== '') {
+        $categoryOptions[$productCategory] = $productCategory;
+    }
+
+    // Size labels remain exact so meaningful distinctions are never merged.
+    if ($productSize !== '') {
+        $sizeOptions[$productSize] = $productSize;
+    }
+
+    // Colors compare case-insensitively while keeping the database untouched.
+    if ($productColor !== '') {
+        $colorKey = strtolower($productColor);
+        if (!isset($colorOptionsByKey[$colorKey])) {
+            $colorOptionsByKey[$colorKey] = [
+                'value' => $colorKey,
+                'label' => ucwords($colorKey, " -/"),
+            ];
+        }
+    }
+}
+
+$sortFilterLabels = static function (string $left, string $right): int {
+    $comparison = strnatcasecmp($left, $right);
+    return $comparison !== 0 ? $comparison : strcmp($left, $right);
+};
+
+$categoryOptions = array_values($categoryOptions);
+$sizeOptions = array_values($sizeOptions);
+usort($categoryOptions, $sortFilterLabels);
+usort($sizeOptions, $sortFilterLabels);
+
+$colorOptions = array_values($colorOptionsByKey);
+usort($colorOptions, static function (array $left, array $right) use ($sortFilterLabels): int {
+    return $sortFilterLabels($left['label'], $right['label']);
+});
+
+$filterGroups = [
+    'category' => [
+        'label' => 'Category',
+        'options' => array_map(static function (string $value): array {
+            return ['value' => $value, 'label' => $value];
+        }, $categoryOptions),
+    ],
+    'size' => [
+        'label' => 'Sizes',
+        'options' => array_map(static function (string $value): array {
+            return ['value' => $value, 'label' => $value];
+        }, $sizeOptions),
+    ],
+    'color' => [
+        'label' => 'Color',
+        'options' => $colorOptions,
+    ],
+];
+
 // Dynamic page heading based on the active gender + category context.
 // Gender present  -> "MEN'S" / "WOMEN'S" (optionally + category, e.g. "MEN'S PANTS").
 // Gender absent   -> empty string, preserving the existing category-only and
@@ -83,20 +152,13 @@ if ($gender !== '') {
     }
 }
 
-$searchTerms = [];
-
-if ($search !== '') {
-    $searchTerms = preg_split('/\s+/', strtolower($search), -1, PREG_SPLIT_NO_EMPTY);
-}
-
-$visibleCount = 0;
-
 require_once __DIR__ . '/../includes/ui.php';
 
 define('HUPIA_BASE', '..');
 
 $page_title = 'Shop - ' . hopia_site_name();
 $page_description = 'Preloved shirts, pants, and shorts at ' . hopia_site_name() . '.';
+$ui_active = 'products.php';
 $body_class = 'catalog-page';
 
 $catalog_logged_in = !empty($_SESSION['customer_id']);
@@ -129,70 +191,144 @@ if ($catalog_logged_in) {
 require __DIR__ . '/../includes/ui.head.php';
 ?>
 
-<body class="ui-store <?= hopia_e($body_class) ?>">
-    <a class="sr-only" href="#site-main">Skip to content</a>
-
-    <header class="catalog-head">
-        <div class="container catalog-head__inner">
-            <a class="catalog-head__icon catalog-head__exit" href="../index.php" aria-label="Close and return to homepage">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true">
-                    <line x1="5" y1="5" x2="19" y2="19"></line>
-                    <line x1="19" y1="5" x2="5" y2="19"></line>
-                </svg>
-            </a>
-            <a class="catalog-head__brand" href="../index.php">HOPIA FITS</a>
-            <a class="catalog-head__icon catalog-head__cart" href="<?= hopia_e($catalog_logged_in ? 'cart.php' : 'login.php') ?>" aria-label="Cart" style="position: relative;">
-                <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                    <path d="M4 5h2l1.6 10.2a1.5 1.5 0 0 0 1.5 1.3h7.8a1.5 1.5 0 0 0 1.5-1.2L20 8H7"></path>
-                    <circle cx="10" cy="20" r="1"></circle>
-                    <circle cx="17" cy="20" r="1"></circle>
-                </svg>
-                <?php if ($catalogCartCount > 0): ?>
-                    <span class="cart-badge" aria-label="<?= (int) $catalogCartCount ?> items in cart"><?= hopia_e($catalogCartCount) ?></span>
-                <?php endif; ?>
-            </a>
-        </div>
-    </header>
-
-    <main id="site-main" class="site-main">
-        <div class="container">
+<?php require __DIR__ . '/../includes/ui.header.php'; ?>
 
             <?php if ($pageHeading !== ''): ?>
                 <h1 class="catalog-heading"><?= hopia_e($pageHeading) ?></h1>
             <?php endif; ?>
 
-            <form class="catalog-search" id="catalog-search-form" role="search">
-                <label class="sr-only" for="catalog-search-input">Search products</label>
-                <?php if ($gender !== ''): ?>
-                    <input type="hidden" name="gender" value="<?= hopia_e($gender) ?>">
-                <?php endif; ?>
-                <?php if ($category !== ''): ?>
-                    <input type="hidden" name="category" value="<?= hopia_e($category) ?>">
-                <?php endif; ?>
-                <svg class="catalog-search__icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true">
-                    <circle cx="11" cy="11" r="6.5"></circle>
-                    <line x1="16" y1="16" x2="20.5" y2="20.5"></line>
-                </svg>
-                <input
-                    id="catalog-search-input"
-                    type="search"
-                    name="search"
-                    placeholder="Search products"
-                    value="<?= hopia_e($search) ?>"
-                    autocomplete="off"
-                    role="combobox"
-                    aria-expanded="false"
-                    aria-autocomplete="list"
-                    aria-controls="catalog-suggestions"<?= $focusSearch ? ' autofocus' : '' ?>
-                >
-                <button type="button" class="catalog-search__clear" id="catalog-search-clear" aria-label="Clear search" hidden>
-                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-                        <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+            <div class="catalog-tools">
+                <form class="catalog-search" id="catalog-search-form" role="search">
+                    <label class="sr-only" for="catalog-search-input">Search products</label>
+                    <?php if ($gender !== ''): ?>
+                        <input type="hidden" name="gender" value="<?= hopia_e($gender) ?>">
+                    <?php endif; ?>
+                    <?php if ($category !== ''): ?>
+                        <input type="hidden" name="category" value="<?= hopia_e($category) ?>">
+                    <?php endif; ?>
+                    <svg class="catalog-search__icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true">
+                        <circle cx="11" cy="11" r="6.5"></circle>
+                        <line x1="16" y1="16" x2="20.5" y2="20.5"></line>
                     </svg>
+                    <input
+                        id="catalog-search-input"
+                        type="search"
+                        name="search"
+                        placeholder="Search products"
+                        value="<?= hopia_e($search) ?>"
+                        autocomplete="off"
+                        role="combobox"
+                        aria-expanded="false"
+                        aria-autocomplete="list"
+                        aria-controls="catalog-suggestions"<?= $focusSearch ? ' autofocus' : '' ?>
+                    >
+                    <button type="button" class="catalog-search__clear" id="catalog-search-clear" aria-label="Clear search" hidden>
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                            <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                        </svg>
+                    </button>
+                </form>
+
+                <button
+                    type="button"
+                    class="catalog-filter-trigger"
+                    id="catalog-filter-trigger"
+                    aria-haspopup="dialog"
+                    aria-controls="catalog-filter-modal"
+                    aria-expanded="false"
+                >
+                    <svg class="catalog-filter-trigger__icon" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <defs>
+                            <linearGradient id="catalog-filter-gradient" x1="3" y1="3" x2="21" y2="21" gradientUnits="userSpaceOnUse">
+                                <stop stop-color="#d7875d"/>
+                                <stop offset="1" stop-color="#7a3828"/>
+                            </linearGradient>
+                        </defs>
+                        <path d="M4 6h16M7 12h10M10 18h4" stroke="url(#catalog-filter-gradient)"/>
+                    </svg>
+                    <span>Filter</span>
+                    <span class="catalog-filter-trigger__count" id="catalog-filter-count" hidden></span>
                 </button>
-            </form>
+            </div>
 
             <div class="catalog-suggestions" id="catalog-suggestions" role="listbox" aria-label="Product name suggestions" hidden></div>
+
+            <div class="catalog-filter-modal" id="catalog-filter-modal" hidden>
+                <div class="catalog-filter-modal__backdrop" data-filter-close aria-hidden="true"></div>
+                <section
+                    class="catalog-filter-modal__panel"
+                    role="dialog"
+                    aria-modal="true"
+                    aria-labelledby="catalog-filter-title"
+                >
+                    <div class="catalog-filter-modal__head">
+                        <div>
+                            <p class="catalog-filter-modal__eyebrow">Refine your fit</p>
+                            <h2 class="catalog-filter-modal__title" id="catalog-filter-title">Filter Products</h2>
+                        </div>
+                        <button type="button" class="catalog-filter-modal__close" data-filter-close aria-label="Close filters">
+                            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true">
+                                <path d="M5 5l14 14M19 5L5 19"/>
+                            </svg>
+                        </button>
+                    </div>
+
+                    <form class="catalog-filter-form" id="catalog-filter-form">
+                        <div class="catalog-filter-form__groups">
+                            <?php foreach ($filterGroups as $groupKey => $group): ?>
+                                <?php $groupOptions = $group['options']; ?>
+                                <fieldset class="catalog-filter-group" data-filter-options-group>
+                                    <legend><?= hopia_e($group['label']) ?></legend>
+                                    <div class="catalog-filter-group__options" id="catalog-filter-options-<?= hopia_e($groupKey) ?>">
+                                        <?php if (count($groupOptions) === 0): ?>
+                                            <p class="catalog-filter-group__empty">No options available</p>
+                                        <?php else: ?>
+                                            <?php foreach ($groupOptions as $optionIndex => $option): ?>
+                                                <?php $optionId = 'catalog-filter-' . $groupKey . '-' . $optionIndex; ?>
+                                                <label class="catalog-filter-option"<?= $optionIndex >= 5 ? ' data-filter-extra hidden' : '' ?>>
+                                                    <input
+                                                        id="<?= hopia_e($optionId) ?>"
+                                                        type="checkbox"
+                                                        value="<?= hopia_e($option['value']) ?>"
+                                                        data-filter-group="<?= hopia_e($groupKey) ?>"
+                                                    >
+                                                    <span><?= hopia_e($option['label']) ?></span>
+                                                </label>
+                                            <?php endforeach; ?>
+                                        <?php endif; ?>
+                                    </div>
+                                    <?php if (count($groupOptions) > 5): ?>
+                                        <button
+                                            type="button"
+                                            class="catalog-filter-group__toggle"
+                                            data-filter-show-more
+                                            aria-controls="catalog-filter-options-<?= hopia_e($groupKey) ?>"
+                                            aria-expanded="false"
+                                        >Show More</button>
+                                    <?php endif; ?>
+                                </fieldset>
+                            <?php endforeach; ?>
+                        </div>
+
+                        <div class="catalog-filter-form__actions">
+                            <button type="button" class="catalog-filter-action catalog-filter-action--reset" id="catalog-filter-reset">
+                                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                    <path d="M4 4v6h6"/>
+                                    <path d="M5.5 15a8 8 0 1 0 .8-7.8L4 10"/>
+                                </svg>
+                                Reset
+                            </button>
+                            <button type="submit" class="catalog-filter-action catalog-filter-action--search">
+                                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true">
+                                    <circle cx="11" cy="11" r="6.5"></circle>
+                                    <path d="M16 16l4.5 4.5"/>
+                                </svg>
+                                Search
+                            </button>
+                        </div>
+                    </form>
+                </section>
+            </div>
 
             <?php if (count($products) === 0): ?>
 
@@ -220,32 +356,36 @@ require __DIR__ . '/../includes/ui.head.php';
 
                         $productUrl = 'product.php?id=' . $productId;
 
-                        $imagePath = trim($product['image_path'] ?? '');
+                        $imagePath = trim((string) ($product['image_path'] ?? ''));
 
-                        $matchesSearch = true;
-
-                        if ($searchTerms) {
-                            $nameLower = strtolower($product['name']);
-                            foreach ($searchTerms as $term) {
-                                if ($term !== '' && strpos($nameLower, $term) === false) {
-                                    $matchesSearch = false;
+                        // Progressive fallback for submitted/search URLs. The live script
+                        // below applies the same five-field search plus active filters.
+                        $matchesInitialSearch = true;
+                        if ($initialSearchTerms) {
+                            $productSearchText = strtolower(implode(' ', [
+                                (string) ($product['name'] ?? ''),
+                                (string) ($product['category'] ?? ''),
+                                (string) ($product['color'] ?? ''),
+                                (string) ($product['size'] ?? ''),
+                                (string) ($product['description'] ?? ''),
+                            ]));
+                            foreach ($initialSearchTerms as $term) {
+                                if (strpos($productSearchText, $term) === false) {
+                                    $matchesInitialSearch = false;
                                     break;
                                 }
                             }
                         }
-
-                        if ($matchesSearch) {
-                            $visibleCount++;
-                        }
                         ?>
 
                         <article class="catalog-card<?= $isSold ? ' is-sold' : '' ?>"
-                            data-category="<?= hopia_e($product['category']) ?>"
-                            data-name="<?= hopia_e($product['name']) ?>"
-                            data-color="<?= hopia_e($product['color']) ?>"
-                            data-size="<?= hopia_e($product['size']) ?>"
-                            data-description="<?= hopia_e($product['description']) ?>"
-                            <?= $matchesSearch ? '' : ' hidden' ?>>
+                            data-category="<?= hopia_e(trim((string) ($product['category'] ?? ''))) ?>"
+                            data-name="<?= hopia_e(trim((string) ($product['name'] ?? ''))) ?>"
+                            data-color="<?= hopia_e(trim((string) ($product['color'] ?? ''))) ?>"
+                            data-color-filter="<?= hopia_e(strtolower(trim((string) ($product['color'] ?? '')))) ?>"
+                            data-size="<?= hopia_e(trim((string) ($product['size'] ?? ''))) ?>"
+                            data-description="<?= hopia_e(trim((string) ($product['description'] ?? ''))) ?>"
+                            <?= $matchesInitialSearch ? '' : ' hidden' ?>>
 
                             <div class="catalog-card__image">
                                 <?php if ($imagePath !== ''): ?>
@@ -326,7 +466,7 @@ require __DIR__ . '/../includes/ui.head.php';
 
                 </div>
 
-                <div class="empty-state empty-state--search" id="catalog-empty" hidden>
+                <div class="empty-state empty-state--search" id="catalog-empty" role="status" aria-live="polite" hidden>
                     <p class="empty-state__title" id="catalog-empty-title">Nothing found.</p>
                     <p>Try another fit.</p>
                 </div>
@@ -400,27 +540,31 @@ require __DIR__ . '/../includes/ui.head.php';
         error: 'Something went wrong. Please try again.'
     };
 
-    var cartLink = document.querySelector('.catalog-head__cart');
+    // Both the desktop and mobile cart icons in the shared site header carry the
+    // cart count, so a quick-add must keep every badge in sync.
+    var cartLinks = Array.prototype.slice.call(document.querySelectorAll('.header-cart'));
 
     function updateCartBadge(count) {
-        if (!cartLink || typeof count !== 'number' || isNaN(count)) {
+        if (typeof count !== 'number' || isNaN(count)) {
             return;
         }
-        var badge = cartLink.querySelector('.cart-badge');
-        if (count > 0) {
-            if (badge) {
-                badge.textContent = count;
-                badge.setAttribute('aria-label', count + ' items in cart');
-            } else {
-                badge = document.createElement('span');
-                badge.className = 'cart-badge';
-                badge.setAttribute('aria-label', count + ' items in cart');
-                badge.textContent = count;
-                cartLink.appendChild(badge);
+        cartLinks.forEach(function(cartLink) {
+            var badge = cartLink.querySelector('.cart-badge');
+            if (count > 0) {
+                if (badge) {
+                    badge.textContent = count;
+                    badge.setAttribute('aria-label', count + ' items in cart');
+                } else {
+                    badge = document.createElement('span');
+                    badge.className = 'cart-badge';
+                    badge.setAttribute('aria-label', count + ' items in cart');
+                    badge.textContent = count;
+                    cartLink.appendChild(badge);
+                }
+            } else if (badge) {
+                badge.parentNode.removeChild(badge);
             }
-        } else if (badge) {
-            badge.parentNode.removeChild(badge);
-        }
+        });
     }
 
     document.querySelectorAll('.catalog-quickadd').forEach(function(form) {
@@ -476,13 +620,26 @@ require __DIR__ . '/../includes/ui.head.php';
     var input = document.getElementById('catalog-search-input');
     var clearBtn = document.getElementById('catalog-search-clear');
     var emptyState = document.getElementById('catalog-empty');
-    var panel = document.getElementById('catalog-suggestions');
+    var emptyTitle = document.getElementById('catalog-empty-title');
+    var suggestionPanel = document.getElementById('catalog-suggestions');
+    var filterModal = document.getElementById('catalog-filter-modal');
+    var filterTrigger = document.getElementById('catalog-filter-trigger');
+    var filterCount = document.getElementById('catalog-filter-count');
+    var searchForm = document.getElementById('catalog-search-form');
+    var filterForm = document.getElementById('catalog-filter-form');
+    var filterReset = document.getElementById('catalog-filter-reset');
 
     if (!input) {
         return;
     }
 
     var cards = Array.prototype.slice.call(document.querySelectorAll('.catalog-card'));
+    var appliedFilters = {
+        category: [],
+        size: [],
+        color: []
+    };
+    var lastFocusedElement = null;
 
     // One data source: unique product names taken from the grid cards themselves.
     var names = [];
@@ -508,6 +665,16 @@ require __DIR__ . '/../includes/ui.head.php';
     var pointerMoved = false;
     var trackedPointerId = null;
 
+    function matchesText(searchable, terms) {
+        searchable = searchable.toLowerCase();
+        for (var i = 0; i < terms.length; i++) {
+            if (searchable.indexOf(terms[i]) === -1) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     function matchesCard(card, terms) {
         var searchable = [
             card.getAttribute('data-name') || '',
@@ -515,13 +682,55 @@ require __DIR__ . '/../includes/ui.head.php';
             card.getAttribute('data-color') || '',
             card.getAttribute('data-size') || '',
             card.getAttribute('data-description') || ''
-        ].join(' ').toLowerCase();
-        for (var i = 0; i < terms.length; i++) {
-            if (searchable.indexOf(terms[i]) === -1) {
+        ].join(' ');
+        return matchesText(searchable, terms);
+    }
+
+    function matchesAppliedFilters(card) {
+        var filterAttributes = {
+            category: 'data-category',
+            size: 'data-size',
+            color: 'data-color-filter'
+        };
+        var groups = Object.keys(appliedFilters);
+
+        for (var i = 0; i < groups.length; i++) {
+            var group = groups[i];
+            var selectedValues = appliedFilters[group];
+            if (selectedValues.length === 0) {
+                continue;
+            }
+            var cardValue = (card.getAttribute(filterAttributes[group]) || '').trim();
+            if (selectedValues.indexOf(cardValue) === -1) {
                 return false;
             }
         }
         return true;
+    }
+
+    function hasAppliedFilters() {
+        return Object.keys(appliedFilters).some(function(group) {
+            return appliedFilters[group].length > 0;
+        });
+    }
+
+    function selectedFilterCount() {
+        return Object.keys(appliedFilters).reduce(function(total, group) {
+            return total + appliedFilters[group].length;
+        }, 0);
+    }
+
+    function updateFilterIndicator() {
+        if (!filterCount || !filterTrigger) {
+            return;
+        }
+        var count = selectedFilterCount();
+        filterCount.hidden = count === 0;
+        filterCount.textContent = count;
+        filterTrigger.classList.toggle('has-filters', count > 0);
+        filterTrigger.setAttribute('aria-label', count > 0
+            ? 'Filter products, ' + count + ' filters applied'
+            : 'Filter products');
     }
 
     function setActive(index) {
@@ -543,9 +752,9 @@ require __DIR__ . '/../includes/ui.head.php';
     }
 
     function hideSuggestions() {
-        if (panel) {
-            panel.hidden = true;
-            panel.innerHTML = '';
+        if (suggestionPanel) {
+            suggestionPanel.hidden = true;
+            suggestionPanel.innerHTML = '';
         }
         items = [];
         activeIndex = -1;
@@ -555,11 +764,11 @@ require __DIR__ . '/../includes/ui.head.php';
 
     function renderSuggestions(terms) {
         hideSuggestions();
-        if (!panel || terms.length === 0) {
+        if (!suggestionPanel || terms.length === 0) {
             return;
         }
         names.forEach(function(name, i) {
-            if (!matchesCard({getAttribute: function() { return name; }}, terms)) {
+            if (!matchesText(name, terms)) {
                 return;
             }
             var item = document.createElement('button');
@@ -605,11 +814,11 @@ require __DIR__ . '/../includes/ui.head.php';
                     pointerMoved = false;
                 }
             });
-            panel.appendChild(item);
+            suggestionPanel.appendChild(item);
             items.push(item);
         });
         if (items.length > 0) {
-            panel.hidden = false;
+            suggestionPanel.hidden = false;
             input.setAttribute('aria-expanded', 'true');
         }
     }
@@ -625,10 +834,12 @@ require __DIR__ . '/../includes/ui.head.php';
             return term !== '';
         });
         var hasQuery = terms.length > 0;
+        var hasFilters = hasAppliedFilters();
         var visible = 0;
 
         cards.forEach(function(card) {
-            var show = !hasQuery || matchesCard(card, terms);
+            var matchesQuery = !hasQuery || matchesCard(card, terms);
+            var show = matchesQuery && matchesAppliedFilters(card);
             card.hidden = !show;
             if (show) {
                 visible++;
@@ -639,11 +850,15 @@ require __DIR__ . '/../includes/ui.head.php';
             clearBtn.hidden = !hasQuery;
         }
         if (emptyState) {
-            if (hasQuery && visible === 0) {
-                var queryText = input.value.trim();
-                var emptyTitle = document.getElementById('catalog-empty-title');
+            if ((hasQuery || hasFilters) && visible === 0) {
                 if (emptyTitle) {
-                    emptyTitle.textContent = 'No products found for "' + queryText + '".';
+                    if (hasQuery && hasFilters) {
+                        emptyTitle.textContent = 'No products match your search and filters.';
+                    } else if (hasQuery) {
+                        emptyTitle.textContent = 'No products found for "' + input.value.trim() + '".';
+                    } else {
+                        emptyTitle.textContent = 'No products match these filters.';
+                    }
                 }
                 emptyState.hidden = false;
             } else {
@@ -658,6 +873,94 @@ require __DIR__ . '/../includes/ui.head.php';
         }
     }
 
+    function readDraftFilters() {
+        var nextFilters = {
+            category: [],
+            size: [],
+            color: []
+        };
+
+        if (!filterForm) {
+            return nextFilters;
+        }
+
+        filterForm.querySelectorAll('input[data-filter-group]:checked').forEach(function(checkbox) {
+            var group = checkbox.getAttribute('data-filter-group');
+            if (nextFilters[group]) {
+                nextFilters[group].push(checkbox.value);
+            }
+        });
+
+        return nextFilters;
+    }
+
+    function syncDraftFilters() {
+        if (!filterForm) {
+            return;
+        }
+        filterForm.querySelectorAll('input[data-filter-group]').forEach(function(checkbox) {
+            var group = checkbox.getAttribute('data-filter-group');
+            checkbox.checked = !!appliedFilters[group] && appliedFilters[group].indexOf(checkbox.value) !== -1;
+        });
+    }
+
+    function collapseOptionGroups() {
+        if (!filterForm) {
+            return;
+        }
+        filterForm.querySelectorAll('[data-filter-options-group]').forEach(function(group) {
+            group.querySelectorAll('[data-filter-extra]').forEach(function(option) {
+                option.hidden = true;
+            });
+            var toggle = group.querySelector('[data-filter-show-more]');
+            if (toggle) {
+                toggle.textContent = 'Show More';
+                toggle.setAttribute('aria-expanded', 'false');
+            }
+        });
+    }
+
+    function openFilterModal() {
+        if (!filterModal || !filterTrigger) {
+            return;
+        }
+        hideSuggestions();
+        syncDraftFilters();
+        lastFocusedElement = filterTrigger;
+        filterModal.hidden = false;
+        filterTrigger.setAttribute('aria-expanded', 'true');
+        document.body.classList.add('is-modal-open');
+        var closeButton = filterModal.querySelector('.catalog-filter-modal__close');
+        if (closeButton) {
+            closeButton.focus();
+        }
+    }
+
+    function closeFilterModal(restoreFocus) {
+        if (!filterModal || filterModal.hidden) {
+            return;
+        }
+        filterModal.hidden = true;
+        document.body.classList.remove('is-modal-open');
+        if (filterTrigger) {
+            filterTrigger.setAttribute('aria-expanded', 'false');
+        }
+        if (restoreFocus && lastFocusedElement && typeof lastFocusedElement.focus === 'function') {
+            lastFocusedElement.focus();
+        }
+    }
+
+    function getModalFocusableElements() {
+        if (!filterModal) {
+            return [];
+        }
+        return Array.prototype.slice.call(filterModal.querySelectorAll(
+            'button:not([disabled]), input:not([disabled]), [href], [tabindex]:not([tabindex="-1"])'
+        )).filter(function(element) {
+            return !element.closest('[hidden]');
+        });
+    }
+
     if (clearBtn) {
         clearBtn.addEventListener('click', function() {
             input.value = '';
@@ -669,6 +972,14 @@ require __DIR__ . '/../includes/ui.head.php';
     input.addEventListener('input', function() {
         applySearch(false);
     });
+
+    if (searchForm) {
+        searchForm.addEventListener('submit', function(e) {
+            // Keep in-memory filters active when Enter submits the search field.
+            e.preventDefault();
+            applySearch(true);
+        });
+    }
 
     input.addEventListener('keydown', function(e) {
         if (items.length === 0) {
@@ -692,7 +1003,91 @@ require __DIR__ . '/../includes/ui.head.php';
         setTimeout(hideSuggestions, 120);
     });
 
+    if (filterTrigger) {
+        filterTrigger.addEventListener('click', openFilterModal);
+    }
+
+    if (filterModal) {
+        filterModal.querySelectorAll('[data-filter-close]').forEach(function(control) {
+            control.addEventListener('click', function() {
+                closeFilterModal(true);
+            });
+        });
+    }
+
+    if (filterForm) {
+        filterForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            appliedFilters = readDraftFilters();
+            updateFilterIndicator();
+            applySearch(true);
+            closeFilterModal(true);
+        });
+
+        filterForm.querySelectorAll('[data-filter-show-more]').forEach(function(toggle) {
+            toggle.addEventListener('click', function() {
+                var group = toggle.closest('[data-filter-options-group]');
+                if (!group) {
+                    return;
+                }
+                var expand = toggle.getAttribute('aria-expanded') !== 'true';
+                group.querySelectorAll('[data-filter-extra]').forEach(function(option) {
+                    option.hidden = !expand;
+                });
+                toggle.textContent = expand ? 'Show Less' : 'Show More';
+                toggle.setAttribute('aria-expanded', expand ? 'true' : 'false');
+            });
+        });
+    }
+
+    if (filterReset) {
+        filterReset.addEventListener('click', function() {
+            appliedFilters = {
+                category: [],
+                size: [],
+                color: []
+            };
+            input.value = '';
+            if (filterForm) {
+                filterForm.reset();
+            }
+            collapseOptionGroups();
+            updateFilterIndicator();
+            applySearch(true);
+            closeFilterModal(true);
+        });
+    }
+
+    document.addEventListener('keydown', function(e) {
+        if (!filterModal || filterModal.hidden) {
+            return;
+        }
+        if (e.key === 'Escape') {
+            e.preventDefault();
+            closeFilterModal(true);
+            return;
+        }
+        if (e.key !== 'Tab') {
+            return;
+        }
+        var focusable = getModalFocusableElements();
+        if (focusable.length === 0) {
+            e.preventDefault();
+            return;
+        }
+        var first = focusable[0];
+        var last = focusable[focusable.length - 1];
+        if (e.shiftKey && document.activeElement === first) {
+            e.preventDefault();
+            last.focus();
+        } else if (!e.shiftKey && document.activeElement === last) {
+            e.preventDefault();
+            first.focus();
+        }
+    });
+
     // Keep the server-rendered query in sync with the live controls on first paint.
+    updateFilterIndicator();
     applySearch(true);
 })();
 </script>

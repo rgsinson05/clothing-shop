@@ -11,7 +11,83 @@ $footer_prefix = isset($ui_section) && $ui_section === 'admin'
 // up from /customer or /admin to reach them.
 $footer_root = $footer_prefix === 'customer/' ? '' : '../';
 
+$ui_is_admin = isset($ui_section) && $ui_section === 'admin';
+
 ?>
+<?php if ($ui_is_admin): ?>
+                </div><!-- .admin-content__inner -->
+            </main>
+        </div><!-- .admin-main -->
+    </div><!-- .admin-shell -->
+
+    <script src="<?= hopia_e(hopia_asset('js/admin-notifications.js')) ?>" defer></script>
+
+    <script>
+        /* Admin sidebar drawer. On desktop the sidebar is a permanent fixed
+           column; below the breakpoint it becomes an off-canvas drawer toggled
+           from the mobile top bar. Progressive enhancement only. */
+        (function () {
+            var shell = document.getElementById('admin-shell');
+            if (!shell) {
+                return;
+            }
+            var toggle = shell.querySelector('[data-admin-nav-toggle]');
+            var backdrop = shell.querySelector('[data-admin-nav-close]');
+            var sidebar = document.getElementById('admin-sidebar');
+            var desktop = window.matchMedia('(min-width: 1024px)');
+
+            function openNav() {
+                shell.classList.add('is-nav-open');
+                if (toggle) { toggle.setAttribute('aria-expanded', 'true'); }
+                if (backdrop) { backdrop.hidden = false; }
+                document.body.classList.add('admin-nav-open');
+            }
+
+            function closeNav() {
+                shell.classList.remove('is-nav-open');
+                if (toggle) { toggle.setAttribute('aria-expanded', 'false'); }
+                if (backdrop) { backdrop.hidden = true; }
+                document.body.classList.remove('admin-nav-open');
+            }
+
+            if (toggle) {
+                toggle.addEventListener('click', function () {
+                    if (shell.classList.contains('is-nav-open')) {
+                        closeNav();
+                    } else {
+                        openNav();
+                    }
+                });
+            }
+
+            if (backdrop) {
+                backdrop.addEventListener('click', closeNav);
+            }
+
+            // Choosing a destination in the drawer closes it (mobile only).
+            if (sidebar) {
+                sidebar.addEventListener('click', function (event) {
+                    var link = event.target.closest('a');
+                    if (link && !desktop.matches) {
+                        closeNav();
+                    }
+                });
+            }
+
+            document.addEventListener('keydown', function (event) {
+                if (event.key === 'Escape') {
+                    closeNav();
+                }
+            });
+
+            desktop.addEventListener('change', function (event) {
+                if (event.matches) {
+                    closeNav();
+                }
+            });
+        })();
+    </script>
+<?php else: ?>
         </div>
     </main>
 
@@ -123,6 +199,7 @@ $footer_root = $footer_prefix === 'customer/' ? '' : '../';
             });
         })();
     </script>
+<?php endif; ?>
 
     <script>
         /* Global page transition: fade the current page out on normal internal

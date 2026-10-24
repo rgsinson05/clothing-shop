@@ -99,7 +99,7 @@ try {
     $pdo->beginTransaction();
 
     $lockStmt = $pdo->prepare(
-        'SELECT status, cancellation_status
+        'SELECT status, cancellation_status, pickup_status
          FROM orders
          WHERE id = :order_id
            AND customer_id = :customer_id
@@ -118,11 +118,17 @@ try {
         $lockedOrder === false
         || $lockedOrder['status'] !== 'PENDING'
         || $lockedOrder['cancellation_status'] !== 'NONE'
+        || $lockedOrder['pickup_status'] === 'PICKED_UP'
     ) {
         /*
          * Unknown order, another customer's order, or an order
          * that is not in a requestable state. All of these
          * cases share the same generic failure response.
+         *
+         * pickup_status = 'PICKED_UP' (Phase 3 Store Pickup): the
+         * goods were already handed over at the store, so the
+         * order is no longer cancellable even though its courier
+         * status stays PENDING throughout the pickup lifecycle.
          */
 
         throw new RuntimeException('This cancellation request cannot be processed.');
@@ -143,7 +149,8 @@ try {
          WHERE id = :order_id
            AND customer_id = :customer_id
            AND status = 'PENDING'
-           AND cancellation_status = 'NONE'"
+           AND cancellation_status = 'NONE'
+           AND (pickup_status IS NULL OR pickup_status <> 'PICKED_UP')"
     );
 
     $updateStmt->execute([

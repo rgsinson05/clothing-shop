@@ -11,6 +11,15 @@ Thumbs.db
 # Logs
 *.log
 
+# Private payment-proof uploads (Phase 2). Keep the directory and its
+# protection in git, but never commit the uploaded financial screenshots.
+/storage/payment_proofs/*
+!/storage/payment_proofs/.htaccess
+!/storage/payment_proofs/.gitkeep
+
 
 
 clothing_shop_backup.sql
+
+# Database backup artifacts, never migration source.
+/database/backup_*.sql

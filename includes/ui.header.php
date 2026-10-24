@@ -6,6 +6,11 @@
 //   $body_class    : extra class(es) for the <body>
 //   $ui_path_prefix: prefix for store links when rendered outside /customer
 //   $ui_brand_href : optional brand URL override
+//
+// Admin pages render a dedicated dark-slate left sidebar shell (fixed on
+// desktop, a drawer on mobile). The customer storefront keeps its original
+// top navigation. Both share this one file so the brand, logo, and routes
+// stay consistent across every admin page.
 
 require_once __DIR__ . '/ui.php';
 
@@ -77,6 +82,89 @@ function hopia_nav_icon(array $icons, string $name): void
     }
 }
 
+if (!function_exists('hopia_admin_icon')) {
+    // Line-art icons for the admin sidebar. Trusted static inline SVG (no user
+    // input); stroke inherits currentColor so the active/hover states colour
+    // the icon with the nav text. Returns '' for an unknown key.
+    function hopia_admin_icon(string $name): string
+    {
+        $paths = [
+            // Dashboard - 2x2 panel grid.
+            'dashboard' =>
+                '<rect x="3.5" y="3.5" width="7" height="7" rx="1.3"/>'
+                . '<rect x="13.5" y="3.5" width="7" height="4.5" rx="1.3"/>'
+                . '<rect x="13.5" y="11.5" width="7" height="9" rx="1.3"/>'
+                . '<rect x="3.5" y="13.5" width="7" height="7" rx="1.3"/>',
+            // Products - price tag.
+            'products' =>
+                '<path d="M4 4h6.2a2 2 0 0 1 1.4.6l8 8a2 2 0 0 1 0 2.8l-5.6 5.6a2 2 0 0 1-2.8 0l-8-8A2 2 0 0 1 2.6 11.6L2 5.5"/>'
+                . '<circle cx="7.5" cy="7.5" r="1.3"/>',
+            // Bundles - stacked layers.
+            'bundles' =>
+                '<path d="m12 3 9 5-9 5-9-5 9-5Z"/>'
+                . '<path d="m3 12 9 5 9-5"/>'
+                . '<path d="m3 16.5 9 5 9-5"/>',
+            // Legacy assignment - archive box with a down arrow.
+            'legacy' =>
+                '<rect x="3.5" y="4" width="17" height="4.5" rx="1"/>'
+                . '<path d="M5 8.5h14V19a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 5 19V8.5Z"/>'
+                . '<path d="M10 12h4"/>',
+            // Barcode labels.
+            'barcode' =>
+                '<path d="M4 5v14M7 5v14M10.5 5v14M14 5v14M17 5v14M20 5v14"/>',
+            // Walk-in sale - cash register / point of sale.
+            'register' =>
+                '<rect x="3.5" y="9" width="17" height="11" rx="1.5"/>'
+                . '<path d="M6.5 9V6.5A1.5 1.5 0 0 1 8 5h5a1.5 1.5 0 0 1 1.5 1.5V9"/>'
+                . '<path d="M7.5 13h3M14 13h2.5M7.5 16.5h9"/>',
+            // Sales monitoring - bar chart.
+            'chart' =>
+                '<path d="M4 20V4"/>'
+                . '<path d="M4 20h16"/>'
+                . '<rect x="7.5" y="12" width="3" height="5"/>'
+                . '<rect x="12.5" y="8.5" width="3" height="8.5"/>'
+                . '<rect x="17.5" y="14" width="0.01" height="3"/>'
+                . '<path d="M8 9.5l3.5-3 3 2 3.5-4"/>',
+            // Orders - shopping bag.
+            'orders' =>
+                '<path d="M6 8h12l1 12.5H5L6 8Z"/>'
+                . '<path d="M9 8V6.5a3 3 0 0 1 6 0V8"/>',
+            'bell' =>
+                '<path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4"/>',
+            // Verify items - clipboard with a check.
+            'verify' =>
+                '<rect x="5" y="4.5" width="14" height="16" rx="1.5"/>'
+                . '<path d="M9 4.5V3.6A1.1 1.1 0 0 1 10.1 2.5h3.8A1.1 1.1 0 0 1 15 3.6v.9"/>'
+                . '<path d="m8.8 13 2.2 2.2 4.2-4.4"/>',
+            // Store Pickup - storefront with a collection check.
+            'pickup' =>
+                '<path d="M4 10.5V20h16v-9.5"/>'
+                . '<path d="M3 10.5 4.5 5h15L21 10.5a3 3 0 0 1-6 0 3 3 0 0 1-6 0 3 3 0 0 1-6 0Z"/>'
+                . '<path d="m9.5 16.5 1.8 1.8 3.4-3.6"/>',
+            // View store - storefront / awning.
+            'store' =>
+                '<path d="M4 10.5V20h16v-9.5"/>'
+                . '<path d="M3 10.5 4.5 5h15L21 10.5a3 3 0 0 1-6 0 3 3 0 0 1-6 0 3 3 0 0 1-6 0Z"/>'
+                . '<path d="M10 20v-4.5h4V20"/>',
+            // Logout - door with exit arrow.
+            'logout' =>
+                '<path d="M15 4h2.5A1.5 1.5 0 0 1 19 5.5v13a1.5 1.5 0 0 1-1.5 1.5H15"/>'
+                . '<path d="M10 16.5 14.5 12 10 7.5"/>'
+                . '<path d="M14.5 12H3.5"/>',
+        ];
+
+        if (!isset($paths[$name])) {
+            return '';
+        }
+
+        return '<svg class="admin-nav__glyph" viewBox="0 0 24 24" width="18" height="18"'
+            . ' fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"'
+            . ' stroke-linejoin="round" aria-hidden="true" focusable="false">'
+            . $paths[$name]
+            . '</svg>';
+    }
+}
+
 $ui_section = isset($ui_section) && $ui_section === 'admin' ? 'admin' : 'store';
 $ui_active = isset($ui_active) ? (string) $ui_active : '';
 $body_class = isset($body_class) ? (string) $body_class : '';
@@ -84,6 +172,10 @@ $ui_path_prefix = isset($ui_path_prefix) ? (string) $ui_path_prefix : '';
 $ui_brand_href_override = isset($ui_brand_href) ? (string) $ui_brand_href : '';
 
 $ui_script = isset($_SERVER['SCRIPT_NAME']) ? basename((string) $_SERVER['SCRIPT_NAME']) : '';
+
+if ($ui_section === 'store' && !empty($_SESSION['customer_id']) && empty($_SESSION['csrf_token'])) {
+    $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+}
 
 $ui_cart_count = 0;
 if (!empty($_SESSION['customer_id']) && isset($pdo)) {
@@ -102,12 +194,54 @@ if ($ui_section === 'admin') {
     $ui_logged_in = !empty($_SESSION['admin_id']);
     $ui_user_name = isset($_SESSION['admin_name']) ? (string) $_SESSION['admin_name'] : '';
     $ui_brand_href = 'index.php';
-    $ui_brand_label = hopia_site_name() . ' - Admin';
-    $ui_nav = [
-        ['url' => 'index.php', 'label' => 'Dashboard'],
-        ['url' => 'products.php', 'label' => 'Products'],
-        ['url' => 'orders.php', 'label' => 'Orders'],
+    $ui_brand_label = 'Hopia Fits';
+
+    // Grouped admin navigation. Every URL is a real existing admin route.
+    $ui_admin_nav = [
+        'OVERVIEW' => [
+            ['url' => 'index.php', 'label' => 'Dashboard', 'icon' => 'dashboard'],
+        ],
+        'INVENTORY' => [
+            ['url' => 'products.php', 'label' => 'Products', 'icon' => 'products'],
+            ['url' => 'bundles.php', 'label' => 'Bundles & Profitability', 'icon' => 'bundles'],
+            ['url' => 'legacy-assign.php', 'label' => 'Legacy Inventory Assignment', 'icon' => 'legacy'],
+            ['url' => 'labels.php', 'label' => 'Barcode Labels', 'icon' => 'barcode'],
+        ],
+        'SALES' => [
+            ['url' => 'scan.php', 'label' => 'Walk-in Sale', 'icon' => 'register'],
+            ['url' => 'sales.php', 'label' => 'Sales Monitoring', 'icon' => 'chart'],
+        ],
+        'ONLINE ORDERS' => [
+            ['url' => 'orders.php', 'label' => 'Orders', 'icon' => 'orders'],
+            ['url' => 'notifications.php', 'label' => 'Notifications', 'icon' => 'bell'],
+            ['url' => 'order-verify.php', 'label' => 'Scan Online Orders', 'icon' => 'verify'],
+        ],
+        'PICK-UP ORDERS' => [
+            ['url' => 'pickups.php', 'label' => 'Store Pickup', 'icon' => 'pickup'],
+            // Dedicated Store Pickup barcode-verification destination. It is
+            // separate from the courier scanner (admin/order-verify.php) and
+            // gates ORDER_RECEIVED -> PREPARING on every item being verified.
+            ['url' => 'pickup-verify.php', 'label' => 'Scan Pickup Orders', 'icon' => 'verify'],
+        ],
     ];
+
+    // Compact initials for the sidebar footer identity badge.
+    $ui_admin_initials = '';
+    $ui_name_parts = preg_split('/\s+/', trim($ui_user_name));
+    if ($ui_name_parts && $ui_name_parts[0] !== '') {
+        $first = $ui_name_parts[0];
+        $last = count($ui_name_parts) > 1 ? $ui_name_parts[count($ui_name_parts) - 1] : '';
+        $slice = function ($value) {
+            return function_exists('mb_substr') ? mb_substr($value, 0, 1, 'UTF-8') : substr($value, 0, 1);
+        };
+        $upper = function ($value) {
+            return function_exists('mb_strtoupper') ? mb_strtoupper($value, 'UTF-8') : strtoupper($value);
+        };
+        $ui_admin_initials = $upper($slice($first) . ($last !== '' ? $slice($last) : ''));
+    }
+    if ($ui_admin_initials === '') {
+        $ui_admin_initials = 'HF';
+    }
 } else {
     $ui_logged_in = !empty($_SESSION['customer_id']);
     $ui_user_name = isset($_SESSION['customer_name']) ? (string) $_SESSION['customer_name'] : '';
@@ -126,10 +260,91 @@ if ($ui_section === 'admin') {
 ?>
 <body class="<?= hopia_e(trim('ui-' . $ui_section . ' ' . $body_class)) ?>">
     <a class="sr-only" href="#site-main">Skip to content</a>
+<?php if ($ui_section === 'admin'): ?>
+    <?php
+    $ui_admin_logo = hopia_asset('assets/videos/pictures/Hopia-fits-logo.webp');
+    ?>
+    <div class="admin-shell" id="admin-shell">
+        <button class="admin-shell__backdrop no-print" type="button" data-admin-nav-close aria-label="Close navigation" hidden></button>
+
+        <aside class="admin-sidebar no-print" id="admin-sidebar">
+            <a class="admin-sidebar__brand" href="<?= hopia_e($ui_brand_href) ?>">
+                <img class="admin-sidebar__logo" src="<?= hopia_e($ui_admin_logo) ?>" alt="Hopia Fits" width="40" height="40">
+                <span class="admin-sidebar__brand-text">
+                    <span class="admin-sidebar__brand-name"><?= hopia_e($ui_brand_label) ?></span>
+                    <span class="admin-sidebar__brand-sub">Admin Console</span>
+                </span>
+            </a>
+
+            <nav class="admin-sidebar__nav" aria-label="Admin navigation">
+                <?php foreach ($ui_admin_nav as $ui_group => $ui_group_items): ?>
+                    <p class="admin-nav__group"><?= hopia_e($ui_group) ?></p>
+                    <ul class="admin-nav__list">
+                        <?php foreach ($ui_group_items as $ui_item): ?>
+                            <?php
+                            $ui_current = $ui_active !== ''
+                                ? ($ui_active === $ui_item['url'])
+                                : ($ui_script === $ui_item['url']);
+                            ?>
+                            <li>
+                                <a class="admin-nav__link<?= $ui_current ? ' is-active' : '' ?>" href="<?= hopia_e($ui_item['url']) ?>"<?= $ui_current ? ' aria-current="page"' : '' ?>>
+                                    <span class="admin-nav__icon"><?= hopia_admin_icon($ui_item['icon']) ?></span>
+                                    <span class="admin-nav__label"><?= hopia_e($ui_item['label']) ?></span>
+                                </a>
+                            </li>
+                        <?php endforeach; ?>
+                    </ul>
+                <?php endforeach; ?>
+            </nav>
+
+            <div class="admin-sidebar__footer">
+                <a class="admin-sidebar__link" href="../customer/products.php">
+                    <span class="admin-nav__icon"><?= hopia_admin_icon('store') ?></span>
+                    <span class="admin-nav__label">View Store</span>
+                </a>
+                <?php if ($ui_user_name !== ''): ?>
+                    <div class="admin-sidebar__identity">
+                        <span class="admin-sidebar__avatar" aria-hidden="true"><?= hopia_e($ui_admin_initials) ?></span>
+                        <span class="admin-sidebar__identity-text">
+                            <span class="admin-sidebar__identity-name"><?= hopia_e($ui_user_name) ?></span>
+                            <span class="admin-sidebar__identity-role">Administrator</span>
+                        </span>
+                    </div>
+                <?php endif; ?>
+                <a class="admin-sidebar__link admin-sidebar__link--logout" href="logout.php">
+                    <span class="admin-nav__icon"><?= hopia_admin_icon('logout') ?></span>
+                    <span class="admin-nav__label">Logout</span>
+                </a>
+            </div>
+        </aside>
+
+        <div class="admin-main">
+            <header class="admin-topbar admin-topbar--notifications no-print">
+                <button class="admin-topbar__toggle" type="button" aria-expanded="false" aria-controls="admin-sidebar" data-admin-nav-toggle>
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+                        <line x1="4" y1="7" x2="20" y2="7"></line>
+                        <line x1="4" y1="12" x2="20" y2="12"></line>
+                        <line x1="4" y1="17" x2="20" y2="17"></line>
+                    </svg>
+                    <span class="sr-only">Toggle navigation</span>
+                </button>
+                <a class="admin-topbar__brand" href="<?= hopia_e($ui_brand_href) ?>">
+                    <img class="admin-topbar__logo" src="<?= hopia_e($ui_admin_logo) ?>" alt="" width="30" height="30">
+                    <span><?= hopia_e($ui_brand_label) ?></span>
+                </a>
+                <div class="admin-topbar__utilities">
+                    <?php require __DIR__ . '/ui.admin-theme-toggle.php'; ?>
+                    <?php require __DIR__ . '/ui.admin-notifications.php'; ?>
+                </div>
+            </header>
+
+            <main id="site-main" class="admin-content">
+                <div class="admin-content__inner">
+                    <?php require __DIR__ . '/ui.admin-success.php'; ?>
+<?php else: ?>
     <header class="site-header">
         <div class="container site-header__inner">
             <a class="brand" href="<?= hopia_e($ui_brand_href) ?>"><img class="brand__logo" src="<?= hopia_e(hopia_asset('assets/videos/pictures/Hopia-fits-logo.webp')) ?>" alt="" width="43" height="43"><span class="brand__text"><?= hopia_e($ui_brand_label) ?></span></a>
-            <?php if ($ui_section !== 'admin'): ?>
                 <div class="site-header__mobile-tools">
                     <a class="header-search-toggle" href="<?= hopia_e($ui_path_prefix) ?>products.php?focus=1">
                         <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true">
@@ -150,6 +365,12 @@ if ($ui_section === 'admin') {
                         <?php endif; ?>
                         <span class="sr-only">Cart</span>
                     </a>
+                    <?php if ($ui_logged_in): ?>
+                        <button class="header-icon customer-notifications__bell" type="button" data-customer-notification-bell aria-label="Notifications" aria-expanded="false" aria-controls="customer-notifications" hidden>
+                            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"></path><path d="M10 21h4"></path></svg>
+                            <span class="customer-notifications__badge" data-notification-badge aria-hidden="true" hidden></span>
+                        </button>
+                    <?php endif; ?>
                     <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="site-nav">
                     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
                         <line x1="4" y1="7" x2="20" y2="7"></line>
@@ -159,22 +380,7 @@ if ($ui_section === 'admin') {
                     <span class="sr-only">Menu</span>
                     </button>
                 </div>
-            <?php endif; ?>
 
-            <?php if ($ui_section === 'admin'): ?>
-                <nav class="site-nav" id="site-nav" aria-label="Primary">
-                    <ul class="nav">
-                        <?php foreach ($ui_nav as $ui_item): ?>
-                            <?php
-                            $ui_current = $ui_active !== ''
-                                ? ($ui_active === ($ui_item['active'] ?? $ui_item['url']))
-                                : ($ui_script === ($ui_item['active'] ?? $ui_item['url']));
-                            ?>
-                            <li><a href="<?= hopia_e($ui_item['url']) ?>"<?= $ui_current ? ' aria-current="page"' : '' ?>><?= hopia_e($ui_item['label']) ?></a></li>
-                        <?php endforeach; ?>
-                    </ul>
-                </nav>
-            <?php else: ?>
                 <nav class="site-nav" id="site-nav" aria-label="Primary">
                     <ul class="nav">
                         <?php $ui_shop_current = ($ui_active !== '' ? $ui_active : $ui_script) === 'products.php'; ?>
@@ -239,16 +445,8 @@ if ($ui_section === 'admin') {
                     </svg>
                     <span class="sr-only">Search products</span>
                 </a>
-            <?php endif; ?>
 
             <div class="site-header__actions">
-                <?php if ($ui_section === 'admin'): ?>
-                    <a class="link-subtle" href="../customer/products.php">View Store</a>
-                    <?php if ($ui_user_name !== ''): ?>
-                        <span class="site-header__user"><?= hopia_e($ui_user_name) ?></span>
-                    <?php endif; ?>
-                    <a class="btn btn-ghost btn-sm" href="logout.php">Logout</a>
-                <?php else: ?>
                     <div class="header-account">
                         <button class="header-icon header-account__toggle" type="button" aria-expanded="false" aria-controls="header-account-menu" aria-label="Account">
                             <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -281,12 +479,21 @@ if ($ui_section === 'admin') {
                         <?php endif; ?>
                         <span class="sr-only">Cart</span>
                     </a>
-                <?php endif; ?>
+                    <?php if ($ui_logged_in): ?>
+                        <button class="header-icon customer-notifications__bell" type="button" data-customer-notification-bell aria-label="Notifications" aria-expanded="false" aria-controls="customer-notifications" hidden>
+                            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"></path><path d="M10 21h4"></path></svg>
+                            <span class="customer-notifications__badge" data-notification-badge aria-hidden="true" hidden></span>
+                        </button>
+                    <?php endif; ?>
             </div>
         </div>
     </header>
 
-    <?php if ($ui_section !== 'admin' && $ui_logged_in): ?>
+    <?php if ($ui_logged_in): ?>
+        <?php require __DIR__ . '/ui.customer-notifications.php'; ?>
+    <?php endif; ?>
+
+    <?php if ($ui_logged_in): ?>
         <div class="logout-confirm" id="logout-confirm" role="dialog" aria-modal="true" aria-labelledby="logout-confirm-title" hidden>
             <div class="logout-confirm__backdrop" data-logout-cancel></div>
             <div class="logout-confirm__panel" role="document">
@@ -365,7 +572,6 @@ if ($ui_section === 'admin') {
         </script>
     <?php endif; ?>
 
-    <?php if ($ui_section !== 'admin'): ?>
         <script>
             (function () {
                 var header = document.querySelector('.site-header');
@@ -439,8 +645,7 @@ if ($ui_section === 'admin') {
                 });
             })();
         </script>
-    <?php endif; ?>
 
     <main id="site-main" class="site-main">
         <div class="container">
-            
+<?php endif; ?>

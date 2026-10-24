@@ -3,6 +3,10 @@
 session_start();
 
 require_once __DIR__ . '/../includes/database.php';
+require_once __DIR__ . '/../includes/shipping.php';
+require_once __DIR__ . '/../includes/gcash.php';
+require_once __DIR__ . '/../includes/payment.php';
+require_once __DIR__ . '/../includes/admin_notifications.php';
 
 if (!isset($_SESSION['customer_id'])) {
     header('Location: login.php');
@@ -10,6 +14,16 @@ if (!isset($_SESSION['customer_id'])) {
 }
 
 $customerId = (int) $_SESSION['customer_id'];
+
+/*
+ * GCash availability. GCash is only ever offered when the shop's real
+ * receiving account is configured (includes/gcash.php reads it from the
+ * environment). When it is not configured the option is withheld entirely
+ * and a GCASH submission is rejected server-side, so a customer can never be
+ * shown a placeholder/misleading destination.
+ */
+$gcashConfig = gcash_config();
+$gcashConfigured = $gcashConfig['configured'];
 
 if (empty($_SESSION['csrf_token'])) {
     $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
@@ -49,23 +63,21 @@ $formValues = [
     'house_unit_building' => '',
     'street' => '',
     'delivery_method' => 'LOCAL_COURIER',
-    'payment_method' => 'COD'
+    'payment_method' => 'COD',
+    'gcash_reference' => ''
 ];
 
 /*
  * Delivery options available at checkout in this phase.
  *
- * LOCAL_COURIER is the only delivery method, so it is always the
- * selected default. The map is deliberately limited to this one
- * value: any other submitted value is rejected server-side instead
- * of being trusted or silently rewritten.
- *
- * Delivery method ONLY. No fee of any kind is stored, calculated,
- * or displayed for these options.
+ * LOCAL_COURIER is the default. STORE_PICKUP hides the delivery
+ * address and charges zero shipping. Any other submitted value is
+ * rejected server-side instead of being trusted or silently
+ * rewritten. The list mirrors shipping_fulfillment_methods().
  */
-$deliveryOptions = [
-    'LOCAL_COURIER' => 'Local Courier',
-];
+$deliveryOptions = shipping_fulfillment_methods();
+
+$pickupDetails = shipping_pickup_details();
 
 /* Load account defaults without changing the customer's saved account. */
 $customerStmt = $pdo->prepare(
@@ -87,18 +99,14 @@ if ($customer !== false) {
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     foreach (array_keys($formValues) as $field) {
         if ($field === 'delivery_method') {
-            /*
-             * Only a value that is actually one of the available
-             * delivery options is accepted. Anything else (including a
-             * missing field) falls back to the single available
-             * option, so a crafted POST cannot inject another method.
-             */
+            // Preserve invalid/missing input as empty so fulfillment validation
+            // rejects it instead of silently creating a Local Courier order.
             $submittedDeliveryMethod = $_POST[$field] ?? '';
 
             $formValues[$field] = is_string($submittedDeliveryMethod)
                 && isset($deliveryOptions[$submittedDeliveryMethod])
                     ? $submittedDeliveryMethod
-                    : 'LOCAL_COURIER';
+                    : '';
 
             continue;
         }
@@ -127,6 +135,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $errors[] = 'Phone number is required.';
     }
 
+    /*
+     * Delivery address fields are required ONLY for Local Courier.
+     * Store Pickup never asks for a delivery address: hidden values
+     * must not bypass validation, and saved addresses are untouched.
+     */
+    $isPickupOrder = $formValues['delivery_method'] === 'STORE_PICKUP';
+
     $requiredAddressFields = [
         'region' => 'Region',
         'province' => 'Province',
@@ -136,9 +151,121 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'street' => 'Street'
     ];
 
-    foreach ($requiredAddressFields as $field => $label) {
-        if ($formValues[$field] === '') {
-            $errors[] = $label . ' is required.';
+    if (!$isPickupOrder) {
+        foreach ($requiredAddressFields as $field => $label) {
+            if ($formValues[$field] === '') {
+                $errors[] = $label . ' is required.';
+            }
+        }
+
+        if (!in_array($formValues['region'], $regionNames, true)) {
+            $errors[] = 'Please select a valid region.';
+        }
+    }
+
+    /*
+     * Resolve the fulfillment method and the authoritative shipping
+     * fee on the server. Client-submitted fees or totals are never
+     * read; the fee below is the only one stored.
+     */
+    $fulfillment = shipping_resolve_fulfillment(
+        $formValues['delivery_method'],
+        $formValues['region']
+    );
+
+    if (!$fulfillment['ok']) {
+        $errors[] = $fulfillment['message'];
+    }
+
+    /*
+     * Payment methods are constrained per fulfillment method. The
+     * submitted value must be one actually offered for the chosen
+     * fulfillment: the cash option (COD for courier, CASH_ON_PICKUP for
+     * pickup) is always allowed, and GCASH is allowed for either
+     * fulfillment ONLY while the shop's GCash account is configured.
+     * Anything else - including a stale value from the other mode or a
+     * GCASH attempt while GCash is unavailable - is rejected.
+     */
+    $cashPayment = $isPickupOrder ? 'CASH_ON_PICKUP' : 'COD';
+    $allowedPayments = [$cashPayment];
+    if ($gcashConfigured) {
+        $allowedPayments[] = 'GCASH';
+    }
+
+    if (!in_array($formValues['payment_method'], $allowedPayments, true)) {
+        if ($formValues['payment_method'] === 'GCASH' && !$gcashConfigured) {
+            $errors[] = 'GCash is currently unavailable. Please choose the cash payment option.';
+        } else {
+            $errors[] = $isPickupOrder
+                ? 'Choose a valid payment method for Store Pickup (Cash on Pickup or GCash).'
+                : 'Choose a valid payment method for Local Courier (Cash on Delivery or GCash).';
+        }
+    }
+
+    /*
+     * GCash submissions must carry BOTH a valid reference number and a valid
+     * payment-proof image before any order record is created. These checks
+     * run before the transaction starts; the same helper rules are applied
+     * again when the proof is moved into private storage. The browser-side
+     * button state is convenience only and is never trusted here.
+     */
+    $isGcashSubmission = $gcashConfigured && $formValues['payment_method'] === 'GCASH';
+    $gcashReference = '';
+    $proofFile = null;
+
+    if ($isGcashSubmission) {
+        $gcashReference = payment_normalize_reference($_POST['gcash_reference'] ?? '');
+        $formValues['gcash_reference'] = $gcashReference;
+
+        if ($gcashReference === '') {
+            $errors[] = payment_message('reference_required');
+        } elseif (!payment_is_valid_reference($gcashReference)) {
+            $errors[] = payment_message('reference_invalid');
+        }
+
+        $proofFile = $_FILES['payment_proof'] ?? null;
+        $proofErrorValue = is_array($proofFile)
+            ? ($proofFile['error'] ?? UPLOAD_ERR_NO_FILE)
+            : UPLOAD_ERR_NO_FILE;
+        $proofError = is_int($proofErrorValue) ? $proofErrorValue : UPLOAD_ERR_NO_FILE;
+        $proofName = is_array($proofFile) && is_string($proofFile['name'] ?? null)
+            ? $proofFile['name']
+            : '';
+
+        if (!is_array($proofFile) || $proofError === UPLOAD_ERR_NO_FILE || $proofName === '') {
+            $errors[] = 'Please upload a screenshot of your GCash payment.';
+        } else {
+            $proofTmp = is_string($proofFile['tmp_name'] ?? null) ? $proofFile['tmp_name'] : '';
+            $proofSize = is_numeric($proofFile['size'] ?? null) ? (int) $proofFile['size'] : 0;
+
+            if ($proofTmp === '' || !is_uploaded_file($proofTmp)) {
+                $errors[] = payment_message(
+                    in_array($proofError, [UPLOAD_ERR_INI_SIZE, UPLOAD_ERR_FORM_SIZE], true)
+                        ? 'proof_too_large'
+                        : 'proof_failed'
+                );
+            } else {
+                $proofCheck = payment_proof_validate(
+                    $proofTmp,
+                    $proofSize,
+                    $proofError
+                );
+
+                if (!$proofCheck['ok']) {
+                    $proofReason = $proofCheck['reason'];
+
+                    /* PHP-level upload limits surface as proof_failed; report
+                     * them as an oversize file so the feedback is accurate. */
+                    if (
+                        $proofReason === 'proof_failed'
+                        && in_array($proofError, [UPLOAD_ERR_INI_SIZE, UPLOAD_ERR_FORM_SIZE], true)
+                    ) {
+                        $proofReason = 'proof_too_large';
+                    }
+
+                    $errors[] = payment_message($proofReason);
+                }
+            }
         }
     }
 
@@ -159,15 +286,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 
-    if (!in_array($formValues['region'], $regionNames, true)) {
-        $errors[] = 'Please select a valid region.';
-    }
-
-    if ($formValues['payment_method'] !== 'COD') {
-        $errors[] = 'Cash on Delivery is the only available payment method in V1.';
-    }
-
     if (count($errors) === 0) {
+        $storedProofPath = null;
+
         try {
             $pdo->beginTransaction();
 
@@ -187,7 +308,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             } else {
                 /* Lock every product in the cart before checking availability or pricing. */
                 $lockedItemsStmt = $pdo->prepare(
-                    'SELECT p.id AS product_id, p.name, p.size, p.color, p.price, p.status
+                    'SELECT p.id AS product_id, p.name, p.size, p.color, p.price, p.status, p.retired_at
                      FROM cart_items ci
                      INNER JOIN products p ON p.id = ci.product_id
                      WHERE ci.cart_id = :cart_id
@@ -201,36 +322,60 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $pdo->rollBack();
                     $errors[] = 'Your cart is empty. Please add an item before checking out.';
                 } else {
-                    $unavailable = false;
-
-                    foreach ($lockedItems as $lockedItem) {
-                        if ($lockedItem['status'] !== 'AVAILABLE') {
-                            $unavailable = true;
-                            break;
-                        }
-                    }
-
-                    if ($unavailable) {
-                        $pdo->rollBack();
-                        $errors[] = 'One or more items in your cart are no longer available. Please return to your cart and review the items.';
-                    } else {
-                        $subtotalCents = 0;
+                        $unavailable = false;
 
                         foreach ($lockedItems as $lockedItem) {
-                            $subtotalCents += (int) round((float) $lockedItem['price'] * 100);
+                            if ($lockedItem['status'] !== 'AVAILABLE') {
+                                $unavailable = true;
+                                break;
+                            }
+                            if (!empty($lockedItem['retired_at'])) {
+                                $unavailable = true;
+                                break;
+                            }
                         }
 
-                        $subtotalAmount = number_format($subtotalCents / 100, 2, '.', '');
-                        $shippingFee = '0.00';
-                        $totalAmount = number_format($subtotalCents / 100, 2, '.', '');
-                        $shippingAddress = implode(', ', [
-                            $formValues['region'],
-                            $formValues['province'],
-                            $formValues['city_municipality'],
-                            $formValues['barangay'],
-                            $formValues['house_unit_building'],
-                            $formValues['street']
-                        ]);
+                        if ($unavailable) {
+                            $pdo->rollBack();
+                            $errors[] = 'One or more items in your cart are no longer available. Please return to your cart and review the items.';
+                        } else {
+                            /*
+                             * Merchandise subtotal is computed from the
+                             * locked database rows only. The shipping fee
+                             * comes from the server-resolved fulfillment
+                             * (shipping_resolve_fulfillment), never from
+                             * the client. Final total = subtotal + fee.
+                             */
+                            $subtotalCents = 0;
+
+                            foreach ($lockedItems as $lockedItem) {
+                                $subtotalCents += (int) round((float) $lockedItem['price'] * 100);
+                            }
+
+                            $shippingFeeCents = $fulfillment['ok'] ? (int) $fulfillment['rate_cents'] : 0;
+                            $totalCents = $subtotalCents + $shippingFeeCents;
+
+                            $subtotalAmount = number_format($subtotalCents / 100, 2, '.', '');
+                            $shippingFee = number_format($shippingFeeCents / 100, 2, '.', '');
+                            $totalAmount = number_format($totalCents / 100, 2, '.', '');
+
+                            if ($isPickupOrder) {
+                                /*
+                                 * Pickup orders record the shop as the
+                                 * fulfillment location. Contact details stay
+                                 * the customer's own, from the form above.
+                                 */
+                                $shippingAddress = 'Store Pickup - ' . $pickupDetails['shop'] . ', ' . $pickupDetails['address'];
+                            } else {
+                                $shippingAddress = implode(', ', [
+                                    $formValues['region'],
+                                    $formValues['province'],
+                                    $formValues['city_municipality'],
+                                    $formValues['barangay'],
+                                    $formValues['house_unit_building'],
+                                    $formValues['street']
+                                ]);
+                            }
 
                         $orderStmt = $pdo->prepare(
                             'INSERT INTO orders (
@@ -242,7 +387,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                 total_amount,
                                 shipping_name,
                                 shipping_phone,
-                                shipping_address
+                                shipping_address,
+                                pickup_status
                              ) VALUES (
                                 :customer_id,
                                 :status,
@@ -252,9 +398,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                 :total_amount,
                                 :shipping_name,
                                 :shipping_phone,
-                                :shipping_address
+                                :shipping_address,
+                                :pickup_status
                              )'
                         );
+                        /*
+                         * Phase 3: a Store Pickup order starts its dedicated
+                         * pickup lifecycle at ORDER_RECEIVED. The courier
+                         * orders.status workflow is untouched and stays
+                         * PENDING for both fulfillment methods (the pickup
+                         * lifecycle, not the courier status, drives pickup
+                         * display). Courier orders store NULL pickup_status.
+                         */
                         $orderStmt->execute([
                             ':customer_id' => $customerId,
                             ':status' => 'PENDING',
@@ -264,7 +419,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             ':total_amount' => $totalAmount,
                             ':shipping_name' => $formValues['shipping_name'],
                             ':shipping_phone' => $formValues['shipping_phone'],
-                            ':shipping_address' => $shippingAddress
+                            ':shipping_address' => $shippingAddress,
+                            ':pickup_status' => $isPickupOrder ? 'ORDER_RECEIVED' : null
                         ]);
                         $orderId = (int) $pdo->lastInsertId();
 
@@ -304,30 +460,68 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             ]);
                         }
 
+                        /*
+                         * Store the proof now that every pre-flight check has
+                         * passed and the order rows exist inside the
+                         * transaction. The upload was already validated
+                         * before the transaction; payment_proof_store()
+                         * re-validates and writes a random private filename.
+                         * If anything below fails, the catch block rolls the
+                         * database back AND removes this newly stored file.
+                         */
+                        if ($isGcashSubmission) {
+                            $storeResult = payment_proof_store($proofFile);
+
+                            if (!$storeResult['ok'] || ($storeResult['path'] ?? null) === null) {
+                                throw new RuntimeException('The payment proof could not be stored.');
+                            }
+
+                            $storedProofPath = $storeResult['path'];
+                        }
+
+                        $paymentSubmittedAtSql = $isGcashSubmission ? 'NOW()' : 'NULL';
                         $paymentStmt = $pdo->prepare(
                             'INSERT INTO payments (
                                 order_id,
                                 payment_method,
-                                payment_status
+                                payment_status,
+                                gcash_reference,
+                                proof_path,
+                                submitted_at
                              ) VALUES (
                                 :order_id,
                                 :payment_method,
-                                :payment_status
+                                :payment_status,
+                                :gcash_reference,
+                                :proof_path,
+                                ' . $paymentSubmittedAtSql . '
                              )'
                         );
+                        /*
+                         * Store the payment method the customer actually
+                         * chose and validated above: the cash option (COD for
+                         * courier, CASH_ON_PICKUP for pickup) or GCASH. A
+                         * pickup order is never recorded as courier COD. The
+                         * status always starts PENDING; a GCash order stays
+                         * PENDING (with submitted_at set) until an admin
+                         * verifies the real transfer, and is never marked
+                         * PAID at order creation.
+                         */
                         $paymentStmt->execute([
                             ':order_id' => $orderId,
-                            ':payment_method' => 'COD',
-                            ':payment_status' => 'PENDING'
+                            ':payment_method' => $formValues['payment_method'],
+                            ':payment_status' => 'PENDING',
+                            ':gcash_reference' => $isGcashSubmission ? $gcashReference : null,
+                            ':proof_path' => $storedProofPath
                         ]);
 
                         /*
                          * One shipment row per order, created inside the same
-                         * transaction as the order. delivery_method stores how
-                         * the order is delivered (LOCAL_COURIER in this phase);
-                         * it carries no fee, so subtotal and total_amount are
-                         * untouched. shipment_status still starts at
-                         * NOT_SHIPPED and is advanced by the admin later.
+                         * transaction as the order. delivery_method stores the
+                         * fulfillment method chosen at checkout
+                         * (LOCAL_COURIER or STORE_PICKUP in this phase);
+                         * shipment_status still starts at NOT_SHIPPED and is
+                         * advanced by the admin later.
                          */
                         $shipmentStmt = $pdo->prepare(
                             'INSERT INTO shipments (
@@ -403,6 +597,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             throw new RuntimeException('The ordered cart items could not be removed.');
                         }
 
+                        // Phase 13: commit the placement notification with the order.
+                        admin_notifications_create($pdo, $orderId);
                         $pdo->commit();
 
                         header('Location: order-confirmation.php?id=' . $orderId);
@@ -413,6 +609,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } catch (Throwable $e) {
             if ($pdo->inTransaction()) {
                 $pdo->rollBack();
+            }
+
+            /*
+             * Filesystem writes are not part of the database transaction. A
+             * proof stored for THIS submission must not survive a failed
+             * order/payment write, so remove exactly the path created above
+             * (never a pre-existing payment's proof).
+             */
+            if ($storedProofPath !== null) {
+                payment_proof_delete($storedProofPath);
             }
 
             $errors[] = 'We could not place your order right now. Please try again.';
@@ -454,6 +660,49 @@ if ($cart !== false) {
 
     foreach ($cartItems as $item) {
         $subtotal += (float) $item['price'];
+    }
+}
+
+/*
+ * Display-time fulfillment preview. Mirrors the server resolution so
+ * the summary shows exactly the fee that order creation would store.
+ * For an unchanged form this is safe: the authoritative value is
+ * always recomputed inside the POST transaction.
+ */
+$displayFulfillment = shipping_resolve_fulfillment(
+    $formValues['delivery_method'],
+    $formValues['region']
+);
+$displayRateCents = $displayFulfillment['ok'] ? (int) $displayFulfillment['rate_cents'] : null;
+$displayIsland = $displayFulfillment['ok'] ? $displayFulfillment['island'] : null;
+
+/*
+ * Payment option rendered for the currently selected fulfillment
+ * method (GET render and failed-POST re-render alike). The default
+ * is the cash option (COD for courier, CASH_ON_PICKUP for pickup).
+ * A valid GCASH selection is preserved on re-render only while GCash
+ * is configured; any other value falls back to the cash option.
+ */
+$isPickupOrderDisplay = $formValues['delivery_method'] === 'STORE_PICKUP';
+$cashPaymentDisplay = $isPickupOrderDisplay ? 'CASH_ON_PICKUP' : 'COD';
+$allowedPaymentsDisplay = [$cashPaymentDisplay];
+if ($gcashConfigured) {
+    $allowedPaymentsDisplay[] = 'GCASH';
+}
+if (!in_array($formValues['payment_method'], $allowedPaymentsDisplay, true)) {
+    $formValues['payment_method'] = $cashPaymentDisplay;
+}
+
+/*
+ * Region -> rate map for the client-side live preview. The server
+ * recomputes the fee authoritatively at order creation; this map only
+ * mirrors the server table so the summary can react instantly.
+ */
+$regionRateMapJs = [];
+foreach ($regionNames as $regionName) {
+    $rate = shipping_rate_cents_for_region($regionName);
+    if ($rate !== null) {
+        $regionRateMapJs[$regionName] = $rate / 100;
     }
 }
 
@@ -517,7 +766,7 @@ require __DIR__ . '/../includes/ui.header.php';
     <?php else: ?>
 
         <div class="checkout-layout">
-            <form id="checkout-form" class="checkout-form" method="POST" action="checkout.php">
+            <form id="checkout-form" class="checkout-form" method="POST" action="checkout.php" enctype="multipart/form-data">
                 <input type="hidden" name="csrf_token" value="<?= hopia_e($csrfToken) ?>">
 
                 <section class="checkout-card" aria-labelledby="checkout-contact-heading">
@@ -554,7 +803,69 @@ require __DIR__ . '/../includes/ui.header.php';
                     </div>
                 </section>
 
-                <section class="checkout-card" aria-labelledby="checkout-address-heading">
+                <section class="checkout-card" aria-labelledby="checkout-delivery-heading">
+                    <div class="checkout-card__head">
+                        <h2 class="checkout-card__title" id="checkout-delivery-heading"><?= hopia_checkout_icon('delivery') ?>Delivery Option</h2>
+                        <p class="checkout-card__hint">Choose how your order is delivered.</p>
+                    </div>
+
+                    <div class="delivery-options">
+                        <label class="delivery-option">
+                            <input
+                                type="radio"
+                                name="delivery_method"
+                                value="LOCAL_COURIER"
+                                id="delivery-method-courier"
+                                <?= $formValues['delivery_method'] === 'LOCAL_COURIER' ? 'checked' : '' ?>
+                            >
+                            <span class="delivery-option__body">
+                                <span class="delivery-option__name"><?= hopia_checkout_icon('courier') ?>Local Courier</span>
+                                <span class="delivery-option__desc">Delivered by our own local courier to your address.</span>
+                            </span>
+                        </label>
+
+                        <label class="delivery-option">
+                            <input
+                                type="radio"
+                                name="delivery_method"
+                                value="STORE_PICKUP"
+                                id="delivery-method-pickup"
+                                <?= $formValues['delivery_method'] === 'STORE_PICKUP' ? 'checked' : '' ?>
+                            >
+                            <span class="delivery-option__body">
+                                <span class="delivery-option__name"><?= hopia_checkout_icon('pickup') ?>Store Pickup</span>
+                                <span class="delivery-option__desc">Collect your order at the shop. No shipping fee.</span>
+                            </span>
+                        </label>
+                    </div>
+
+                    <div class="pickup-panel" id="pickup-panel" <?= $formValues['delivery_method'] === 'STORE_PICKUP' ? '' : 'hidden' ?>>
+                        <p class="pickup-panel__heading">Pickup details</p>
+                        <dl class="pickup-panel__details">
+                            <div class="pickup-panel__row">
+                                <dt>Shop</dt>
+                                <dd><?= hopia_e($pickupDetails['shop']) ?></dd>
+                            </div>
+                            <div class="pickup-panel__row">
+                                <dt>Address</dt>
+                                <dd><?= hopia_e($pickupDetails['address']) ?></dd>
+                            </div>
+                            <div class="pickup-panel__row">
+                                <dt>Contact</dt>
+                                <dd><a href="<?= hopia_e($pickupDetails['contact_href']) ?>"><?= hopia_e($pickupDetails['contact']) ?></a></dd>
+                            </div>
+                        </dl>
+                        <a class="pickup-panel__maps" href="<?= hopia_e($pickupDetails['maps_url']) ?>" target="_blank" rel="noopener noreferrer">
+                            View on Google Maps
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                <path d="M7 17 17 7"></path>
+                                <path d="M8 7h9v9"></path>
+                            </svg>
+                        </a>
+                    </div>
+                </section>
+
+                <section class="checkout-card" id="delivery-address-card" aria-labelledby="checkout-address-heading" <?= $formValues['delivery_method'] === 'STORE_PICKUP' ? 'hidden' : '' ?>>
                     <div class="checkout-card__head">
                         <h2 class="checkout-card__title" id="checkout-address-heading"><?= hopia_checkout_icon('address') ?>Delivery Address</h2>
                         <p class="checkout-card__hint">Choose your location, then add the street details.</p>
@@ -622,55 +933,144 @@ require __DIR__ . '/../includes/ui.header.php';
                     </div>
                 </section>
 
-                <section class="checkout-card" aria-labelledby="checkout-delivery-heading">
-                    <div class="checkout-card__head">
-                        <h2 class="checkout-card__title" id="checkout-delivery-heading"><?= hopia_checkout_icon('delivery') ?>Delivery Option</h2>
-                        <p class="checkout-card__hint">Choose how your order is delivered.</p>
-                    </div>
-
-                    <div class="delivery-options">
-                        <label class="delivery-option">
-                            <input
-                                type="radio"
-                                name="delivery_method"
-                                value="LOCAL_COURIER"
-                                <?= $formValues['delivery_method'] === 'LOCAL_COURIER' ? 'checked' : '' ?>
-                            >
-                            <span class="delivery-option__body">
-                                <span class="delivery-option__name"><?= hopia_checkout_icon('courier') ?>Local Courier</span>
-                                <span class="delivery-option__desc">Delivered by our own local courier to your address.</span>
-                            </span>
-                        </label>
-                    </div>
-                </section>
-
                 <section class="checkout-card" aria-labelledby="checkout-payment-heading">
                     <div class="checkout-card__head">
                         <h2 class="checkout-card__title" id="checkout-payment-heading"><?= hopia_checkout_icon('payment') ?>Payment Method</h2>
                     </div>
 
-                    <div class="payment-options">
-                        <label class="payment-option">
-                            <input
-                                type="radio"
-                                name="payment_method"
-                                value="COD"
-                                <?= $formValues['payment_method'] === 'COD' ? 'checked' : '' ?>
-                            >
-                            <span class="payment-option__body">
-                                <span class="payment-option__name"><?= hopia_checkout_icon('cash') ?>Cash on Delivery</span>
-                                <span class="payment-option__desc">Pay in cash when your order arrives.</span>
-                            </span>
-                        </label>
+                    <div class="payment-options" id="payment-options">
+                        <div id="payment-options-courier" <?= $formValues['delivery_method'] === 'STORE_PICKUP' ? 'hidden' : '' ?>>
+                            <label class="payment-option">
+                                <input
+                                    type="radio"
+                                    name="payment_method"
+                                    value="COD"
+                                    data-fulfillment="courier"
+                                    <?= $formValues['delivery_method'] !== 'STORE_PICKUP' && $formValues['payment_method'] === 'COD' ? 'checked' : '' ?>
+                                >
+                                <span class="payment-option__body">
+                                    <span class="payment-option__name"><?= hopia_checkout_icon('cash') ?>Cash on Delivery</span>
+                                    <span class="payment-option__desc">Pay in cash when your order arrives.</span>
+                                </span>
+                            </label>
 
-                        <label class="payment-option is-disabled" aria-disabled="true">
-                            <input type="radio" name="payment_method" value="GCASH" disabled>
-                            <span class="payment-option__body">
-                                <span class="payment-option__name"><?= hopia_checkout_icon('gcash') ?>GCash <span class="badge badge-pending">Coming Soon</span></span>
-                                <span class="payment-option__desc">Not available yet.</span>
-                            </span>
-                        </label>
+                            <?php if ($gcashConfigured): ?>
+                                <label class="payment-option">
+                                    <input
+                                        type="radio"
+                                        name="payment_method"
+                                        value="GCASH"
+                                        data-fulfillment="courier"
+                                        data-gcash-option
+                                        <?= $formValues['delivery_method'] !== 'STORE_PICKUP' && $formValues['payment_method'] === 'GCASH' ? 'checked' : '' ?>
+                                    >
+                                    <span class="payment-option__body">
+                                        <span class="payment-option__name"><?= hopia_checkout_icon('gcash') ?>GCash</span>
+                                        <span class="payment-option__desc">Send payment via GCash, then submit your reference and proof before placing the order.</span>
+                                    </span>
+                                </label>
+                            <?php endif; ?>
+                        </div>
+
+                        <div id="payment-options-pickup" <?= $formValues['delivery_method'] === 'STORE_PICKUP' ? '' : 'hidden' ?>>
+                            <label class="payment-option">
+                                <input
+                                    type="radio"
+                                    name="payment_method"
+                                    value="CASH_ON_PICKUP"
+                                    data-fulfillment="pickup"
+                                    <?= $formValues['delivery_method'] === 'STORE_PICKUP' && $formValues['payment_method'] === 'CASH_ON_PICKUP' ? 'checked' : '' ?>
+                                >
+                                <span class="payment-option__body">
+                                    <span class="payment-option__name"><?= hopia_checkout_icon('cash') ?>Cash on Pickup</span>
+                                    <span class="payment-option__desc">Pay in cash when you collect your order at the shop.</span>
+                                </span>
+                            </label>
+
+                            <?php if ($gcashConfigured): ?>
+                                <label class="payment-option">
+                                    <input
+                                        type="radio"
+                                        name="payment_method"
+                                        value="GCASH"
+                                        data-fulfillment="pickup"
+                                        data-gcash-option
+                                        <?= $formValues['delivery_method'] === 'STORE_PICKUP' && $formValues['payment_method'] === 'GCASH' ? 'checked' : '' ?>
+                                    >
+                                    <span class="payment-option__body">
+                                        <span class="payment-option__name"><?= hopia_checkout_icon('gcash') ?>GCash</span>
+                                        <span class="payment-option__desc">Send payment via GCash, then submit your reference and proof before placing the order.</span>
+                                    </span>
+                                </label>
+                            <?php endif; ?>
+                        </div>
                     </div>
+
+                    <?php if ($gcashConfigured): ?>
+                        <div class="gcash-checkout" id="gcash-checkout" <?= $formValues['payment_method'] === 'GCASH' ? '' : 'hidden' ?>>
+                            <div class="gcash-checkout__head">
+                                <?= hopia_checkout_icon('gcash') ?>
+                                <p class="gcash-checkout__title">Send your GCash payment</p>
+                            </div>
+                            <dl class="gcash-checkout__details">
+                                <div class="gcash-checkout__row">
+                                    <dt>Amount due</dt>
+                                    <dd class="gcash-checkout__amount" id="gcash-checkout-amount">&#8369;<?= number_format($subtotal + ($displayRateCents ?? 0) / 100, 2) ?></dd>
+                                </div>
+                                <div class="gcash-checkout__row">
+                                    <dt>Account name</dt>
+                                    <dd><?= hopia_e($gcashConfig['name']) ?></dd>
+                                </div>
+                                <div class="gcash-checkout__row">
+                                    <dt>GCash number</dt>
+                                    <dd class="gcash-checkout__number-row">
+                                        <span data-gcash-number><?= hopia_e($gcashConfig['number']) ?></span>
+                                        <button type="button" class="btn btn-secondary btn-sm" data-gcash-copy>Copy number</button>
+                                        <span class="gcash-checkout__copied" data-gcash-copied hidden role="status">Copied</span>
+                                    </dd>
+                                </div>
+                            </dl>
+                            <?php if ($gcashConfig['has_qr']): ?>
+                                <figure class="gcash-checkout__qr">
+                                    <img src="<?= hopia_e(hopia_asset($gcashConfig['qr'])) ?>" alt="GCash QR code for <?= hopia_e($gcashConfig['name']) ?>" loading="lazy" width="160" height="160">
+                                    <figcaption>Scan to pay in the GCash app</figcaption>
+                                </figure>
+                            <?php endif; ?>
+                            <ol class="gcash-panel__steps">
+                                <li>Open your GCash app and send the exact amount shown above to the account details provided.</li>
+                                <li>Copy the reference number shown on your GCash receipt.</li>
+                                <li>Enter that reference and attach your payment screenshot below.</li>
+                                <li>Place your order. Your payment stays pending until our team confirms the transfer.</li>
+                            </ol>
+
+                            <div class="field">
+                                <label for="gcash_reference">GCash reference number</label>
+                                <input
+                                    type="text"
+                                    id="gcash_reference"
+                                    name="gcash_reference"
+                                    value="<?= checkoutValue($formValues, 'gcash_reference') ?>"
+                                    maxlength="64"
+                                    autocomplete="off"
+                                    inputmode="latin"
+                                >
+                                <p class="hint">Enter the reference exactly as shown on your GCash receipt.</p>
+                            </div>
+
+                            <div class="field">
+                                <label for="gcash-proof">Payment proof <span class="muted">(required)</span></label>
+                                <input
+                                    type="file"
+                                    id="gcash-proof"
+                                    name="payment_proof"
+                                    accept="image/jpeg,image/png,image/webp"
+                                >
+                                <p class="hint">JPG, PNG, or WebP, up to 5 MB. Only you and the shop can view it.</p>
+                            </div>
+
+                            <p class="alert alert-warning" id="gcash-requirement" role="status" hidden>Please complete GCash payment first before placing order.</p>
+                        </div>
+                    <?php endif; ?>
                 </section>
 
                 <button type="submit" class="sr-only" tabindex="-1" aria-hidden="true">Place order</button>
@@ -734,12 +1134,16 @@ require __DIR__ . '/../includes/ui.header.php';
 
                     <div class="checkout-summary__totals">
                         <div class="checkout-summary__row">
-                            <span>Order total before shipping</span>
+                            <span>Merchandise subtotal</span>
                             <span class="price">₱<?= number_format($subtotal, 2) ?></span>
                         </div>
                         <div class="checkout-summary__row checkout-summary__row--muted">
                             <span>Shipping</span>
-                            <span>To be confirmed</span>
+                            <span class="price" id="summary-shipping"><?= $displayRateCents === null ? 'To be confirmed' : '₱' . number_format($displayRateCents / 100, 2) ?></span>
+                        </div>
+                        <div class="checkout-summary__row checkout-summary__row--grand">
+                            <span>Order total</span>
+                            <span class="price" id="summary-total">₱<?= number_format($subtotal + ($displayRateCents ?? 0) / 100, 2) ?></span>
                         </div>
                     </div>
 
@@ -844,10 +1248,96 @@ require __DIR__ . '/../includes/ui.header.php';
             var panel = modal.querySelector('.location-modal__panel');
             var form = document.getElementById('checkout-form');
             var submitBtn = document.getElementById('checkout-submit');
+            var courierRadio = document.getElementById('delivery-method-courier');
+            var pickupRadio = document.getElementById('delivery-method-pickup');
+            var addressCard = document.getElementById('delivery-address-card');
+            var pickupPanel = document.getElementById('pickup-panel');
+            var shippingOut = document.getElementById('summary-shipping');
+            var totalOut = document.getElementById('summary-total');
             var locations = null;
             var loadPromise = null;
             var level = 'region';
             var lastFocused = null;
+
+            var subtotalCents = <?= (int) round($subtotal * 100) ?>;
+            var regionRates = <?= json_encode($regionRateMapJs) ?>;
+            var paymentBlocks = {
+                courier: document.getElementById('payment-options-courier'),
+                pickup: document.getElementById('payment-options-pickup')
+            };
+            var gcashCheckout = document.getElementById('gcash-checkout');
+            var gcashCheckoutAmount = document.getElementById('gcash-checkout-amount');
+            var gcashReferenceInput = document.getElementById('gcash_reference');
+            var gcashProofInput = document.getElementById('gcash-proof');
+            var gcashRequirement = document.getElementById('gcash-requirement');
+
+            function selectedPaymentMethod() {
+                var checked = form
+                    ? form.querySelector('input[name="payment_method"]:checked')
+                    : null;
+                return checked ? checked.value : '';
+            }
+
+            function gcashReferenceValue() {
+                return gcashReferenceInput
+                    ? gcashReferenceInput.value.replace(/\s+/g, ' ').trim()
+                    : '';
+            }
+
+            function gcashReferenceLooksValid(reference) {
+                return reference.length >= 6
+                    && reference.length <= 64
+                    && /^[A-Za-z0-9 \-]+$/.test(reference)
+                    && /[A-Za-z0-9]/.test(reference);
+            }
+
+            function gcashProofSelected() {
+                return !!(gcashProofInput
+                    && gcashProofInput.files
+                    && gcashProofInput.files.length > 0);
+            }
+
+            function gcashRequirementsMet() {
+                if (selectedPaymentMethod() !== 'GCASH') {
+                    return true;
+                }
+
+                return gcashReferenceLooksValid(gcashReferenceValue())
+                    && gcashProofSelected();
+            }
+
+            function refreshGcashCheckout() {
+                if (!gcashCheckout) {
+                    return;
+                }
+                var isGcash = selectedPaymentMethod() === 'GCASH';
+                gcashCheckout.hidden = !isGcash;
+                if (isGcash && gcashCheckoutAmount && totalOut) {
+                    gcashCheckoutAmount.textContent = totalOut.textContent;
+                }
+
+                /* GCash-only fields are required only while GCash is the
+                 * active payment method; switching to cash must not leave
+                 * stale native validation blocking a valid checkout. */
+                if (gcashReferenceInput) {
+                    gcashReferenceInput.required = isGcash;
+                }
+                if (gcashProofInput) {
+                    gcashProofInput.required = isGcash;
+                }
+
+                var met = gcashRequirementsMet();
+
+                if (gcashRequirement) {
+                    gcashRequirement.hidden = !isGcash || met;
+                }
+
+                /* Convenience only: the server independently enforces both
+                 * requirements before creating any order or payment row. */
+                if (submitBtn && !submitBtn.classList.contains('is-loading')) {
+                    submitBtn.disabled = !met;
+                }
+            }
 
             levelOrder.forEach(function (name) {
                 var field = fields[name];
@@ -920,6 +1410,10 @@ require __DIR__ . '/../includes/ui.header.php';
                 if (complete && errorText) {
                     errorText.hidden = true;
                 }
+
+                /* Programmatic .value changes do not fire 'change', so
+                 * re-price the summary here after the region updates. */
+                refreshFulfillmentUi();
 
                 return complete;
             }
@@ -1199,11 +1693,190 @@ require __DIR__ . '/../includes/ui.header.php';
                     renderList();
                 });
             }
+            /* ---- Fulfillment toggle ----
+             * Switching between Local Courier and Store Pickup updates
+             * the address card, pickup panel, payment options, and the
+             * summary. The server recomputes everything; this only
+             * mirrors it for instant feedback. */
+            function currentMethod() {
+                return pickupRadio && pickupRadio.checked ? 'STORE_PICKUP' : 'LOCAL_COURIER';
+            }
+
+            function rateCentsForCurrentRegion() {
+                var region = fields.region ? fields.region.value : '';
+                return Object.prototype.hasOwnProperty.call(regionRates, region)
+                    ? Math.round(regionRates[region] * 100)
+                    : null;
+            }
+
+            function formatPeso(cents) {
+                return '\u20B1' + (cents / 100).toLocaleString('en-PH', {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2
+                });
+            }
+
+            function refreshFulfillmentUi() {
+                var isPickup = currentMethod() === 'STORE_PICKUP';
+
+                if (addressCard) {
+                    addressCard.hidden = isPickup;
+                }
+
+                if (pickupPanel) {
+                    pickupPanel.hidden = !isPickup;
+                }
+
+                if (paymentBlocks.courier) {
+                    paymentBlocks.courier.hidden = isPickup;
+                }
+
+                if (paymentBlocks.pickup) {
+                    paymentBlocks.pickup.hidden = !isPickup;
+                }
+
+                /*
+                 * Keep exactly one payment option valid for the current mode
+                 * selected. Options in the hidden block are unchecked so a
+                 * hidden value is never submitted; if that leaves nothing
+                 * checked in the active block (e.g. after switching modes),
+                 * fall back to that mode's cash option. A GCash selection made
+                 * within the active mode is preserved across re-pricing.
+                 */
+                var activeBlock = isPickup ? paymentBlocks.pickup : paymentBlocks.courier;
+                var inactiveBlock = isPickup ? paymentBlocks.courier : paymentBlocks.pickup;
+
+                if (inactiveBlock) {
+                    Array.prototype.forEach.call(
+                        inactiveBlock.querySelectorAll('input[name="payment_method"]'),
+                        function (radio) { radio.checked = false; }
+                    );
+                }
+
+                if (activeBlock && !activeBlock.querySelector('input[name="payment_method"]:checked')) {
+                    var fallback = activeBlock.querySelector(
+                        'input[value="' + (isPickup ? 'CASH_ON_PICKUP' : 'COD') + '"]'
+                    );
+                    if (fallback) {
+                        fallback.checked = true;
+                    }
+                }
+
+                /* Delivery-specific required attributes follow the mode so
+                 * hidden fields never trigger or bypass HTML validation. */
+                var courierInputs = addressCard
+                    ? addressCard.querySelectorAll('input[name="house_unit_building"], input[name="street"]')
+                    : [];
+
+                Array.prototype.forEach.call(courierInputs, function (input) {
+                    input.required = !isPickup;
+                });
+
+                var feeCents = isPickup ? 0 : rateCentsForCurrentRegion();
+
+                if (shippingOut) {
+                    shippingOut.textContent = feeCents === null
+                        ? 'To be confirmed'
+                        : formatPeso(feeCents);
+                }
+
+                if (totalOut) {
+                    totalOut.textContent = feeCents === null
+                        ? formatPeso(subtotalCents)
+                        : formatPeso(subtotalCents + feeCents);
+                }
+
+                refreshGcashCheckout();
+            }
+
+            [courierRadio, pickupRadio].forEach(function (radio) {
+                if (radio) {
+                    radio.addEventListener('change', refreshFulfillmentUi);
+                }
+            });
+
+            /* Toggle the GCash details panel when the GCash option is picked. */
+            if (form) {
+                Array.prototype.forEach.call(
+                    form.querySelectorAll('input[name="payment_method"]'),
+                    function (radio) {
+                        radio.addEventListener('change', refreshGcashCheckout);
+                    }
+                );
+            }
+
+            /* Keep the Place Order state in sync with the reference input and
+             * proof selection. This is convenience feedback only. */
+            [gcashReferenceInput, gcashProofInput].forEach(function (input) {
+                if (!input) {
+                    return;
+                }
+
+                input.addEventListener('input', refreshGcashCheckout);
+                input.addEventListener('change', refreshGcashCheckout);
+            });
+
+            /* Copy GCash number from the checkout details panel. */
+            if (gcashCheckout) {
+                var gcashCopyBtn = gcashCheckout.querySelector('[data-gcash-copy]');
+                var gcashNumberEl = gcashCheckout.querySelector('[data-gcash-number]');
+                var gcashCopied = gcashCheckout.querySelector('[data-gcash-copied]');
+                if (gcashCopyBtn && gcashNumberEl) {
+                    gcashCopyBtn.addEventListener('click', function () {
+                        var value = (gcashNumberEl.textContent || '').replace(/\s+/g, '');
+                        var done = function () {
+                            if (gcashCopied) {
+                                gcashCopied.hidden = false;
+                                window.setTimeout(function () { gcashCopied.hidden = true; }, 2000);
+                            }
+                        };
+                        if (navigator.clipboard && navigator.clipboard.writeText) {
+                            navigator.clipboard.writeText(value).then(done).catch(done);
+                        } else {
+                            done();
+                        }
+                    });
+                }
+            }
+
+            /* Re-price when the location picker changes the region. */
+            if (fields.region) {
+                fields.region.addEventListener('change', refreshFulfillmentUi);
+            }
+
+            refreshFulfillmentUi();
 
             form.addEventListener('submit', function (event) {
-                var complete = levelOrder.every(function (name) {
-                    return selection[name] !== '';
-                });
+                /*
+                 * Block an incomplete GCash submission here as well: the
+                 * hidden in-form submit button (Enter key) can fire even when
+                 * the visible Place Order button is disabled.
+                 */
+                if (!gcashRequirementsMet()) {
+                    event.preventDefault();
+
+                    if (gcashRequirement) {
+                        gcashRequirement.hidden = false;
+                    }
+
+                    if (!gcashReferenceLooksValid(gcashReferenceValue()) && gcashReferenceInput) {
+                        gcashReferenceInput.focus();
+                    } else if (!gcashProofSelected() && gcashProofInput) {
+                        gcashProofInput.focus();
+                    }
+
+                    refreshGcashCheckout();
+                    return;
+                }
+
+                var isPickup = currentMethod() === 'STORE_PICKUP';
+                var complete = true;
+
+                if (!isPickup) {
+                    complete = levelOrder.every(function (name) {
+                        return selection[name] !== '';
+                    });
+                }
 
                 if (!complete) {
                     event.preventDefault();
@@ -1212,7 +1885,10 @@ require __DIR__ . '/../includes/ui.header.php';
                         errorText.hidden = false;
                     }
 
-                    openModal();
+                    if (!isPickup) {
+                        openModal();
+                    }
+
                     return;
                 }
 
@@ -1237,6 +1913,10 @@ require __DIR__ . '/../includes/ui.header.php';
                 if (label) {
                     label.textContent = 'PLACE ORDER';
                 }
+
+                /* Re-apply the GCash gate after restoring the button; the
+                 * browser may restore a GCash selection without its proof. */
+                refreshGcashCheckout();
             });
         })();
         </script>

@@ -1,0 +1,35 @@
+-- ============================================================
+-- Migration 006: Add product retirement timestamp
+-- ============================================================
+--
+-- Business model:
+--   Bundle-linked products must not be hard-deleted because
+--   each carries a permanently issued barcode that must remain
+--   traceable.  When a bundle-linked item is permanently
+--   removed from the active catalog (e.g. damaged, lost, or
+--   otherwise unfit for sale) it is "retired" rather than
+--   deleted.
+--
+-- Design notes (migration-safe by design):
+--   * Additive only: no existing column is altered or dropped.
+--   * Nullable with NO default — existing rows keep retired_at
+--     as NULL, meaning "not retired".  No product is
+--     automatically marked retired.
+--   * No enum or flag is added; a NULLable TIMESTAMP is the
+--     canonical retired/not-retired signal.
+--   * The column is placed after bundle_item_number to group
+--     all bundle/bundle-related product fields together.
+--
+-- Enforced by the PHP backend:
+--   * Only AVAILABLE items may be retired.
+--   * A retired item is excluded from the customer catalog,
+--     product-detail page, cart-add, and checkout eligibility.
+--   * Retirement does NOT set the product status to SOLD or
+--     alter any other product field.
+--   * Barcode reassignment history belongs to a later phase.
+--
+-- Compatibility: MySQL 8.4 and MariaDB 11.4.
+-- ============================================================
+
+ALTER TABLE products
+    ADD COLUMN retired_at TIMESTAMP NULL AFTER bundle_item_number;

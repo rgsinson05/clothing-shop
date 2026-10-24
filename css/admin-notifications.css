@@ -1,0 +1,110 @@
+/* Phase 13: retain the admin slate/green palette and mobile navigation. */
+.ui-admin .admin-topbar--notifications {
+  display: flex !important;
+  align-items: center;
+  gap: 0.75rem;
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  background: #fff;
+  border-bottom: 1px solid var(--color-border);
+  padding: 0.55rem clamp(0.9rem, 3vw, 2rem);
+}
+
+.admin-notifications {
+  position: relative;
+  margin-left: auto;
+  flex: 0 0 auto;
+}
+
+.admin-notifications__bell {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  background: #fff;
+  color: var(--admin-ink);
+  cursor: pointer;
+}
+
+.admin-notifications__bell:hover,
+.admin-notifications__bell[aria-expanded="true"] {
+  background: var(--admin-accent-soft);
+  border-color: var(--admin-accent);
+}
+
+.admin-notifications__bell svg { width: 22px; height: 22px; }
+
+.admin-notifications__badge {
+  position: absolute;
+  top: -5px;
+  right: -6px;
+  min-width: 20px;
+  padding: 1px 5px;
+  border-radius: 20px;
+  background: var(--admin-accent-strong);
+  color: #fff;
+  font-size: 0.68rem;
+  line-height: 18px;
+  font-weight: 700;
+  text-align: center;
+}
+
+.admin-notifications__panel {
+  position: absolute;
+  top: calc(100% + 12px);
+  right: 0;
+  width: min(400px, calc(100vw - 2rem));
+  max-height: calc(100dvh - 90px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  background: #fff;
+  color: var(--admin-ink);
+  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.16);
+}
+
+.admin-notifications__panel[hidden] { display: none; }
+.admin-notifications__heading { padding: 1rem 1rem 0; }
+.admin-notifications__heading h2 { margin: 0; font-size: 1rem; }
+.admin-notifications__heading p { margin: 0.4rem 0 0; font-size: 0.75rem; color: #64748b; }
+.admin-notifications__status { padding: 0.8rem 1rem; margin: 0; color: #64748b; font-size: 0.8rem; }
+.admin-notifications__list { list-style: none; padding: 0; margin: 0; }
+
+.admin-notifications__item {
+  display: block;
+  padding: 1rem;
+  border-top: 1px solid var(--color-border);
+  border-left: 3px solid transparent;
+  color: var(--admin-ink);
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+
+.admin-notifications__item strong { display: block; font-size: 0.87rem; line-height: 1.5; }
+.admin-notifications__item.is-unread { border-left-color: var(--admin-accent); background: #f0fdf4; }
+.admin-notifications__item:hover { background: var(--admin-content-bg); }
+.admin-notifications__meta { display: flex; flex-wrap: wrap; gap: 0.5rem 1rem; margin-top: 0.35rem; color: #64748b; font-size: 0.75rem; }
+.admin-notifications__item.is-unread .admin-notifications__meta { color: var(--admin-accent-strong); }
+.admin-notifications__more { display: block; padding: 0.85rem; border-top: 1px solid var(--color-border); color: var(--admin-accent-strong); text-align: center; font-weight: 600; font-size: 0.875rem; }
+.admin-notifications-history { background: #fff; border: 1px solid var(--color-border); border-radius: 12px; overflow: hidden; }
+.admin-notifications-history .admin-notifications__list li:first-child .admin-notifications__item { border-top: 0; }
+.admin-notifications__pagination { display: flex; align-items: center; justify-content: center; gap: 1rem; margin-top: 1.25rem; font-size: 0.875rem; }
+.admin-notifications a:focus-visible,
+.admin-notifications button:focus-visible,
+.admin-notifications-history a:focus-visible { outline: 2px solid var(--admin-accent-strong); outline-offset: -2px; }
+
+@media (min-width: 1024px) {
+  .admin-topbar--notifications .admin-topbar__toggle,
+  .admin-topbar--notifications .admin-topbar__brand { display: none; }
+}
+
+@media print {
+  .ui-admin .admin-topbar--notifications { display: none !important; }
+}

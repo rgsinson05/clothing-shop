@@ -8,6 +8,7 @@ if (!isset($_SESSION['admin_id'])) {
 }
 
 require_once __DIR__ . '/../includes/database.php';
+require_once __DIR__ . '/../includes/inventory_guard.php';
 
 $productId = filter_input(INPUT_GET, 'id', FILTER_VALIDATE_INT);
 
@@ -156,6 +157,38 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isset($_POST['delete_image_id'])) 
 
     /*
     |--------------------------------------------------------------------------
+    | Bundle-linked product protection
+    |--------------------------------------------------------------------------
+    | bundle_id, bundle_item_number, and barcode_value are NOT in the update
+    | statement below, so client-submitted values for those fields are never
+    | accepted.  The remaining protections apply only to bundle-linked items.
+    */
+
+    $isBundled = !empty($product['bundle_id']);
+
+    if ($isBundled) {
+        /*
+         * Prevent a category change that would violate the bundle constraint.
+         * The database enforces that every product under a bundle shares the
+         * same category as the bundle itself.
+         */
+        if ($category !== $product['category']) {
+            $errors[] = 'The category of a bundle-linked item cannot be changed.';
+        }
+
+        /*
+         * Block manual status changes through the generic edit form for
+         * bundle-linked items.  Status transitions (AVAILABLE -> SOLD at
+         * checkout, SOLD -> AVAILABLE on cancellation) are handled entirely
+         * by the checkout and cancellation code and must not be editable here.
+         */
+        if ($status !== $product['status']) {
+            $errors[] = 'The status of a bundle-linked item cannot be changed through this form.';
+        }
+    }
+
+    /*
+    |--------------------------------------------------------------------------
     | Validate uploaded images
     |--------------------------------------------------------------------------
     */
@@ -228,7 +261,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isset($_POST['delete_image_id'])) 
 
         try {
 
+            $pdo->exec('SET TRANSACTION ISOLATION LEVEL READ COMMITTED');
             $pdo->beginTransaction();
+
+            $freshStmt = $pdo->prepare('SELECT status, category, bundle_id, retired_at FROM products WHERE id = ? FOR UPDATE');
+            $freshStmt->execute([$productId]);
+            $freshProduct = $freshStmt->fetch();
+            if ($freshProduct === false || $freshProduct['status'] !== $product['status']) {
+                throw new RuntimeException('The product state changed. Reload before editing.');
+            }
+            if (!empty($freshProduct['bundle_id'])
+                && ($category !== $freshProduct['category'] || $status !== $freshProduct['status'])) {
+                throw new RuntimeException('Bundle-linked product state cannot be changed through this form.');
+            }
+            // Metadata editing must not overwrite an inventory state from an
+            // old browser form. Inventory resolution requires its own action.
+            if ($status !== $freshProduct['status']) {
+                throw new RuntimeException('Inventory status cannot be changed through generic product editing.');
+            }
 
             $updateStmt = $pdo->prepare("
                 UPDATE products
@@ -451,10 +501,19 @@ $body_class = 'admin-product-form-page';
 
                 <div class="field">
                     <label for="status">Status</label>
-                    <select id="status" name="status" required>
-                        <option value="AVAILABLE"<?= $product['status'] === 'AVAILABLE' ? ' selected' : '' ?>>Available</option>
-                        <option value="SOLD"<?= $product['status'] === 'SOLD' ? ' selected' : '' ?>>Sold</option>
-                    </select>
+                    <?php if (!empty($product['bundle_id'])): ?>
+                        <select id="status" name="status" required disabled>
+                            <option value="AVAILABLE"<?= $product['status'] === 'AVAILABLE' ? ' selected' : '' ?>>Available</option>
+                            <option value="SOLD"<?= $product['status'] === 'SOLD' ? ' selected' : '' ?>>Sold</option>
+                        </select>
+                        <p class="hint">Status is managed automatically for bundle-linked items.</p>
+                        <input type="hidden" name="status" value="<?= htmlspecialchars($product['status']) ?>">
+                    <?php else: ?>
+                        <select id="status" name="status" required>
+                            <option value="AVAILABLE"<?= $product['status'] === 'AVAILABLE' ? ' selected' : '' ?>>Available</option>
+                            <option value="SOLD"<?= $product['status'] === 'SOLD' ? ' selected' : '' ?>>Sold</option>
+                        </select>
+                    <?php endif; ?>
                 </div>
             </div>
 

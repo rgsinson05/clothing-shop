@@ -4,6 +4,11 @@ session_start();
 
 require_once __DIR__ . '/../includes/database.php';
 require_once __DIR__ . '/../includes/feedback-data.php';
+require_once __DIR__ . '/../includes/gcash.php';
+require_once __DIR__ . '/../includes/payment.php';
+require_once __DIR__ . '/../includes/pickup.php';
+require_once __DIR__ . '/../includes/shipping.php';
+require_once __DIR__ . '/../includes/customer_delivery.php';
 
 if (!isset($_SESSION['customer_id'])) {
     header('Location: login.php');
@@ -23,18 +28,22 @@ $csrfToken = $_SESSION['csrf_token'];
  */
 
 $orderStatusLabels = [
-    'PENDING' => 'Order Placed',
-    'CONFIRMED' => 'Order Confirmed',
-    'PACKED' => 'Being Prepared',
+    'PENDING' => 'Pending',
+    'CONFIRMED' => 'Confirmed',
+    'PACKED' => 'Packed',
     'SHIPPED' => 'Shipped',
+    'IN_TRANSIT' => 'In Transit',
     'DELIVERED' => 'Delivered',
+    'RETURN_TO_SELLER' => 'Return to Seller',
+    'RETURNED_TO_SHOP' => 'Returned to Shop',
     'CANCELLED' => 'Cancelled'
 ];
 
 $paymentMethodLabels = [
     'COD' => 'Cash on Delivery',
     'GCASH' => 'GCash',
-    'CARD' => 'Card'
+    'CARD' => 'Card',
+    'CASH_ON_PICKUP' => 'Cash on Pickup'
 ];
 
 $paymentStatusLabels = [
@@ -44,14 +53,7 @@ $paymentStatusLabels = [
     'REFUNDED' => 'Refunded'
 ];
 
-$shipmentStatusLabels = [
-    'NOT_SHIPPED' => 'Not Shipped',
-    'READY_TO_SHIP' => 'Ready to Ship',
-    'SHIPPED' => 'Shipped',
-    'IN_TRANSIT' => 'In Transit',
-    'OUT_FOR_DELIVERY' => 'Out for Delivery',
-    'DELIVERED' => 'Delivered'
-];
+$shipmentStatusLabels = customer_delivery_labels();
 
 $cancellationStatusLabels = [
     'NONE' => 'No cancellation request',
@@ -65,6 +67,9 @@ $orderStatusBadgeClasses = [
     'CONFIRMED' => 'badge-info',
     'PACKED' => 'badge-warning',
     'SHIPPED' => 'badge-info',
+    'IN_TRANSIT' => 'badge-info',
+    'RETURN_TO_SELLER' => 'badge-warning',
+    'RETURNED_TO_SHOP' => 'badge-info',
     'DELIVERED' => 'badge-success',
     'CANCELLED' => 'badge-cancelled'
 ];
@@ -74,13 +79,14 @@ $orderStatusBadgeClasses = [
  * semantic badge styling. No database values are changed.
  */
 
-$orderWorkflow = ['PENDING', 'CONFIRMED', 'PACKED', 'SHIPPED', 'DELIVERED'];
+$orderWorkflow = ['PENDING', 'CONFIRMED', 'PACKED', 'SHIPPED', 'IN_TRANSIT', 'DELIVERED'];
 
 $orderStepIcons = [
     'PENDING' => 'clock',
     'CONFIRMED' => 'check',
     'PACKED' => 'package',
     'SHIPPED' => 'truck',
+    'IN_TRANSIT' => 'truck',
     'DELIVERED' => 'check-circle'
 ];
 
@@ -97,7 +103,10 @@ $shipmentStatusBadgeClasses = [
     'SHIPPED' => 'badge-info',
     'IN_TRANSIT' => 'badge-info',
     'OUT_FOR_DELIVERY' => 'badge-warning',
-    'DELIVERED' => 'badge-success'
+    'DELIVERED' => 'badge-success',
+    'DELIVERY_ATTEMPT_FAILED' => 'badge-warning',
+    'RETURN_TO_SELLER' => 'badge-warning',
+    'RETURNED_TO_SHOP' => 'badge-info'
 ];
 
 $requestedOrderId = filter_input(INPUT_GET, 'id', FILTER_VALIDATE_INT);
@@ -106,6 +115,7 @@ $order = false;
 $orderItems = [];
 $payment = false;
 $shipment = false;
+$courierHistory = null;
 
 if ($requestedOrderId !== null && $requestedOrderId !== false && $requestedOrderId > 0) {
     /*
@@ -116,10 +126,12 @@ if ($requestedOrderId !== null && $requestedOrderId !== false && $requestedOrder
 
     $orderStmt = $pdo->prepare(
         'SELECT id, status, cancellation_status, subtotal, shipping_fee, total_amount,
-                shipping_name, shipping_phone, shipping_address, created_at
+                shipping_name, shipping_phone, shipping_address, created_at, received_at,
+                pickup_status, ready_for_pickup_at, pickup_deadline_at, picked_up_at,
+                EXISTS(SELECT 1 FROM sales_transactions st WHERE st.order_id = orders.id) AS has_completed_sale
          FROM orders
          WHERE id = :order_id
-           AND customer_id = :customer_id
+            AND customer_id = :customer_id
          LIMIT 1'
     );
 
@@ -159,15 +171,7 @@ if ($requestedOrderId !== null && $requestedOrderId !== false && $requestedOrder
         $itemsStmt->execute([':order_id' => $orderId]);
         $orderItems = $itemsStmt->fetchAll();
 
-        $paymentStmt = $pdo->prepare(
-            'SELECT payment_method, payment_status
-             FROM payments
-             WHERE order_id = :order_id
-             LIMIT 1'
-        );
-
-        $paymentStmt->execute([':order_id' => $orderId]);
-        $payment = $paymentStmt->fetch();
+        $payment = payment_load($pdo, $orderId) ?? false;
 
         /*
          * Fetch the shipment for display only. The order is already
@@ -176,7 +180,7 @@ if ($requestedOrderId !== null && $requestedOrderId !== false && $requestedOrder
          */
 
         $shipmentStmt = $pdo->prepare(
-            'SELECT shipment_status, tracking_number, shipped_at, delivered_at
+            'SELECT shipment_status, tracking_number, shipped_at, delivered_at, delivery_method
              FROM shipments
              WHERE order_id = :order_id
              LIMIT 1'
@@ -184,6 +188,11 @@ if ($requestedOrderId !== null && $requestedOrderId !== false && $requestedOrder
 
         $shipmentStmt->execute([':order_id' => $orderId]);
         $shipment = $shipmentStmt->fetch();
+
+        if ($shipment !== false && $shipment['delivery_method'] === 'LOCAL_COURIER') {
+            $courierSchema = delivery_schema_status($pdo);
+            $courierHistory = customer_delivery_history($pdo, $orderId, $customerId, $courierSchema);
+        }
 
         /*
          * Feedback lookup for the LEAVE FEEDBACK / EDIT FEEDBACK decision.
@@ -214,6 +223,22 @@ $paymentStatusLabel = ($payment !== false && $payment['payment_status'] !== null
     ? ($paymentStatusLabels[$payment['payment_status']] ?? $payment['payment_status'])
     : '';
 
+/*
+ * GCash payment state + configuration for the GCash panel. The panel is only
+ * rendered for a GCASH payment; its submission form posts to payment-submit.php.
+ */
+$gcashConfig = gcash_config();
+$isGcashOrder = ($payment !== false && ($payment['payment_method'] ?? '') === 'GCASH');
+$gcashState = $isGcashOrder ? payment_gcash_state($payment) : 'NA';
+
+$gcashFlash = '';
+if (isset($_GET['gcash'])) {
+    $gcashFlash = in_array($_GET['gcash'], ['submitted', 'resubmitted', 'cash_changed', 'error'], true) ? $_GET['gcash'] : '';
+}
+$gcashFlashMessage = ($gcashFlash === 'error' && isset($_GET['gcash_reason']) && is_string($_GET['gcash_reason']))
+    ? payment_message($_GET['gcash_reason'])
+    : '';
+
 $shipmentStatusLabel = ($shipment !== false && $shipment['shipment_status'] !== null)
     ? ($shipmentStatusLabels[$shipment['shipment_status']] ?? $shipment['shipment_status'])
     : '';
@@ -223,8 +248,7 @@ $trackingNumber = $shipment !== false
     : '';
 
 /*
- * Display-only: total purchased quantity for the item count label, and
- * the order's position in the real workflow for the progress timeline.
+ * Display-only: total purchased quantity for the item count label.
  */
 
 $itemCount = 0;
@@ -234,9 +258,35 @@ foreach ($orderItems as $item) {
 
 $itemCountLabel = $itemCount === 1 ? '1 ITEM' : $itemCount . ' ITEMS';
 
-$currentStepIndex = $order !== false
-    ? array_search($order['status'], $orderWorkflow, true)
-    : false;
+/*
+ * Phase 3: the Store Pickup lifecycle view. Resolved from the persisted
+ * fulfillment method (shipments.delivery_method) — a pickup order renders
+ * the pickup timeline below instead of the courier PENDING→…→DELIVERED
+ * progression; a courier order keeps the courier timeline untouched. The
+ * pickup stage never overwrites or implies payment state.
+ */
+$pickupProgress = ($order !== false)
+    ? pickup_progress($order, $shipment)
+    : null;
+
+$orderTimeline = ($order !== false && $pickupProgress === null)
+    ? customer_order_timeline($order, $payment !== false ? $payment : null,
+        $shipment !== false ? $shipment : null, $courierHistory)
+    : null;
+if ($orderTimeline !== null) {
+    $orderStatusLabel = $orderStatusLabels[$orderTimeline['badge_stage'] ?? ''] ?? 'Status unavailable';
+    $shipmentStatusLabel = $orderTimeline['stage'] === 'CANCELLED' ? 'Cancelled'
+        : ($orderTimeline['courier_label'] ?? 'Status unavailable');
+}
+$orderStatusBadgeClass = $order !== false && ($order['status'] === 'CANCELLED' || $order['cancellation_status'] === 'APPROVED')
+    ? 'badge-cancelled' : ($pickupProgress !== null ? $pickupProgress['badge_class']
+        : ($orderStatusBadgeClasses[$orderTimeline['badge_stage'] ?? ''] ?? 'badge'));
+if ($pickupProgress !== null) {
+    $orderStatusLabel = $order !== false && ($order['status'] === 'CANCELLED' || $order['cancellation_status'] === 'APPROVED')
+        ? 'Cancelled' : $pickupProgress['stage_label'];
+}
+
+$pickupPickupDetails = shipping_pickup_details();
 
 /*
  * The cancellation status shown on the page always comes from
@@ -259,6 +309,20 @@ $cancelRequestedFlag = isset($_GET['cancel_requested']);
 $cancelErrorFlag = isset($_GET['cancel_error']);
 
 /*
+ * PRG flags from the Order Received confirmation endpoint.
+ * Both are informational only; the authoritative receipt state is
+ * the database received_at column.
+ */
+$receivedFlag = isset($_GET['received']);
+$receivedErrorFlag = isset($_GET['received_error']);
+// Match the receipt endpoint's existing legacy NULL-method courier handling.
+$receiptDeliveryEligible = $order !== false && $pickupProgress === null
+    && $order['status'] === 'DELIVERED' && $shipment !== false
+    && in_array($shipment['delivery_method'], [null, 'LOCAL_COURIER'], true) && $shipment['shipment_status'] === 'DELIVERED'
+    && in_array($order['cancellation_status'], ['NONE', 'REJECTED'], true)
+    && $orderTimeline['stage'] === 'DELIVERED';
+
+/*
  * The cancellation request form is only offered while the order
  * is still PENDING and no request exists yet. Informational
  * messages are shown for the other cancellation states.
@@ -268,6 +332,7 @@ $showCancelForm = (
     $order !== false
     && $order['status'] === 'PENDING'
     && $cancellationStatus === 'NONE'
+    && !($pickupProgress !== null && $pickupProgress['stage'] === 'PICKED_UP')
 );
 
 $showCancelInfo = (
@@ -286,7 +351,14 @@ $showCancelInfo = (
  * LEAVE FEEDBACK and EDIT FEEDBACK and supplies the edit prefill.
  */
 
-$showFeedbackAction = $order !== false && $order['status'] === 'DELIVERED';
+/*
+ * Feedback gating: order must be DELIVERED and the customer must have
+ * confirmed receipt. The received_at check is the Phase C addition.
+ * Edit mode for existing feedback is still allowed for legacy records.
+ */
+$showFeedbackAction = $order !== false
+    && $receiptDeliveryEligible
+    && $order['received_at'] !== null;
 $feedbackItem = $showFeedbackAction ? ($orderItems[0] ?? null) : null;
 $feedbackRow = $feedbackItem !== null
     ? ($feedbackByItem[(int) $feedbackItem['order_item_id']] ?? null)
@@ -343,7 +415,15 @@ require __DIR__ . '/../includes/ui.header.php';
             </ol>
         </nav>
 
-        <?php if ($cancelRequestedFlag): ?>
+        <?php if ($receivedFlag && $receiptDeliveryEligible && $order['received_at'] !== null): ?>
+            <p class="alert alert-success" role="status">
+                Your order receipt has been confirmed. Thank you!
+            </p>
+        <?php elseif ($receivedErrorFlag): ?>
+            <p class="alert alert-error" role="alert">
+                The order receipt could not be confirmed. Please try again.
+            </p>
+        <?php elseif ($cancelRequestedFlag): ?>
             <p class="alert alert-success" role="status">
                 Your cancellation request has been submitted and is waiting for admin review.
             </p>
@@ -353,6 +433,18 @@ require __DIR__ . '/../includes/ui.header.php';
             </p>
         <?php endif; ?>
 
+        <?php if ($gcashFlash === 'cash_changed' && !$isGcashOrder && $order['status'] !== 'CANCELLED'
+            && $order['cancellation_status'] !== 'APPROVED' && in_array($payment['payment_method'] ?? '', ['COD', 'CASH_ON_PICKUP'], true)): ?>
+            <p class="alert alert-success" role="status">
+                Your payment method has been changed to <?= hopia_e($paymentMethodLabel) ?>.
+                <?php if (($payment['payment_status'] ?? '') === 'PENDING'): ?>
+                    Payment is still due <?= ($payment['payment_method'] ?? '') === 'COD' ? 'when your order is delivered' : 'when you collect your order at the shop' ?>.
+                <?php endif; ?>
+            </p>
+        <?php elseif ($gcashFlash === 'error' && !$isGcashOrder): ?>
+            <p class="alert alert-error" role="alert"><?= hopia_e($gcashFlashMessage) ?></p>
+        <?php endif; ?>
+
         <header class="order-detail-hero">
             <p class="order-detail-hero__eyebrow">Order details</p>
             <h1>Order #<?= hopia_e($order['id']) ?></h1>
@@ -360,7 +452,7 @@ require __DIR__ . '/../includes/ui.header.php';
                 <span>
                     Placed on <?= hopia_e(date('M j, Y g:i A', strtotime($order['created_at']))) ?>
                 </span>
-                <span class="badge <?= hopia_e($orderStatusBadgeClasses[$order['status']] ?? 'badge') ?>">
+                <span class="badge <?= hopia_e($orderStatusBadgeClass) ?>">
                     <?= hopia_e($orderStatusLabel) ?>
                 </span>
             </p>
@@ -374,7 +466,7 @@ require __DIR__ . '/../includes/ui.header.php';
                 </div>
             </div>
 
-            <?php if ($order['status'] === 'CANCELLED'): ?>
+            <?php if ($order['status'] === 'CANCELLED' || $cancellationStatus === 'APPROVED'): ?>
 
                 <div class="od-cancelled">
                     <span class="od-cancelled__icon" aria-hidden="true"><?= hopia_order_icon('x-circle') ?></span>
@@ -384,29 +476,127 @@ require __DIR__ . '/../includes/ui.header.php';
                     </div>
                 </div>
 
-            <?php else: ?>
+            <?php elseif ($pickupProgress !== null): ?>
 
-                <ol class="od-progress" role="list">
-                    <?php foreach ($orderWorkflow as $stepIndex => $stepStatus): ?>
+                <?php /*
+                     * Store Pickup lifecycle (Phase 3): the customer sees the
+                     * pickup stages here — never the courier Packed/Shipped/
+                     * Delivered progression. Cancellation renders above as its
+                     * own separate terminal outcome.
+                     */ ?>
+                <ol class="od-progress od-progress--pickup" role="list">
+                    <?php foreach (pickup_stages() as $stageIndex => $stageKey): ?>
                         <?php
                         $stepState = '';
-                        if ($currentStepIndex !== false && $stepIndex < $currentStepIndex) {
+                        if ($stageIndex < $pickupProgress['stage_index']) {
                             $stepState = ' is-complete';
-                        } elseif ($currentStepIndex !== false && $stepIndex === $currentStepIndex) {
+                        } elseif ($stageIndex === $pickupProgress['stage_index']) {
                             $stepState = ' is-current';
                         }
                         ?>
                         <li class="od-progress__step<?= hopia_e($stepState) ?>">
                             <span class="od-progress__node" aria-hidden="true">
-                                <?= hopia_order_icon($orderStepIcons[$stepStatus] ?? 'package') ?>
+                                <?= hopia_order_icon(pickup_stage_icon($stageKey)) ?>
                             </span>
-                            <span class="od-progress__label"><?= hopia_e($stepStatus) ?></span>
+                            <span class="od-progress__label"><?= hopia_e(pickup_stage_label($stageKey)) ?></span>
                         </li>
                     <?php endforeach; ?>
                 </ol>
 
+                <?php if ($pickupProgress['stage'] === 'READY_FOR_PICKUP'): ?>
+                    <div class="pickup-deadline-note<?= $pickupProgress['overdue'] ? ' is-overdue' : '' ?>">
+                        <p class="pickup-deadline-note__title">
+                            <?= $pickupProgress['overdue'] ? 'Your order is ready and waiting for you' : 'Your order is ready for pickup' ?>
+                        </p>
+                        <p>
+                            Please collect it at the shop
+                            <?php if ($pickupProgress['deadline_at'] !== null): ?>
+                                <strong>by <?= hopia_e(date('M j, Y g:i A', strtotime($pickupProgress['deadline_at']))) ?></strong>
+                                (48-hour pickup window)
+                            <?php endif; ?>.
+                            Bring a valid ID and your order number <strong>#<?= hopia_e($order['id']) ?></strong>.
+                        </p>
+                        <?php if ($pickupProgress['overdue']): ?>
+                            <p class="pickup-deadline-note__overdue">
+                                This order has passed its pickup window. Please contact the shop as soon as possible
+                                so we can arrange your pickup.
+                            </p>
+                        <?php endif; ?>
+                    </div>
+                <?php elseif ($pickupProgress['stage'] === 'PREPARING'): ?>
+                    <p class="pickup-deadline-note__intro">
+                        The shop is preparing your items. We will update this page as soon as your order is ready
+                        for pickup; the 48-hour pickup window starts then.
+                    </p>
+                <?php elseif ($pickupProgress['stage'] === 'PICKED_UP' && $pickupProgress['picked_up_at'] !== null): ?>
+                    <p class="pickup-deadline-note__intro">
+                        You collected this order on <?= hopia_e(date('M j, Y g:i A', strtotime($pickupProgress['picked_up_at']))) ?>. Enjoy your finds!
+                    </p>
+                <?php endif; ?>
+
+            <?php else: ?>
+
+                <div class="od-timeline-status" role="status">
+                    <p class="od-timeline-status__heading">
+                        <strong><?= hopia_e($orderTimeline['closure'] === 'RECEIVED' ? 'Delivery received'
+                            : ($orderTimeline['closure'] === 'RETURNED_TO_SHOP' ? 'Returned to Shop'
+                                : ($orderTimeline['stage'] !== null ? 'Current stage: ' . $orderStatusLabels[$orderTimeline['stage']]
+                                    : 'Order status under review'))) ?></strong>
+                        <?php if (in_array($orderTimeline['stage'], ['IN_TRANSIT', 'DELIVERED'], true) && isset($shipmentStatusLabels[$orderTimeline['courier_stage'] ?? ''])): ?>
+                            <span class="badge <?= hopia_e($shipmentStatusBadgeClasses[$orderTimeline['courier_stage']] ?? 'badge') ?>"><?= hopia_e($orderTimeline['stage'] === 'DELIVERED'
+                                ? $orderTimeline['courier_label'] : 'Current courier state: ' . $orderTimeline['courier_label']) ?></span>
+                        <?php endif; ?>
+                    </p>
+                    <p><?= hopia_e($orderTimeline['message']) ?></p>
+                </div>
+
+                <?php if ($orderTimeline['stage'] !== null): ?>
+                <ol class="od-progress od-progress--courier" role="list" aria-label="Order progress">
+                    <?php foreach ($orderWorkflow as $stepStatus): ?>
+                        <?php
+                        $stepState = $orderTimeline['returned_step_states'][$stepStatus]
+                            ?? ($orderTimeline['stage'] === $stepStatus ? 'current' : '');
+                        $stepIsCurrent = $stepState === 'current';
+                        $showCourierLink = $stepStatus === 'IN_TRANSIT' && $courierHistory !== null
+                            && $courierHistory['state'] === 'ready' && $courierHistory['stage'] !== null;
+                        ?>
+                        <li class="od-progress__step<?= $stepState !== '' ? ' is-' . hopia_e($stepState) : '' ?>"<?= $stepIsCurrent ? ' aria-current="step"' : '' ?><?= $stepState === 'unreached' ? ' aria-disabled="true"' : '' ?>>
+                            <span class="od-progress__node" aria-hidden="true">
+                                <?= hopia_order_icon($orderStepIcons[$stepStatus] ?? 'package') ?>
+                            </span>
+                            <span class="od-progress__copy">
+                                <span class="od-progress__label"><?= hopia_e($orderStatusLabels[$stepStatus]) ?></span>
+                                <?php if ($showCourierLink): ?>
+                                    <a class="od-progress__details-link" href="#courier-history-heading">Courier updates<span class="sr-only"> for In Transit</span></a>
+                                <?php endif; ?>
+                            </span>
+                        </li>
+                    <?php endforeach; ?>
+                </ol>
+                <?php endif; ?>
+
+            <?php endif; ?>
+            <?php if ($pickupProgress === null): ?>
+                <?php require __DIR__ . '/../includes/ui.customer-delivery.php'; ?>
             <?php endif; ?>
         </section>
+
+        <?php if ($pickupProgress === null && in_array($orderTimeline['closure'] ?? null, ['RECEIVED', 'RETURNED_TO_SHOP'], true)): ?>
+            <section class="order-detail-card order-detail-card--closure" aria-labelledby="delivery-journey-heading">
+                <div class="order-detail-card__head">
+                    <div class="order-detail-card__label">
+                        <?= hopia_order_icon('check-circle') ?>
+                        <h2 id="delivery-journey-heading" class="order-detail-card__title"><?= $orderTimeline['closure'] === 'RECEIVED'
+                            ? 'Delivery journey complete' : 'Delivery journey ended' ?></h2>
+                    </div>
+                </div>
+                <?php if ($orderTimeline['closure'] === 'RECEIVED'): ?>
+                    <p>Order received successfully. Thank you for shopping with Hopia Fits! Your delivery journey is complete.</p>
+                <?php else: ?>
+                    <p>This parcel has been returned to Hopia Fits, and its delivery journey has ended. If you need assistance regarding your order, please contact the shop.</p>
+                <?php endif; ?>
+            </section>
+        <?php endif; ?>
 
         <div class="order-detail-layout">
             <div class="order-detail-main">
@@ -477,12 +667,12 @@ require __DIR__ . '/../includes/ui.header.php';
 
                     <div class="order-detail-totals">
                         <div class="order-detail-total-row">
-                            <span>Order total before shipping</span>
+                            <span>Merchandise subtotal</span>
                             <span>&#8369;<?= number_format((float) $order['subtotal'], 2) ?></span>
                         </div>
                         <div class="order-detail-total-row order-detail-total-row--muted">
                             <span>Shipping</span>
-                            <span>To be confirmed</span>
+                            <span>&#8369;<?= number_format((float) $order['shipping_fee'], 2) ?></span>
                         </div>
                         <div class="order-detail-total-row order-detail-total-row--grand">
                             <span>Order total</span>
@@ -494,32 +684,76 @@ require __DIR__ . '/../includes/ui.header.php';
 
             <div class="order-detail-rail">
 
-                <section class="order-detail-card order-detail-card--delivery" aria-labelledby="delivery-heading">
-                    <div class="order-detail-card__head">
-                        <div class="order-detail-card__heading">
-                            <div class="order-detail-card__label">
-                                <?= hopia_order_icon('location') ?>
-                                <h2 id="delivery-heading" class="order-detail-card__title">Where it is going</h2>
+                    <section class="order-detail-card order-detail-card--delivery" aria-labelledby="delivery-heading">
+                        <div class="order-detail-card__head">
+                            <div class="order-detail-card__heading">
+                                <div class="order-detail-card__label">
+                                    <?= hopia_order_icon('location') ?>
+                                    <h2 id="delivery-heading" class="order-detail-card__title">
+                                        <?= $pickupProgress !== null ? 'Where to pick up' : 'Where it is going' ?>
+                                    </h2>
+                                </div>
+                                <p class="order-detail-card__sub">
+                                    <?= $pickupProgress !== null ? 'Store Pickup information' : 'Delivery information' ?>
+                                </p>
                             </div>
-                            <p class="order-detail-card__sub">Delivery information</p>
                         </div>
-                    </div>
 
-                    <dl class="order-detail-details">
-                        <div>
-                            <dt>Recipient</dt>
-                            <dd><?= hopia_e($order['shipping_name']) ?></dd>
-                        </div>
-                        <div>
-                            <dt>Phone</dt>
-                            <dd><?= hopia_e($order['shipping_phone']) ?></dd>
-                        </div>
-                        <div>
-                            <dt>Address</dt>
-                            <dd><?= hopia_e($order['shipping_address']) ?></dd>
-                        </div>
-                    </dl>
-                </section>
+                        <?php if ($pickupProgress !== null): ?>
+                            <dl class="order-detail-details">
+                                <div>
+                                    <dt>Shop</dt>
+                                    <dd><?= hopia_e($pickupPickupDetails['shop']) ?></dd>
+                                </div>
+                                <div>
+                                    <dt>Address</dt>
+                                    <dd><?= hopia_e($pickupPickupDetails['address']) ?></dd>
+                                </div>
+                                <div>
+                                    <dt>Contact</dt>
+                                    <dd><a href="<?= hopia_e($pickupPickupDetails['contact_href']) ?>"><?= hopia_e($pickupPickupDetails['contact']) ?></a></dd>
+                                </div>
+                                <div>
+                                    <dt>Collector</dt>
+                                    <dd><?= hopia_e($order['shipping_name']) ?></dd>
+                                </div>
+                            </dl>
+                            <p class="order-detail-tracking">
+                                <a class="btn btn-outline btn-sm" href="<?= hopia_e($pickupPickupDetails['maps_url']) ?>" target="_blank" rel="noopener noreferrer">
+                                    View on Google Maps
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+                                        <path d="M7 17 17 7"></path>
+                                        <path d="M8 7h9v9"></path>
+                                    </svg>
+                                </a>
+                            </p>
+                        <?php else: ?>
+                            <dl class="order-detail-details">
+                                <div>
+                                    <dt>Recipient</dt>
+                                    <dd><?= hopia_e($order['shipping_name']) ?></dd>
+                                </div>
+                                <div>
+                                    <dt>Phone</dt>
+                                    <dd><?= hopia_e($order['shipping_phone']) ?></dd>
+                                </div>
+                                <div>
+                                    <dt>Address</dt>
+                                    <dd><?= hopia_e($order['shipping_address']) ?></dd>
+                                </div>
+                                <?php if ($orderTimeline['closure'] === 'RECEIVED'): ?>
+                                <div>
+                                    <dt>Receipt confirmed</dt>
+                                    <dd>
+                                        <span class="badge badge-success">
+                                            <?= hopia_e(date('M j, Y g:i A', strtotime($order['received_at']))) ?>
+                                        </span>
+                                    </dd>
+                                </div>
+                                <?php endif; ?>
+                            </dl>
+                        <?php endif; ?>
+                    </section>
 
                 <section class="order-detail-card order-detail-card--payment" aria-labelledby="payment-heading">
                     <div class="order-detail-card__head">
@@ -544,7 +778,27 @@ require __DIR__ . '/../includes/ui.header.php';
                     </dl>
                 </section>
 
-                <?php if ($shipment !== false || $trackingNumber !== ''): ?>
+                <?php if ($isGcashOrder): ?>
+                    <?php
+                    $gcashPanel = [
+                        'order_id' => (int) $order['id'],
+                        'amount' => $order['total_amount'],
+                        'config' => $gcashConfig,
+                        'payment' => $payment,
+                        'order' => $order,
+                        'shipment' => $shipment !== false ? $shipment : null,
+                        'state' => $gcashState,
+                        'csrf' => $csrfToken,
+                        'return' => 'order-detail.php',
+                        'proof_endpoint' => 'payment-proof.php',
+                        'flash' => $gcashFlash,
+                        'flash_message' => $gcashFlashMessage,
+                    ];
+                    require __DIR__ . '/../includes/ui.gcash-panel.php';
+                    ?>
+                <?php endif; ?>
+
+                <?php if ($pickupProgress === null && ($shipment !== false || $trackingNumber !== '')): ?>
 
                     <section class="order-detail-card order-detail-card--shipment" aria-labelledby="shipment-heading">
                         <div class="order-detail-card__head">
@@ -560,7 +814,8 @@ require __DIR__ . '/../includes/ui.header.php';
                         <dl class="order-detail-details">
                             <div>
                                 <dt>Shipment</dt>
-                                <dd><span class="badge <?= hopia_e($shipment !== false ? ($shipmentStatusBadgeClasses[$shipment['shipment_status']] ?? 'badge') : 'badge') ?>"><?= hopia_e($shipmentStatusLabel) ?></span></dd>
+                                <dd><span class="badge <?= hopia_e($orderTimeline['stage'] === 'CANCELLED' ? 'badge-cancelled'
+                                    : ($shipmentStatusBadgeClasses[$orderTimeline['courier_stage'] ?? ''] ?? 'badge')) ?>"><?= hopia_e($shipmentStatusLabel) ?></span></dd>
                             </div>
                             <?php if ($trackingNumber !== ''): ?>
                                 <div>
@@ -598,6 +853,29 @@ require __DIR__ . '/../includes/ui.header.php';
                     </div>
 
                     <div class="order-detail-actions">
+                        <?php if ($receiptDeliveryEligible && $order['received_at'] === null && (!$isGcashOrder || $gcashState === 'PAID')): ?>
+                            <p class="od-order-received-intro">
+                                Already received your parcel? Confirm below to unlock feedback.
+                            </p>
+                            <form method="POST" action="order-received.php"
+                                  onsubmit="return confirm('Confirm that you have received your order?');">
+                                <input type="hidden" name="order_id" value="<?= (int) $order['id'] ?>">
+                                <input type="hidden" name="csrf_token" value="<?= hopia_e($csrfToken) ?>">
+                                <button class="btn btn-success btn-block" type="submit">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+                                        <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                                        <polyline points="22 4 12 14.01 9 11.01"></polyline>
+                                    </svg>
+                                    <span>ORDER RECEIVED</span>
+                                </button>
+                            </form>
+                        <?php elseif ($receiptDeliveryEligible && $order['received_at'] === null && $isGcashOrder && $gcashState !== 'PAID'): ?>
+                            <p class="od-order-received-intro" role="status">
+                                <?= $gcashState === 'REJECTED'
+                                    ? 'Your GCash payment was rejected. Please contact the shop for assistance; receipt confirmation remains unavailable until payment is verified.'
+                                    : 'Your GCash payment is still awaiting verification by the shop. You can confirm receipt after it has been verified.' ?>
+                            </p>
+                        <?php endif; ?>
                         <?php if ($showFeedbackAction): ?>
                             <?php
                             $feedbackName = $feedbackItem !== null

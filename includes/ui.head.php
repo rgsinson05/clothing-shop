@@ -12,12 +12,21 @@ $page_description = isset($page_description)
 
 ?>
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en"<?= ($ui_section ?? '') === 'admin' ? ' data-admin-theme="dark"' : '' ?>>
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="theme-color" content="#f5f4f1">
+    <meta name="theme-color" content="<?= ($ui_section ?? '') === 'admin' ? '#0b1120' : '#f5f4f1' ?>">
     <meta name="description" content="<?= hopia_e($page_description) ?>">
     <title><?= hopia_e($page_title) ?></title>
+    <?php if (($ui_section ?? '') === 'admin'): ?>
+        <script src="<?= hopia_e(hopia_asset('js/admin-theme.js')) ?>"></script>
+    <?php endif; ?>
     <link rel="stylesheet" href="<?= hopia_e(hopia_asset('css/styles.css')) ?>">
+    <?php if (($ui_section ?? '') === 'admin'): ?>
+        <link rel="stylesheet" href="<?= hopia_e(hopia_asset('css/admin-notifications.css')) ?>">
+        <link rel="stylesheet" href="<?= hopia_e(hopia_asset('css/admin-theme.css')) ?>">
+    <?php elseif (!empty($_SESSION['customer_id'])): ?>
+        <link rel="stylesheet" href="<?= hopia_e(hopia_asset('css/customer-notifications.css')) ?>">
+    <?php endif; ?>
 </head>
