@@ -13,8 +13,8 @@
  *
  *   1. The customer must be authenticated.
  *   2. The order must belong to the authenticated customer.
- *   3. The Local Courier order and shipment must be DELIVERED, without an
- *      active cancellation.
+ *   3. The Local Courier shipment must be OUT_FOR_DELIVERY (primary SHIPPED)
+ *      or already DELIVERED, without an active cancellation.
  *   4. received_at must be NULL (first-time confirmation).
  *   5. The order must have at least one item.
  *   6. Every item quantity must be exactly 1.
@@ -29,9 +29,6 @@
  */
 
 session_start();
-
-require_once __DIR__ . '/../includes/database.php';
-require_once __DIR__ . '/../includes/sales.php';
 
 /*
  * Redirect helper for POST/Redirect/Get. Uses the same flag names as
@@ -104,10 +101,13 @@ if ($filteredOrderId === false || $filteredOrderId === null || $filteredOrderId 
 
 $orderId = (int) $filteredOrderId;
 
+require_once __DIR__ . '/../includes/database.php';
+require_once __DIR__ . '/../includes/sales.php';
+
 /*
  * Execute the confirmation. The shared helper handles all business
- * logic inside a transaction: ownership, fulfillment, DELIVERED status,
- * idempotency, and receipt persistence. COD never creates a sale here.
+ * logic inside a transaction: ownership, courier eligibility, automatic
+ * DELIVERED transition, idempotency, and receipt persistence. COD never creates a sale here.
  * Any violation rolls the transaction back and returns a failure.
  */
 $result = sales_confirm_receipt_online($pdo, $customerId, $orderId);

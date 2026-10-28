@@ -105,7 +105,11 @@ foreach (['verified_by' => 0, 'verified_at' => 'invalid', 'submitted_at' => '202
 }
 check('optional proof_path is not custody evidence', delivery_transition($order, $verifiedGcash, $return,
     'confirm_return', 1, 0, 'RETURN_TO_SELLER', null, $returnNote)['ok'], true);
-check('delivery cannot bypass out for delivery', $decide('delivered', $shipment)['reason'], 'invalid_state');
+check('customer receipt cannot bypass out for delivery', $decide('confirm_receipt', $shipment)['reason'], 'invalid_state');
+check('manual delivered is not an admin action', in_array('delivered', delivery_action_names(), true), false);
+check('manual delivered transition is rejected', $decide('delivered', $shipment)['reason'], 'bad_request');
+check('customer receipt is not an admin action', in_array('confirm_receipt', delivery_action_names(), true), false);
+check('customer receipt completes an eligible courier delivery', $decide('confirm_receipt', $out)['state'], 'DELIVERED');
 check('stale revision rejected', delivery_transition($order, $payment, $shipment, 'out_for_delivery', 1, 9, 'SHIPPED', null, '')['reason'], 'conflict');
 check('stale cycle rejected', delivery_transition($order, $payment, $shipment, 'out_for_delivery', 2, 0, 'SHIPPED', null, '')['reason'], 'conflict');
 foreach (['PENDING', 'DELIVERED', 'CANCELLED'] as $state) {
@@ -242,7 +246,7 @@ try {
         // Compare every action with an individually fingerprinted locked preview.
         // Impossible transitions may be prefiltered with a different denial reason.
         $actions = $inspections = [];
-        foreach (['out_for_delivery', 'fail_attempt', 'return_to_seller', 'confirm_return', 'delivered'] as $action) {
+        foreach (['out_for_delivery', 'fail_attempt', 'return_to_seller', 'confirm_return'] as $action) {
             $actions[$action] = $call($id, $action,
                 attempt: $action === 'fail_attempt' ? (int) $s['failed_attempts'] + 1 : null,
                 reason: 'Eligibility check only', token: $s, validateOnly: true);
@@ -279,7 +283,7 @@ try {
     foreach (['stage' => ['shipment_status' => 'SHIPPED'], 'revision' => ['delivery_revision' => 0]] as $field => $changes) {
         $staleView = $view('stale ' . $field . ' (sequential)', 1, [], shipmentChanges: $changes);
         check('stale ' . $field . ' rejects the otherwise eligible shipment action',
-            $staleView['actions'][$field === 'stage' ? 'out_for_delivery' : 'delivered']['reason'], 'conflict');
+            $staleView['actions']['out_for_delivery']['reason'], 'conflict');
     }
     check('nonexistent admin rejected', $call(1, 'fail_attempt', 1, 'Reason', admin: 999)['reason'], 'admin_required');
     check('blank failure causes no event', $call(1, 'fail_attempt', 1, '  ')['reason'], 'reason_required');
@@ -287,7 +291,7 @@ try {
     check('second attempt before first rejected', $call(1, 'fail_attempt', 2, 'Reason')['reason'], 'attempt_sequence');
     for ($i = 1; $i <= 3; $i++) {
         if ($i > 1) check('next outing ' . $i, $call(1, 'out_for_delivery')['ok'], true);
-        $outingView = $view('OUT_FOR_DELIVERY attempt ' . $i, 1, ['fail_attempt', 'delivered']);
+        $outingView = $view('OUT_FOR_DELIVERY attempt ' . $i, 1, ['fail_attempt']);
         check('view derives next failed attempt ' . $i . ' from shipment',
             [$outingView['actions']['fail_attempt']['failed_attempts'], $outingView['actions']['fail_attempt']['state']],
             [$i, 'DELIVERY_ATTEMPT_FAILED']);
@@ -304,7 +308,7 @@ try {
         [['OUT_FOR_DELIVERY', 'DELIVERY_ATTEMPT_FAILED', 'OUT_FOR_DELIVERY', 'DELIVERY_ATTEMPT_FAILED',
             'OUT_FOR_DELIVERY', 'DELIVERY_ATTEMPT_FAILED', 'RETURN_TO_SELLER'], [], []]);
     check('fourth failure never recorded', $call(1, 'fail_attempt', 4, 'Reason')['reason'], 'attempt_limit');
-    check('return state cannot be delivered', $call(1, 'delivered')['reason'], 'invalid_state');
+    check('return state cannot be confirmed as received', sales_confirm_receipt_online($db, 1, 1)['reason'], 'not_delivered');
     $evidenceToken = $db->query('SELECT * FROM shipments WHERE order_id=1')->fetch();
     $evidenceKey = bin2hex(random_bytes(16));
     $beforeEvidence = $snapshot(true);
@@ -392,14 +396,20 @@ try {
     check('persisted PAID without attribution rejected', $call(3, 'out_for_delivery')['reason'], 'manual_review');
     $db->exec("UPDATE payments SET verified_by=1,verified_at=NOW(),submitted_at=NOW(),gcash_reference='1234567890123' WHERE order_id=3");
     check('verified GCash delivery permitted', $call(3, 'out_for_delivery')['ok'], true);
-    $view('verified GCash OUT_FOR_DELIVERY', 3, ['fail_attempt', 'delivered']);
-    check('delivery is separate from financial completion', $call(3, 'delivered')['ok'], true);
+    $view('verified GCash OUT_FOR_DELIVERY', 3, ['fail_attempt']);
+    check('outing alone never records receipt', $db->query('SELECT received_at FROM orders WHERE id=3')->fetchColumn(), null);
+    check('customer receipt completes verified GCash courier delivery', sales_confirm_receipt_online($db, 1, 3)['ok'], true);
     $deliveredView = $view('DELIVERED has no courier actions', 3, []);
     check('delivered view retains delivery history without approvals',
         [array_column($deliveredView['events'], 'event_type'), $deliveredView['returns'], $deliveredView['inspections']],
-        [['OUT_FOR_DELIVERY', 'DELIVERED'], [], []]);
+        [['OUT_FOR_DELIVERY'], [], []]);
     check('delivered does not create sale', $db->query('SELECT COUNT(*) FROM sales_transactions')->fetchColumn(), 0);
-    check('delivered does not confirm customer receipt', $db->query('SELECT received_at FROM orders WHERE id=3')->fetchColumn(), null);
+    check('customer receipt uses the shipment delivery timestamp',
+        $db->query('SELECT o.received_at = s.delivered_at FROM orders o JOIN shipments s ON s.order_id=o.id WHERE o.id=3')->fetchColumn(), 1);
+    $receiptSnapshot = $snapshot();
+    check('repeat GCash receipt is idempotent', sales_confirm_receipt_online($db, 1, 3)['idempotent'], true);
+    check('repeat receipt changes no financial, audit or notification rows', $snapshot(), $receiptSnapshot);
+    check('foreign customer cannot confirm this order', sales_confirm_receipt_online($db, 999, 3)['reason'], 'not_found');
     $fixture(4);
     $db->exec("UPDATE shipments SET delivery_method='STORE_PICKUP' WHERE order_id=4");
     $view('pickup never enables courier previews', 4, []);

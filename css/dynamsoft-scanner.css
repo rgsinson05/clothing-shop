@@ -1,0 +1,30 @@
+.hopia-dynamsoft-reader {
+    width: 100%;
+    height: clamp(320px, 52svh, 420px);
+    min-height: 320px;
+}
+
+.hopia-dynamsoft-reader > * {
+    width: 100% !important;
+    height: 100% !important;
+    min-width: 0 !important;
+    min-height: 0 !important;
+}
+
+.hopia-dynamsoft-reader video {
+    width: 100% !important;
+    height: 100% !important;
+    object-fit: contain;
+}
+
+.hopia-dynamsoft-reader .dce-sel-camera,
+.hopia-dynamsoft-reader .dce-sel-resolution {
+    display: none !important;
+}
+
+@media (max-height: 500px) and (orientation: landscape) {
+    .hopia-dynamsoft-reader {
+        height: clamp(240px, 60svh, 320px);
+        min-height: 240px;
+    }
+}

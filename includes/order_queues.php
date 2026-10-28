@@ -442,6 +442,36 @@ if (!function_exists('order_list_filter_definitions')) {
                     'icon' => 'x-circle',
                     'queue' => 'online_cancellation',
                 ],
+                // Narrow presentation selectors; existing work queues above keep their semantics.
+                'online_transit_stage' => [
+                    'label' => 'In Transit', 'href' => 'orders.php?queue=online_transit_stage', 'icon' => 'truck',
+                    'where' => $courier . " AND o.status = 'SHIPPED' AND s.shipment_status = 'IN_TRANSIT' AND " . $activeCancellation,
+                ],
+                'online_out_for_delivery' => [
+                    'label' => 'Out for Delivery', 'href' => 'orders.php?queue=online_out_for_delivery', 'icon' => 'truck',
+                    'where' => $courier . " AND o.status = 'SHIPPED' AND s.shipment_status = 'OUT_FOR_DELIVERY' AND " . $activeCancellation,
+                ],
+                'online_receipt_confirmed' => [
+                    'label' => 'Completed', 'href' => 'orders.php?queue=online_receipt_confirmed', 'icon' => 'check',
+                    'where' => $courier . " AND o.status = 'DELIVERED' AND s.shipment_status = 'DELIVERED' AND o.received_at IS NOT NULL AND " . $activeCancellation,
+                    'empty' => 'No orders with customer Order Received confirmation.',
+                ],
+                'online_failed_attempt' => [
+                    'label' => 'Delivery Attempt Failed', 'href' => 'orders.php?queue=online_failed_attempt', 'icon' => 'x-circle',
+                    'where' => $courier . " AND o.status = 'SHIPPED' AND s.shipment_status = 'DELIVERY_ATTEMPT_FAILED' AND " . $activeCancellation,
+                ],
+                'online_cancelled' => [
+                    'label' => 'Cancelled', 'href' => 'orders.php?queue=online_cancelled', 'icon' => 'x-circle',
+                    'where' => $courier . " AND o.status = 'CANCELLED'",
+                ],
+                'online_gcash_review' => [
+                    'label' => 'GCash Awaiting Verification', 'href' => 'orders.php?queue=online_gcash_review', 'icon' => 'payment',
+                    'where' => $courier . " AND p.payment_method = 'GCASH' AND p.payment_status = 'PENDING' AND (TRIM(COALESCE(p.gcash_reference, '')) <> '' OR p.submitted_at IS NOT NULL)",
+                ],
+                'online_gcash_failed' => [
+                    'label' => 'GCash Verification Failed', 'href' => 'orders.php?queue=online_gcash_failed', 'icon' => 'payment',
+                    'where' => $courier . " AND p.payment_method = 'GCASH' AND p.payment_status = 'FAILED'",
+                ],
             ];
         }
 
@@ -497,6 +527,23 @@ if (!function_exists('order_list_filter_definitions')) {
                     'href' => 'pickups.php?queue=pickup_cancellation',
                     'icon' => 'x-circle',
                     'queue' => 'pickup_cancellation',
+                ],
+                'pickup_overdue' => [
+                    'label' => 'Overdue Pickups', 'href' => 'pickups.php?queue=pickup_overdue', 'icon' => 'clock',
+                    'where' => $pickup . " AND o.status <> 'CANCELLED' AND " . $activeCancellation
+                        . " AND {$pickupStage} = 'READY_FOR_PICKUP' AND o.pickup_deadline_at < NOW()",
+                ],
+                'pickup_cancelled' => [
+                    'label' => 'Cancelled', 'href' => 'pickups.php?queue=pickup_cancelled', 'icon' => 'x-circle',
+                    'where' => $pickup . " AND o.status = 'CANCELLED'",
+                ],
+                'pickup_gcash_review' => [
+                    'label' => 'GCash Awaiting Verification', 'href' => 'pickups.php?queue=pickup_gcash_review', 'icon' => 'payment',
+                    'where' => $pickup . " AND p.payment_method = 'GCASH' AND p.payment_status = 'PENDING' AND (TRIM(COALESCE(p.gcash_reference, '')) <> '' OR p.submitted_at IS NOT NULL)",
+                ],
+                'pickup_gcash_failed' => [
+                    'label' => 'GCash Verification Failed', 'href' => 'pickups.php?queue=pickup_gcash_failed', 'icon' => 'payment',
+                    'where' => $pickup . " AND p.payment_method = 'GCASH' AND p.payment_status = 'FAILED'",
                 ],
             ];
         }

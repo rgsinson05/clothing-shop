@@ -52,10 +52,19 @@ $page_description = $productNotFound
 $ui_active = 'products.php';
 $body_class = 'product-page';
 
+$_SESSION['csrf_token_buy_now'] = $_SESSION['csrf_token_buy_now'] ?? bin2hex(random_bytes(32));
+$csrfTokenBuyNow = $_SESSION['csrf_token_buy_now'];
+$buyNowError = $_SESSION['buy_now_error'] ?? '';
+unset($_SESSION['buy_now_error']);
+
 require __DIR__ . '/../includes/ui.head.php';
 require __DIR__ . '/../includes/ui.header.php';
 
 ?>
+
+<?php if ($buyNowError !== ''): ?>
+    <p class="alert alert-error" role="alert"><?= hopia_e($buyNowError) ?></p>
+<?php endif; ?>
 
 <?php if ($productNotFound): ?>
 
@@ -213,24 +222,47 @@ require __DIR__ . '/../includes/ui.header.php';
                 </div>
             <?php else: ?>
                 <p class="product-availability product-availability--available" aria-label="Status: Available">Available</p>
+                <div class="product-actions">
                 <?php if (isset($_SESSION['customer_id'])): ?>
                     <?php $_SESSION['csrf_token_cart'] = $_SESSION['csrf_token_cart'] ?? bin2hex(random_bytes(32)); $csrfToken = $_SESSION['csrf_token_cart']; ?>
                     <form class="product-form" id="add-to-cart-form" method="POST" action="cart-add.php">
                         <input type="hidden" name="csrf_token" value="<?= hopia_e($csrfToken) ?>">
                         <input type="hidden" name="product_id" value="<?= $productId ?>">
                         <input type="hidden" name="return_to" value="product.php?id=<?= $productId ?>">
-                        <button type="submit" class="btn btn-primary btn-block btn-lg product-form__btn">
+                        <button type="submit" class="btn btn-block btn-lg product-form__btn product-action-btn product-action-btn--cart">
                             <svg class="product-form__icon" width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                                 <path d="M5 8h14l-1.4 11.2a2 2 0 0 1-2 1.8H8.4a2 2 0 0 1-2-1.8L5 8z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
                                 <path d="M9 8V6a3 3 0 0 1 6 0v2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
                             </svg>
                             <span>Add to Cart</span>
-                            <svg class="product-form__icon product-form__icon--arrow" width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                                <path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                            </svg>
                         </button>
                     </form>
                 <?php else: ?>
+                    <form class="product-form" method="GET" action="login.php">
+                        <button type="submit" class="btn btn-block btn-lg product-form__btn product-action-btn product-action-btn--cart" aria-label="Log in to add <?= hopia_e($product['name']) ?> to cart">
+                            <svg class="product-form__icon" width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                                <path d="M5 8h14l-1.4 11.2a2 2 0 0 1-2 1.8H8.4a2 2 0 0 1-2-1.8L5 8z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+                                <path d="M9 8V6a3 3 0 0 1 6 0v2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                            </svg>
+                            <span>Add to Cart</span>
+                        </button>
+                    </form>
+                <?php endif; ?>
+                    <form class="product-form product-buy-now" method="POST" action="checkout.php">
+                        <input type="hidden" name="checkout_action" value="buy_now">
+                        <input type="hidden" name="csrf_token" value="<?= hopia_e($csrfTokenBuyNow) ?>">
+                        <input type="hidden" name="product_id" value="<?= $productId ?>">
+                        <input type="hidden" name="return_to" value="product.php?id=<?= $productId ?>">
+                        <button type="submit" class="btn btn-block btn-lg product-form__btn product-action-btn product-action-btn--buy product-buy-now__btn" aria-label="Buy <?= hopia_e($product['name']) ?> now">
+                            <svg class="product-form__icon" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+                                <path d="M4.5 12h13"/>
+                                <path d="m12.5 7 5 5-5 5"/>
+                            </svg>
+                            <span>Buy Now</span>
+                        </button>
+                    </form>
+                </div>
+                <?php if (!isset($_SESSION['customer_id'])): ?>
                     <p class="product-auth-notice">
                         <a href="login.php">Log in</a> to add this piece to your cart.
                     </p>
@@ -277,7 +309,13 @@ require __DIR__ . '/../includes/ui.header.php';
     if (form) {
         form.addEventListener('submit', function(e) {
             e.preventDefault();
+            const button = form.querySelector('button[type="submit"]');
+            if (button.disabled) {
+                return;
+            }
             const formData = new FormData(form);
+            button.disabled = true;
+            button.setAttribute('aria-busy', 'true');
 
             fetch(form.action, {
                 method: 'POST',
@@ -295,6 +333,25 @@ require __DIR__ . '/../includes/ui.header.php';
             });
         });
     }
+
+    document.querySelectorAll('.product-buy-now').forEach(function(buyNowForm) {
+        buyNowForm.addEventListener('submit', function(e) {
+            const button = buyNowForm.querySelector('button[type="submit"]');
+            if (button.disabled) {
+                e.preventDefault();
+                return;
+            }
+            button.disabled = true;
+            button.setAttribute('aria-busy', 'true');
+        });
+    });
+
+    window.addEventListener('pageshow', function() {
+        document.querySelectorAll('.product-actions button[aria-busy="true"]').forEach(function(button) {
+            button.disabled = false;
+            button.removeAttribute('aria-busy');
+        });
+    });
 
     const urlParams = new URLSearchParams(window.location.search);
     if (urlParams.get('cart_success') === '1' && toast) {

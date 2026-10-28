@@ -31,6 +31,7 @@ require_once __DIR__ . '/../includes/database.php';
 require_once __DIR__ . '/../includes/pickup.php';
 require_once __DIR__ . '/../includes/payment.php';
 require_once __DIR__ . '/../includes/order_queues.php';
+require_once __DIR__ . '/../includes/admin_order_ui.php';
 
 $adminName = $_SESSION['admin_name'] ?? 'Admin';
 
@@ -220,6 +221,7 @@ foreach ($allPickupOrders as $row) {
  * The filtered pickup list + derived progress (stage, overdue) per order.
  */
 $pickupOrders = pickup_admin_list($pdo, $pickupWhere, $pickupParams);
+$pickupListDetails = admin_order_list_details($pdo, array_column($pickupOrders, 'id'));
 
 $progressByOrder = [];
 foreach ($pickupOrders as $row) {
@@ -285,19 +287,20 @@ $page_description = "Manage Store Pickup orders.";
 $ui_section = 'admin';
 $ui_active = 'pickups.php';
 $body_class = 'admin-pickups-page';
+$ui_admin_order_list = true;
 
 require __DIR__ . '/../includes/ui.head.php';
 require __DIR__ . '/../includes/ui.header.php';
 ?>
 
-<div class="admin-pickups">
+<div class="admin-pickups om-page">
     <header class="admin-page-header">
         <div>
             <p class="admin-page-header__eyebrow">Order management</p>
-            <h1>STORE PICKUP</h1>
+            <h1>Store Pickup</h1>
             <p class="admin-page-header__copy">
                 Welcome, <?= htmlspecialchars($adminName, ENT_QUOTES, 'UTF-8') ?>. Store Pickup orders, their pickup
-                lifecycle, 48-hour pickup window, and payment state. Courier orders stay on the Orders page.
+                lifecycle, 48-hour pickup window, and payment state. Courier orders stay on the Online Orders page.
             </p>
         </div>
     </header>
@@ -336,20 +339,8 @@ require __DIR__ . '/../includes/ui.header.php';
         </article>
     </section>
 
-    <nav class="orders-filters admin-list-filters" aria-label="Store Pickup order filters">
-        <div class="orders-filter-tabs" role="list">
-            <?php foreach ($pickupListFilters as $filterKey => $filterDefinition): ?>
-                <?php $isActiveFilter = $activePickupFilterKey === $filterKey; ?>
-                <a class="orders-filter<?= $isActiveFilter ? ' is-active' : '' ?>"
-                   href="<?= htmlspecialchars((string) $filterDefinition['href'], ENT_QUOTES, 'UTF-8') ?>"
-                   role="listitem"
-                   <?= $isActiveFilter ? 'aria-current="page"' : '' ?>>
-                    <span class="orders-filter__icon" aria-hidden="true"><?= hopia_order_icon((string) ($filterDefinition['icon'] ?? 'status')) ?></span>
-                    <span class="orders-filter__label"><?= htmlspecialchars((string) $filterDefinition['label'], ENT_QUOTES, 'UTF-8') ?></span>
-                </a>
-            <?php endforeach; ?>
-        </div>
-    </nav>
+    <?php admin_order_filter_nav('pickups', $pickupListFilters, $activePickupFilterKey, '', null,
+        $queueFilter === null && $stageFilter !== null ? ['name' => 'stage', 'value' => $stageFilter, 'label' => pickup_stage_label($stageFilter)] : null); ?>
 
     <?php if (count($pickupOrders) === 0): ?>
 
@@ -377,7 +368,8 @@ require __DIR__ . '/../includes/ui.header.php';
             </p>
         </div>
 
-        <div class="admin-pickup-list">
+        <?php $desktopPickupRows = []; ?>
+        <div class="admin-pickup-list om-cards" data-order-card-section="store-pickup">
             <?php foreach ($pickupOrders as $row): ?>
                 <?php
                 $orderId = (int) $row['id'];
@@ -489,14 +481,21 @@ require __DIR__ . '/../includes/ui.header.php';
                 $paymentStatusBadge = isset($row['payment_status']) && isset($paymentStatusBadgeClasses[$row['payment_status']])
                     ? $paymentStatusBadgeClasses[$row['payment_status']]
                     : 'badge';
+                $listDetails = $pickupListDetails[$orderId] ?? [];
+                $listDeadline = $progress['deadline_at'] !== null
+                    ? date('M j, Y g:i A', strtotime($progress['deadline_at']))
+                    : ($stage === 'PICKED_UP' && $progress['picked_up_at'] !== null
+                        ? 'Picked up ' . date('M j, Y g:i A', strtotime($progress['picked_up_at']))
+                        : 'Set when Ready for Pickup');
                 ?>
-                <article class="admin-pickup-card<?= $progress['overdue'] ? ' is-overdue' : '' ?>">
+                <article class="admin-pickup-card om-card<?= $progress['overdue'] ? ' is-overdue' : '' ?>">
                     <div class="admin-pickup-card__header">
                         <div>
                             <p class="admin-pickup-card__eyebrow">Order</p>
                             <h2>#<?= $orderId ?></h2>
                         </div>
 
+                        <?php ob_start(); ?>
                         <div class="admin-pickup-card__statuses">
                             <span class="badge">Store Pickup</span>
                             <span class="badge <?= htmlspecialchars(pickup_stage_badge_class($stage), ENT_QUOTES, 'UTF-8') ?>">
@@ -519,8 +518,21 @@ require __DIR__ . '/../includes/ui.header.php';
                                 </span>
                             <?php endif; ?>
                         </div>
+                        <?php $listStatusHtml = ob_get_clean(); echo $listStatusHtml; ?>
                     </div>
 
+                    <div class="om-card-summary">
+                        <strong class="om-card-summary__customer"><?= hopia_e($row['customer_name']) ?></strong>
+                        <strong class="om-card-summary__total">&#8369;<?= number_format((float) $row['total_amount'], 2) ?></strong>
+                        <span class="om-card-summary__meta"><?= hopia_e(date('M j, Y g:i A', strtotime($row['created_at']))) ?></span>
+                        <span class="om-card-summary__meta"><?= (int) ($listDetails['item_count'] ?? 0) ?> items</span>
+                        <span class="om-card-summary__deadline">Pickup deadline: <?= hopia_e($listDeadline) ?></span>
+                        <span class="om-card-summary__payment"><?= hopia_e($paymentMethodLabel) ?> &middot; <?= hopia_e($paymentStatusLabel) ?></span>
+                    </div>
+                    <button class="om-card-toggle" id="pickup-toggle-<?= $orderId ?>" type="button" data-order-expand data-order-id="<?= $orderId ?>" aria-expanded="false" aria-controls="pickup-details-<?= $orderId ?>" aria-label="Expand details for order #<?= $orderId ?>">
+                        <span data-order-toggle-label>Show Details</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+                    </button>
+                    <div class="om-card-details" id="pickup-details-<?= $orderId ?>" hidden>
                     <dl class="admin-pickup-card__details">
                         <div>
                             <dt>Customer</dt>
@@ -573,6 +585,8 @@ require __DIR__ . '/../includes/ui.header.php';
                         <?php endif; ?>
                     </dl>
 
+                    <?php admin_order_expanded_details($row, $listDetails, true); ?>
+                    <?php ob_start(); ?>
                     <div class="admin-pickup-card__actions">
                         <a class="btn btn-secondary btn-sm" href="order-view.php?id=<?= $orderId ?>">
                             View Order
@@ -656,9 +670,15 @@ require __DIR__ . '/../includes/ui.header.php';
                             <span class="badge badge-success">Cash collected</span>
                         <?php endif; ?>
                     </div>
+                    <?php $listActionsHtml = ob_get_clean(); echo $listActionsHtml; ?>
+                    </div>
                 </article>
+                <?php $desktopPickupRows[] = ['order' => $row, 'item_count' => $listDetails['item_count'] ?? 0,
+                    'statuses' => $listStatusHtml, 'payment_method' => $paymentMethodLabel, 'actions' => $listActionsHtml,
+                    'deadline' => $listDeadline, 'overdue' => $progress['overdue']]; ?>
             <?php endforeach; ?>
         </div>
+        <?php admin_order_desktop_table($desktopPickupRows, true); ?>
 
     <?php endif; ?>
 </div>

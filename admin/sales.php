@@ -19,8 +19,8 @@
  * values only ever enter the query as bound parameters, and LIKE
  * wildcards in the typed term are escaped so they match literally.
  *
- * The ten Today cards show global transaction counts and merchandise revenue
- * for Walk-in and each online fulfillment/payment combination, not profit.
+ * Today's overview and channel cards show global completed merchandise sales,
+ * item counts and the existing fulfillment/payment breakdown, not profit.
  * Payment metadata is displayed as stored; shipping is not sales revenue.
  */
 
@@ -435,6 +435,7 @@ $queryError = false;
 
 /* Today's channel/payment categories (Asia/Manila day boundaries). */
 $today = [];
+$todayOverview = ['cents' => 0, 'items' => 0];
 
 try {
     $sales = sales_monitor_list(
@@ -471,6 +472,25 @@ try {
     }
 
     $today = sales_monitor_today_cents($pdo);
+
+    /* Reuse the dashboard's eligible sales and recorded item-count definitions,
+       including valid historical categories outside the channel cards below. */
+    $todayStart = new DateTimeImmutable('today', new DateTimeZone('Asia/Manila'));
+    $overviewStmt = $pdo->prepare(
+        "SELECT COALESCE(SUM(total_amount), 0) AS sales_total,
+                COALESCE(SUM(item_count), 0) AS items_sold
+         FROM (" . sales_monitor_source_sql() . ") sales
+         WHERE reporting_issue IS NULL AND sold_at >= :start AND sold_at < :end"
+    );
+    $overviewStmt->execute([
+        ':start' => $todayStart->format('Y-m-d H:i:s'),
+        ':end' => $todayStart->modify('+1 day')->format('Y-m-d H:i:s'),
+    ]);
+    $overviewRow = $overviewStmt->fetch();
+    $todayOverview = [
+        'cents' => sales_money_to_cents($overviewRow['sales_total']) ?? 0,
+        'items' => (int) $overviewRow['items_sold'],
+    ];
 } catch (Throwable $e) {
     $queryError = true;
     $sales = [];
@@ -492,61 +512,117 @@ require __DIR__ . '/../includes/ui.header.php';
 <div class="admin-products sales-monitor">
     <header class="admin-page-header">
         <div>
-            <p class="admin-page-header__eyebrow">Sales monitoring</p>
-            <h1>COMPLETED SALES</h1>
+            <h1>Sales Monitoring</h1>
             <p class="admin-page-header__copy">
-                Welcome, <?= hopia_e($adminName) ?>. Every completed sale transaction &mdash; walk-in
-                counter sales and finalized Local Courier or Store Pickup orders, one row per transaction.
+                Monitor sales performance, payment channels, and completed transactions.
             </p>
         </div>
         <a class="btn btn-primary" href="scan.php">New Walk-in Sale</a>
     </header>
 
-    <section class="dash-kpis" aria-label="Today's sales summary">
-        <?php foreach ([
-            'WALKIN' => ['label' => 'Walk-in', 'icon' => 'store', 'note' => 'Completed counter transactions, Philippine local day.'],
-            'LOCAL_COURIER_COD' => ['label' => 'Local Courier COD', 'icon' => 'truck', 'note' => 'Cash collected and sale finalized.'],
-            'LOCAL_COURIER_GCASH' => ['label' => 'Local Courier GCash', 'icon' => 'truck', 'note' => 'GCash verified and sale finalized.'],
-            'STORE_PICKUP_CASH_ON_PICKUP' => ['label' => 'Store Pickup COP', 'icon' => 'store', 'note' => 'Cash on Pickup collected, handover and sale completed.'],
-            'STORE_PICKUP_GCASH' => ['label' => 'Store Pickup GCash', 'icon' => 'store', 'note' => 'GCash verified, handover and sale completed.'],
-        ] as $category => $card):
-            $isWalkinCard = $category === 'WALKIN';
-        ?>
-            <article class="dash-kpi dash-kpi--<?= $isWalkinCard ? 'sales' : 'items' ?>">
+    <section class="sales-monitor__overview" aria-labelledby="sales-overview-title">
+        <header class="sales-monitor__section-heading">
+            <div>
+                <h2 id="sales-overview-title">Sales Overview</h2>
+                <p>Today's completed sales across all channels.</p>
+            </div>
+        </header>
+        <div class="sales-monitor__metrics">
+            <article class="dash-kpi sales-monitor__metric">
                 <div class="dash-kpi__top">
-                    <span class="dash-kpi__label"><?= hopia_e($card['label']) ?> Sales Today</span>
-                    <span class="dash-kpi__icon"><?= sales_monitor_icon($card['icon']) ?></span>
+                    <span class="dash-kpi__label">Completed Sales Today</span>
+                    <span class="dash-kpi__icon"><?= sales_monitor_icon('peso') ?></span>
                 </div>
-                <p class="dash-kpi__value"><?= $queryError ? '&mdash;' : (int) $today[$category]['count'] ?></p>
-                <p class="dash-kpi__sub"><?= hopia_e($card['note']) ?></p>
-                <span class="dash-kpi__bar"></span>
+                <p class="dash-kpi__value"><?= $queryError ? '&mdash;' : sales_monitor_money($todayOverview['cents']) ?></p>
+                <p class="dash-kpi__sub">Merchandise sales only; shipping excluded.</p>
             </article>
-            <article class="dash-kpi dash-kpi--<?= $isWalkinCard ? 'profit' : 'orders' ?>">
+            <article class="dash-kpi sales-monitor__metric">
                 <div class="dash-kpi__top">
-                    <span class="dash-kpi__label"><?= hopia_e($card['label']) ?> Revenue Today</span>
-                    <span class="dash-kpi__icon"><?= sales_monitor_icon($isWalkinCard ? 'peso' : 'receipt') ?></span>
+                    <span class="dash-kpi__label">Items Sold Today</span>
+                    <span class="dash-kpi__icon"><?= sales_monitor_icon('items') ?></span>
                 </div>
-                <p class="dash-kpi__value"><?= $queryError ? '&mdash;' : sales_monitor_money($today[$category]['cents']) ?></p>
-                <p class="dash-kpi__sub"><?= $isWalkinCard ? 'Merchandise totals from committed walk-in sales.' : 'Merchandise revenue only; shipping excluded.' ?></p>
-                <span class="dash-kpi__bar"></span>
+                <p class="dash-kpi__value"><?= $queryError ? '&mdash;' : number_format($todayOverview['items']) ?></p>
+                <p class="dash-kpi__sub">Actual completed sale-item records.</p>
             </article>
-        <?php endforeach; ?>
+        </div>
     </section>
-    <p class="text-small muted">Today cards use the Philippine local day and are not changed by the filters below.</p>
+
+    <div class="sales-monitor__channels">
+        <?php foreach ([
+            'walkin' => [
+                'title' => 'Walk-in Sales', 'icon' => 'store',
+                'description' => 'In-store barcode and cashier transactions.',
+                'metrics' => [
+                    ['label' => 'Transactions', 'category' => 'WALKIN', 'value' => 'count', 'note' => 'Completed counter transactions today.'],
+                    ['label' => 'Sales Amount', 'category' => 'WALKIN', 'value' => 'cents', 'note' => 'Completed merchandise sales today.'],
+                ],
+            ],
+            'courier' => [
+                'title' => 'Local Courier', 'icon' => 'truck',
+                'description' => 'Online orders delivered to customers.',
+                'metrics' => [
+                    ['label' => 'COD Sales', 'category' => 'LOCAL_COURIER_COD', 'value' => 'cents', 'note' => 'Cash collected and sale finalized.'],
+                    ['label' => 'GCash Sales', 'category' => 'LOCAL_COURIER_GCASH', 'value' => 'cents', 'note' => 'GCash verified and sale finalized.'],
+                ],
+            ],
+            'pickup' => [
+                'title' => 'Store Pickup', 'icon' => 'store',
+                'description' => 'Online orders collected at the shop.',
+                'metrics' => [
+                    ['label' => 'Cash on Pickup', 'category' => 'STORE_PICKUP_CASH_ON_PICKUP', 'value' => 'cents', 'note' => 'Cash collected and handover completed.'],
+                    ['label' => 'GCash Sales', 'category' => 'STORE_PICKUP_GCASH', 'value' => 'cents', 'note' => 'GCash verified and handover completed.'],
+                ],
+            ],
+        ] as $sectionId => $channelSection): ?>
+            <section class="sales-monitor__channel" aria-labelledby="sales-<?= hopia_e($sectionId) ?>-title">
+                <header class="sales-monitor__section-heading">
+                    <span class="sales-monitor__section-icon"><?= sales_monitor_icon($channelSection['icon']) ?></span>
+                    <div>
+                        <h2 id="sales-<?= hopia_e($sectionId) ?>-title"><?= hopia_e($channelSection['title']) ?></h2>
+                        <p><?= hopia_e($channelSection['description']) ?></p>
+                    </div>
+                </header>
+                <div class="sales-monitor__metrics">
+                    <?php foreach ($channelSection['metrics'] as $metric):
+                        $category = $metric['category'];
+                    ?>
+                        <article class="dash-kpi sales-monitor__metric">
+                            <span class="dash-kpi__label"><?= hopia_e($metric['label']) ?></span>
+                            <p class="dash-kpi__value"><?= $queryError ? '&mdash;' : ($metric['value'] === 'cents' ? sales_monitor_money($today[$category]['cents']) : number_format($today[$category]['count'])) ?></p>
+                            <p class="dash-kpi__sub">
+                                <?php if ($sectionId !== 'walkin' && !$queryError): ?>
+                                    <span class="sales-monitor__transaction-count"><?= number_format($today[$category]['count']) ?> completed transaction<?= $today[$category]['count'] === 1 ? '' : 's' ?> today.</span>
+                                <?php endif; ?>
+                                <?= hopia_e($metric['note']) ?>
+                            </p>
+                        </article>
+                    <?php endforeach; ?>
+                </div>
+            </section>
+        <?php endforeach; ?>
+    </div>
+    <p class="text-small muted sales-monitor__today-note">Today uses the Philippine local day and is not changed by the filters below. All amounts exclude shipping.</p>
     <?php if (!$queryError && $today['unclassified_count'] > 0): ?>
         <div class="alert alert-warning" role="alert">
             <?= (int) $today['unclassified_count'] ?> completed transaction(s) today have a stored channel/payment combination
-            outside these five KPI categories. They remain in the completed-transactions list for review;
+            outside these five channel/payment categories. They remain in the overview and completed-transactions list for review;
             no payment method, channel or stored sale has been changed.
         </div>
     <?php endif; ?>
 
+    <section class="sales-monitor__transactions" aria-labelledby="sales-transactions-title">
+        <header class="sales-monitor__section-heading">
+            <span class="sales-monitor__section-icon"><?= sales_monitor_icon('receipt') ?></span>
+            <div>
+                <h2 id="sales-transactions-title">Sales Transactions</h2>
+                <p>Completed sales, one row per transaction.</p>
+            </div>
+        </header>
     <section class="admin-products__filters card" aria-labelledby="sales-filters-title">
         <div class="card-body">
             <div class="admin-section-heading">
                 <div>
-                    <p class="admin-section-heading__eyebrow">Refine</p>
-                    <h2 id="sales-filters-title">Search &amp; filter transactions</h2>
+                    <h3 id="sales-filters-title">Search &amp; filters</h3>
                 </div>
             </div>
 
@@ -555,8 +631,8 @@ require __DIR__ . '/../includes/ui.header.php';
                     <label for="sales-search">Search</label>
                     <input type="search" id="sales-search" name="search" maxlength="120"
                         placeholder="Receipt no. (SALE-000123), order no., or customer name"
+                        aria-describedby="sales-search-hint"
                         value="<?= hopia_e($filterSearch) ?>">
-                    <p class="hint">Matches the SALE- reference, online order number, cashier, or customer name.</p>
                 </div>
                 <div class="field">
                     <label for="sales-channel">Channel</label>
@@ -567,13 +643,15 @@ require __DIR__ . '/../includes/ui.header.php';
                         <option value="STORE_PICKUP"<?= $filterChannel === 'STORE_PICKUP' ? ' selected' : '' ?>>Store Pickup</option>
                     </select>
                 </div>
-                <div class="field">
-                    <label for="date-from">From</label>
-                    <input type="date" id="date-from" name="date_from" value="<?= hopia_e($filterFrom) ?>">
-                </div>
-                <div class="field">
-                    <label for="date-to">To</label>
-                    <input type="date" id="date-to" name="date_to" value="<?= hopia_e($filterTo) ?>">
+                <div class="sales-monitor__dates">
+                    <div class="field">
+                        <label for="date-from">From</label>
+                        <input type="date" id="date-from" name="date_from" value="<?= hopia_e($filterFrom) ?>">
+                    </div>
+                    <div class="field">
+                        <label for="date-to">To</label>
+                        <input type="date" id="date-to" name="date_to" value="<?= hopia_e($filterTo) ?>">
+                    </div>
                 </div>
                 <div class="admin-filter-form__actions">
                     <button class="btn btn-primary" type="submit">Apply</button>
@@ -584,6 +662,7 @@ require __DIR__ . '/../includes/ui.header.php';
                     <?php endif; ?>
                 </div>
             </form>
+            <p class="text-small muted sales-monitor__filter-hint" id="sales-search-hint">Matches the SALE- reference, online order number, cashier, or customer name.</p>
         </div>
     </section>
 
@@ -630,16 +709,16 @@ require __DIR__ . '/../includes/ui.header.php';
             <p class="text-small muted">Filtered merchandise total: <strong><?= sales_monitor_money($summary['cents']) ?></strong> (shipping excluded).</p>
         </div>
 
-        <div class="table-wrap">
-            <table>
+        <div class="table-wrap sales-monitor__table-wrap" role="region" aria-labelledby="sales-transactions-title" tabindex="0">
+            <table class="sales-monitor__table">
                 <thead>
                     <tr>
                         <th scope="col">Receipt</th>
                         <th scope="col">Recorded sale date &amp; time</th>
                         <th scope="col">Channel</th>
                         <th scope="col">Customer / reference</th>
-                        <th scope="col">Items</th>
-                        <th scope="col">Merchandise total</th>
+                        <th scope="col" class="sales-monitor__numeric">Items</th>
+                        <th scope="col" class="sales-monitor__numeric">Merchandise total</th>
                         <th scope="col">Payment method</th>
                         <th scope="col">Payment status</th>
                         <th scope="col"><span class="sr-only">Actions</span></th>
@@ -663,8 +742,8 @@ require __DIR__ . '/../includes/ui.header.php';
                                     <span class="sales-monitor__cust">Cashier: <?= hopia_e($saleRow['cashier'] ?: 'Not recorded') ?></span>
                                 <?php endif; ?>
                             </td>
-                            <td><?= (int) $saleRow['item_count'] ?></td>
-                            <td><span class="price"><?= sales_monitor_money((int) sales_money_to_cents($saleRow['total_amount'])) ?></span></td>
+                            <td class="sales-monitor__numeric"><?= (int) $saleRow['item_count'] ?></td>
+                            <td class="sales-monitor__numeric"><span class="price"><?= sales_monitor_money((int) sales_money_to_cents($saleRow['total_amount'])) ?></span></td>
                             <td><?= hopia_e(payment_method_label(
                                 is_string($saleRow['payment_method']) && $saleRow['payment_method'] !== '' ? $saleRow['payment_method'] : null,
                                 (string) $saleRow['sale_channel']
@@ -706,6 +785,7 @@ require __DIR__ . '/../includes/ui.header.php';
             </nav>
         <?php endif; ?>
     <?php endif; ?>
+    </section>
 </div>
 
 <?php require __DIR__ . '/../includes/ui.footer.php';

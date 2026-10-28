@@ -13,8 +13,8 @@
  *
  * All eligibility, progress, barcode resolution, and duplicate protection are
  * server-side (includes/pickup.php + includes/order_verify.php). This page
- * only presents them. Camera scanning reuses the existing html5-qrcode
- * implementation; a USB/keyboard-wedge scanner types into the same input.
+ * only presents them. A USB/keyboard-wedge scanner types into the same input
+ * used by the camera scanner.
  *
  * Scanning records ONLY an order_item_verifications row. It never changes
  * products.status, reserves inventory a second time, updates payment, or
@@ -34,6 +34,7 @@ require_once __DIR__ . '/../includes/pickup.php';
 require_once __DIR__ . '/../includes/order_verify.php';
 require_once __DIR__ . '/../includes/ui.php';
 require_once __DIR__ . '/../includes/admin-feedback.php';
+require_once __DIR__ . '/../includes/dynamsoft_scanner.php';
 
 $adminName = $_SESSION['admin_name'] ?? 'Admin';
 
@@ -628,7 +629,7 @@ require __DIR__ . '/../includes/ui.header.php';
         </div>
     </section>
 
-    <script src="<?= hopia_e(hopia_asset('js/vendor/html5-qrcode/html5-qrcode.min.js')) ?>"></script>
+    <?php hopia_dynamsoft_assets(); ?>
     <script>
     (function () {
         'use strict';
@@ -850,9 +851,10 @@ require __DIR__ . '/../includes/ui.header.php';
             });
         }
 
-        // ---- Camera (reuses the existing html5-qrcode implementation) ----
+        // ---- Camera ----
         function cameraSupported() {
-            return typeof Html5Qrcode !== 'undefined'
+            return typeof HopiaDynamsoftScanner !== 'undefined'
+                && HopiaDynamsoftScanner.isSupported()
                 && navigator.mediaDevices
                 && typeof navigator.mediaDevices.getUserMedia === 'function';
         }
@@ -936,10 +938,7 @@ require __DIR__ . '/../includes/ui.header.php';
             elZoomControl.hidden = true;
 
             try {
-                cameraScanner = new Html5Qrcode('pickup-reader', {
-                    formatsToSupport: [Html5QrcodeSupportedFormats.CODE_128],
-                    verbose: false
-                });
+                cameraScanner = HopiaDynamsoftScanner.create('pickup-reader');
             } catch (e) {
                 cameraScanner = null;
                 cameraStarting = false;
@@ -964,6 +963,7 @@ require __DIR__ . '/../includes/ui.header.php';
                 setStatus('Camera started. Point it at a Code 128 barcode.', 'info');
                 probeCameraCaps(cameraScanner);
             }).catch(function (err) {
+                if (err && err.name === 'AbortError') { return; }
                 cameraStarting = false;
                 cameraRunning = false;
                 if (cameraScanner) {
@@ -991,7 +991,7 @@ require __DIR__ . '/../includes/ui.header.php';
         }
 
         function stopCamera() {
-            if (!cameraScanner || !cameraRunning) {
+            if (!cameraScanner) {
                 elStart.hidden = false;
                 elStop.hidden = true;
                 elReaderOff.hidden = false;
@@ -1003,6 +1003,7 @@ require __DIR__ . '/../includes/ui.header.php';
             zoomCaps = null;
             cameraScanner.stop().then(function () {
                 cameraRunning = false;
+                cameraStarting = false;
                 try { cameraScanner.clear(); } catch (e) { /* noop */ }
                 cameraScanner = null;
                 elStart.hidden = false;

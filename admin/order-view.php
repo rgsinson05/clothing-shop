@@ -1,8 +1,10 @@
 <?php
 
 session_start();
+$orderLiveRequest = ($_SERVER['REQUEST_METHOD'] ?? '') === 'GET' && ($_GET['order_live'] ?? '') === '1';
 
 if (!isset($_SESSION['admin_id'])) {
+    if ($orderLiveRequest) { http_response_code(401); header('Cache-Control: no-store'); exit; }
     header('Location: login.php');
     exit;
 }
@@ -17,6 +19,7 @@ require_once __DIR__ . '/../includes/order_cancel.php';
 require_once __DIR__ . '/../includes/customer_notifications.php';
 require_once __DIR__ . '/../includes/admin_delivery.php';
 require_once __DIR__ . '/../includes/delivery_schema.php';
+require_once __DIR__ . '/../includes/ui.php';
 
 $adminName = $_SESSION['admin_name'] ?? 'Admin';
 
@@ -783,6 +786,12 @@ $shipment = false;
 
 if ($requestedOrderId !== null && $requestedOrderId !== false && $requestedOrderId > 0) {
 
+    if ($orderLiveRequest) {
+        $pdo->exec('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ');
+        $pdo->exec('SET TRANSACTION READ ONLY');
+        $pdo->beginTransaction();
+    }
+
     /*
      * Fetch the order together with its customer. If no order is
      * found, the remaining queries are skipped.
@@ -882,6 +891,7 @@ if ($requestedOrderId !== null && $requestedOrderId !== false && $requestedOrder
 
         $shipment = $shipmentStmt->fetch();
     }
+    if ($orderLiveRequest) $pdo->commit();
 }
 
 $pageTitle = $order !== false
@@ -1288,15 +1298,25 @@ $page_description = "Review and manage order details at Hopia's Ukay-Ukay.";
 $ui_section = 'admin';
 $ui_active = $isPickupOrderView ? 'pickups.php' : 'orders.php';
 $body_class = 'admin-order-detail-page';
+$ui_order_live = $order !== false && !$isPickupOrderView;
+$orderLiveVersion = hash('sha256', serialize([$order, $shipment,
+    $payment !== false ? array_diff_key($payment, ['checked_at' => true]) : false,
+    array_column($courierView['events'] ?? [], 'id'), $courierProgress]));
 
-require __DIR__ . '/../includes/ui.head.php';
-require __DIR__ . '/../includes/ui.header.php';
+if ($orderLiveRequest) {
+    header('Content-Type: text/html; charset=utf-8');
+    header('Cache-Control: no-store');
+    if (!$ui_order_live) { http_response_code($order === false ? 404 : 422); exit; }
+} else {
+    require __DIR__ . '/../includes/ui.head.php';
+    require __DIR__ . '/../includes/ui.header.php';
+}
 ?>
 
 <?php if ($courierSchema !== null): ?>
     <link rel="stylesheet" href="../css/admin-delivery.css">
 <?php endif; ?>
-<div class="admin-order-detail">
+<div class="admin-order-detail"<?= $ui_order_live ? ' data-order-live' : '' ?> data-version="<?= htmlspecialchars($orderLiveVersion, ENT_QUOTES, 'UTF-8') ?>">
     <?php if ($actionError !== ''): ?>
         <div class="alert alert-error" role="alert"><?= htmlspecialchars($actionError, ENT_QUOTES, 'UTF-8') ?></div>
     <?php endif; ?>
@@ -1309,7 +1329,7 @@ require __DIR__ . '/../includes/ui.header.php';
             <a class="btn btn-primary" href="orders.php">Back to Orders</a>
         </div>
     <?php else: ?>
-        <header class="admin-order-detail__header">
+        <header class="admin-order-detail__header" data-order-live-region="header">
             <div>
                 <a class="admin-page-header__back" href="<?= $isPickupOrderView ? 'pickups.php' : 'orders.php' ?>">
                     &larr; Back to <?= $isPickupOrderView ? 'Store Pickup' : 'Orders' ?>
@@ -1340,7 +1360,7 @@ require __DIR__ . '/../includes/ui.header.php';
 
         <div class="admin-order-detail__layout">
             <div class="admin-order-detail__main">
-                <section class="admin-order-detail__card" aria-labelledby="order-status-heading">
+                <section class="admin-order-detail__card" aria-labelledby="order-status-heading" data-order-live-region="status">
                     <div class="admin-order-detail__card-head">
                         <div>
                             <p class="admin-order-detail__eyebrow">Current state</p>
@@ -1830,7 +1850,7 @@ require __DIR__ . '/../includes/ui.header.php';
                     <?php endif; ?>
                 </div>
 
-                <section class="admin-order-detail__card" aria-labelledby="payment-heading">
+                <section class="admin-order-detail__card" aria-labelledby="payment-heading" data-order-live-region="payment">
                     <div class="admin-order-detail__card-head">
                         <div>
                             <p class="admin-order-detail__eyebrow">Payment</p>
@@ -2123,7 +2143,7 @@ require __DIR__ . '/../includes/ui.header.php';
                 </section>
 
                 <?php if (!$isPickupOrderView): ?>
-                <section class="admin-order-detail__card" aria-labelledby="shipment-heading">
+                <section class="admin-order-detail__card" aria-labelledby="shipment-heading" data-order-live-region="shipment">
                     <div class="admin-order-detail__card-head">
                         <div>
                             <p class="admin-order-detail__eyebrow">Fulfillment</p>
@@ -2211,7 +2231,8 @@ require __DIR__ . '/../includes/ui.header.php';
     <?php endif; ?>
 </div>
 
-<?php if ($courierSchema !== null): ?>
+<?php if (!$orderLiveRequest && $courierSchema !== null): ?>
     <script src="../js/admin-delivery.js" defer></script>
 <?php endif; ?>
+<?php if ($orderLiveRequest) exit; ?>
 <?php require __DIR__ . '/../includes/ui.footer.php'; ?>

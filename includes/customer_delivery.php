@@ -4,6 +4,21 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/delivery_schema.php';
 
+/** Presentation only; receipt writes revalidate the locked courier records. */
+function customer_receipt_delivery_eligible(array $order, ?array $shipment): bool
+{
+    if ($shipment === null || !in_array($shipment['delivery_method'] ?? null, [null, 'LOCAL_COURIER'], true)
+        || !in_array($order['cancellation_status'] ?? '', ['NONE', 'REJECTED'], true)
+        || ($order['pickup_status'] ?? null) !== null || ($order['picked_up_at'] ?? null) !== null) return false;
+    if (($order['status'] ?? '') === 'DELIVERED' && ($shipment['shipment_status'] ?? '') === 'DELIVERED') return true;
+    return ($order['status'] ?? '') === 'SHIPPED' && ($shipment['delivery_method'] ?? '') === 'LOCAL_COURIER'
+        && ($shipment['shipment_status'] ?? '') === 'OUT_FOR_DELIVERY' && ($order['received_at'] ?? null) === null
+        && ($shipment['delivered_at'] ?? null) === null
+        && isset($shipment['delivery_cycle'], $shipment['delivery_revision'], $shipment['failed_attempts'])
+        && (int) $shipment['delivery_cycle'] >= 1 && (int) $shipment['delivery_revision'] >= 1
+        && (int) $shipment['failed_attempts'] >= 0 && (int) $shipment['failed_attempts'] < 3;
+}
+
 /** Display-only labels, not transition or retry eligibility rules. */
 function customer_delivery_labels(): array
 {

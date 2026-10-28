@@ -12,6 +12,7 @@ $deliveryAttempts = filter_var($shipment['failed_attempts'] ?? null, FILTER_VALI
     ['options' => ['min_range' => 0, 'max_range' => 3]]);
 $deliveryIsReturn = in_array($deliveryStage, ['RETURN_TO_SELLER', 'RETURNED_TO_SHOP'], true);
 $deliveryGuidance = match ($deliveryDisplayStage) {
+    'OUT_FOR_DELIVERY' => 'The customer can now confirm Order Received after receiving the parcel. That confirmation automatically marks the order Delivered. Record a failed attempt only if delivery was unsuccessful; payment and sale finalization remain separate.',
     'DELIVERY_ATTEMPT_FAILED' => $deliveryAttempts === 3
         ? 'Three failed attempts are recorded. This delivery cycle is exhausted. Record Return to Seller explicitly with a return reason; a fourth attempt is not allowed.'
         : 'The latest attempt failed. Review the courier reason before explicitly starting the next permitted attempt.',
@@ -91,6 +92,7 @@ $deliveryForm = static function (string $action, ?array $item = null, bool $stoc
 };
 ?>
 <section class="admin-order-detail__card admin-delivery" id="courier-workflow" aria-labelledby="courier-workflow-heading"
+         data-order-live-region="courier"
          data-admin-delivery data-storage-key="hopia.admin.delivery.<?= (int) ($_SESSION['admin_id'] ?? 0) ?>.<?= (int) $order['id'] ?>"
          data-reload-url="order-view.php?id=<?= (int) $order['id'] ?>#courier-workflow">
     <div class="admin-order-detail__card-head">
@@ -141,6 +143,8 @@ $deliveryForm = static function (string $action, ?array $item = null, bool $stoc
                 <?php endif; ?>
                 <a href="#payment-heading">Review payment and sale</a>.
             </div>
+        <?php elseif ($deliveryStage === 'OUT_FOR_DELIVERY'): ?>
+            <p class="alert alert-info" role="status"><strong>Awaiting Customer Order Received.</strong> Delivery stays Out for Delivery until the customer explicitly confirms receipt. No manual Delivered action is required.</p>
         <?php elseif ($order['status'] === 'CANCELLED'): ?>
             <p class="alert alert-warning" role="status">This order is cancelled. Delivery actions cannot revive it. Historical return evidence is reference only.</p>
         <?php endif; ?>
@@ -319,7 +323,8 @@ $deliveryForm = static function (string $action, ?array $item = null, bool $stoc
             <ol class="admin-delivery__history">
                 <?php foreach ($deliveryHistoryEvents as $deliveryEvent): ?>
                     <?php $deliveryEventIsCurrent = $deliveryHistoryCycleIsCurrent && (string) $deliveryEvent['id'] === ($courierProgress['current_event'] ?? null)
-                        && in_array($courierProgress['stage'] ?? null, ['SHIPPED', 'IN_TRANSIT', 'DELIVERED', 'COMPLETED'], true); ?>
+                        && in_array($courierProgress['stage'] ?? null, ['SHIPPED', 'IN_TRANSIT', 'DELIVERED', 'COMPLETED'], true)
+                        && !($order['status'] === 'DELIVERED' && $deliveryStage === 'DELIVERED' && !empty($order['received_at'])); ?>
                     <li<?= $deliveryEventIsCurrent ? ' class="is-current" aria-current="step"' : '' ?>>
                         <div class="admin-order-detail__card-head">
                             <strong><?= $deliveryEscape($deliveryEventIsCurrent && $deliveryEvent['event_type'] === 'DELIVERED'
@@ -341,6 +346,16 @@ $deliveryForm = static function (string $action, ?array $item = null, bool $stoc
             </ol>
                 </section>
             <?php endforeach; ?>
+            <?php if ($order['status'] === 'DELIVERED' && $deliveryStage === 'DELIVERED' && !empty($order['received_at'])
+                && !($courierProgress['cancelled'] ?? false)): ?>
+                <ol class="admin-delivery__history" aria-label="Customer receipt confirmation">
+                    <li class="is-current" aria-current="step" data-customer-receipt-event>
+                        <strong>Delivered - Customer Order Received Confirmed</strong>
+                        <p class="text-small muted"><?= $deliveryEscape($order['received_at']) ?> (Philippine time), confirmed by the customer.</p>
+                        <p class="text-small">The existing receipt timestamp records this customer event. Payment collection and sale finalization are separate.</p>
+                    </li>
+                </ol>
+            <?php endif; ?>
         </details>
         <?php if ($deliveryStage === 'RETURNED_TO_SHOP'): ?>
             <section class="admin-delivery__closure" aria-labelledby="admin-return-journey-heading">

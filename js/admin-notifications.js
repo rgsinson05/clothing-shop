@@ -50,6 +50,7 @@
             return;
         }
         busy = true;
+        const orderRefresh = window.hopiaOrderLive ? window.hopiaOrderLive.refresh() : Promise.resolve();
         const controller = new AbortController();
         const timeout = window.setTimeout(function () { controller.abort(); }, 15000);
         try {
@@ -91,6 +92,7 @@
                 : error.message;
         } finally {
             window.clearTimeout(timeout);
+            await orderRefresh;
             busy = false;
             if (pendingOpen) {
                 pendingOpen = false;

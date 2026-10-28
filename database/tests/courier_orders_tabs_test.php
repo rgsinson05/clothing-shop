@@ -285,8 +285,8 @@ foreach (['RETURN_TO_SELLER', 'RETURNED_TO_SHOP'] as $state) {
 
 $source = file_get_contents(__DIR__ . '/../../admin/orders.php');
 $controllerStart = strpos($source, '$orderListFilters =');
-$controllerEnd = strpos($source, "require __DIR__ . '/../includes/ui.head.php';");
-$bodyStart = strpos($source, '<div class="admin-orders">');
+$controllerEnd = strpos($source, '$page_title =');
+$bodyStart = strpos($source, '<div class="admin-orders"');
 $bodyEnd = strpos($source, "<?php require __DIR__ . '/../includes/ui.footer.php'; ?>");
 if ($controllerStart === false || $controllerEnd === false || $bodyStart === false || $bodyEnd === false) {
     throw new RuntimeException('Actual admin Orders controller/body boundary changed');
@@ -388,9 +388,11 @@ function courierTabsRender(array $fixtures, array $get, string $selected = 'all'
     $pdo = new CourierTabsPDO($steps);
     $_GET = $get;
     $_SESSION = ['admin_id' => 7, 'admin_name' => 'Offline Admin <name>'];
+    $orderLiveRequest = false;
     ob_start();
     try {
         eval($controller);
+        $orderLiveVersion = hash('sha256', serialize([$orders, $orderTabCounts, $verifyProgressByOrder, $gcashStateByOrder]));
         eval('?>' . $body);
         $html = (string) ob_get_clean();
     } catch (Throwable $error) {

@@ -22,10 +22,19 @@ $page_description = isset($page_description)
     <?php if (($ui_section ?? '') === 'admin'): ?>
         <script src="<?= hopia_e(hopia_asset('js/admin-theme.js')) ?>"></script>
     <?php endif; ?>
+    <?php if (!empty($ui_editorial_fonts)): ?>
+        <link rel="preconnect" href="https://fonts.googleapis.com">
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&amp;family=Playfair+Display:wght@600;700&amp;display=swap">
+    <?php endif; ?>
     <link rel="stylesheet" href="<?= hopia_e(hopia_asset('css/styles.css')) ?>">
     <?php if (($ui_section ?? '') === 'admin'): ?>
         <link rel="stylesheet" href="<?= hopia_e(hopia_asset('css/admin-notifications.css')) ?>">
         <link rel="stylesheet" href="<?= hopia_e(hopia_asset('css/admin-theme.css')) ?>">
+        <link rel="stylesheet" href="<?= hopia_e(hopia_asset('css/admin-order-management.css')) ?>">
+        <?php if (!empty($ui_admin_order_list)): ?>
+            <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
+        <?php endif; ?>
     <?php elseif (!empty($_SESSION['customer_id'])): ?>
         <link rel="stylesheet" href="<?= hopia_e(hopia_asset('css/customer-notifications.css')) ?>">
     <?php endif; ?>

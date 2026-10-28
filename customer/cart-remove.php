@@ -3,6 +3,7 @@
 session_start();
 
 require_once __DIR__ . '/../includes/database.php';
+require_once __DIR__ . '/../includes/cart_selection.php';
 
 /*
  * Require the customer to be logged in.
@@ -23,6 +24,8 @@ $customerId = (int) $_SESSION['customer_id'];
 $submittedToken = $_POST['csrf_token'] ?? '';
 
 if (
+    $_SERVER['REQUEST_METHOD'] !== 'POST' ||
+    !is_string($submittedToken) ||
     $submittedToken === '' ||
     empty($_SESSION['csrf_token']) ||
     !hash_equals($_SESSION['csrf_token'], $submittedToken)
@@ -57,6 +60,12 @@ $cartItemId = $filteredCartItemId;
  */
 
 try {
+    $cartStmt = $pdo->prepare(
+        'SELECT ci.cart_id FROM cart_items ci INNER JOIN carts c ON c.id = ci.cart_id
+         WHERE ci.id = ? AND c.customer_id = ?'
+    );
+    $cartStmt->execute([$cartItemId, $customerId]);
+    $cartId = (int) $cartStmt->fetchColumn();
     $stmt = $pdo->prepare(
         'DELETE ci
          FROM cart_items ci
@@ -69,6 +78,9 @@ try {
         ':cart_item_id' => $cartItemId,
         ':customer_id' => $customerId
     ]);
+    if ($stmt->rowCount() === 1) {
+        cart_selection_remove($cartId, [$cartItemId]);
+    }
 } catch (PDOException $e) {
     /*
      * Do not expose database errors to the customer.

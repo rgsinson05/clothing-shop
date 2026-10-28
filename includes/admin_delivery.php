@@ -99,11 +99,6 @@ function admin_delivery_actions(): array
             'confirmation' => 'Record this item\'s condition evidence for MANUAL_REVIEW. This immutable review blocks stock release; it is not a passed stock-condition inspection. No inventory, reservation or payment is changed.',
             'reason_label' => 'Inspection evidence',
         ],
-        'delivered' => [
-            'label' => 'Mark Delivered',
-            'confirmation' => 'Record courier delivery only. The customer must still select Order Received. COD collection and GCash sale finalization remain separate actions in the existing Payment section.',
-            'reason_label' => null,
-        ],
     ];
 }
 

@@ -6,12 +6,14 @@ require_once __DIR__ . '/../includes/database.php';
 require_once __DIR__ . '/../includes/feedback-data.php';
 require_once __DIR__ . '/../includes/pickup.php';
 require_once __DIR__ . '/../includes/customer_delivery.php';
+require_once __DIR__ . '/../includes/customer_auth.php';
 
 /*
  * Require the customer to be logged in.
  */
 
 if (!isset($_SESSION['customer_id'])) {
+    hopia_customer_set_intended_destination('orders.php');
     header('Location: login.php');
     exit;
 }
@@ -349,7 +351,9 @@ require __DIR__ . '/../includes/ui.header.php';
                 $hasConfirmedReceipt = $receivedAt !== null;
                 /* Feedback gating requires DELIVERED + confirmed receipt (Phase C). */
                 $showFeedbackAction = $isDelivered && $hasConfirmedReceipt;
-                $showOrderReceived = $isDelivered && !$hasConfirmedReceipt
+                $showOrderReceived = !$isCancelled && $pickupProgress === null && !$hasConfirmedReceipt
+                    && ($isDelivered || ($orderStatus === 'SHIPPED' && $order['delivery_method'] === 'LOCAL_COURIER'
+                        && $order['shipment_status'] === 'OUT_FOR_DELIVERY'))
                     && in_array($cancellationStatus, ['NONE', 'REJECTED'], true)
                     && ($order['payment_method'] !== 'GCASH' || $order['payment_status'] === 'PAID');
                 $feedbackRow = $item !== null ? ($feedbackByItem[(int) $item['order_item_id']] ?? null) : null;

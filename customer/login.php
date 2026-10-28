@@ -3,6 +3,7 @@
 session_start();
 
 require_once __DIR__ . '/../includes/database.php';
+require_once __DIR__ . '/../includes/customer_auth.php';
 
 define('HUPIA_BASE', '..');
 
@@ -13,13 +14,21 @@ $body_class = 'login-page';
 
 require_once __DIR__ . '/../includes/ui.php';
 
-$message = '';
+$message = hopia_google_take_flash('login') ?? '';
+
+if (empty($_SESSION['csrf_token_login'])) {
+    $_SESSION['csrf_token_login'] = bin2hex(random_bytes(32));
+}
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $email = trim($_POST['email'] ?? '');
     $password = $_POST['password'] ?? '';
 
-    if ($email === '' || $password === '') {
+    $submittedToken = $_POST['csrf_token'] ?? '';
+
+    if (!is_string($submittedToken) || !hash_equals($_SESSION['csrf_token_login'], $submittedToken)) {
+        $message = 'Your session expired. Please try again.';
+    } elseif ($email === '' || $password === '') {
         $message = 'Please enter your email and password.';
     } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
         $message = 'Please enter a valid email address.';
@@ -38,13 +47,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         $customer = $stmt->fetch();
 
-        if ($customer && password_verify($password, $customer['password_hash'])) {
-            session_regenerate_id(true);
-
-            $_SESSION['customer_id'] = $customer['id'];
-            $_SESSION['customer_name'] = $customer['first_name'];
-
-            header('Location: ../index.php');
+        $passwordHash = $customer['password_hash'] ?? null;
+        if ($customer && is_string($passwordHash) && $passwordHash !== ''
+            && password_verify($password, $passwordHash)) {
+            $destination = hopia_customer_complete_login($customer);
+            header('Location: ' . $destination, true, 303);
             exit;
         }
 
@@ -79,10 +86,14 @@ require __DIR__ . '/../includes/ui.header.php';
         </header>
 
         <?php if ($message !== ''): ?>
-            <p class="alert alert-error" role="alert"><?= htmlspecialchars($message) ?></p>
+            <p class="alert alert-error" role="alert"><?= hopia_e($message) ?></p>
         <?php endif; ?>
 
+        <?php hopia_google_button('login'); ?>
+        <div class="auth-divider"><span>or continue with email</span></div>
+
         <form class="auth-form" method="POST" novalidate>
+            <input type="hidden" name="csrf_token" value="<?= hopia_e($_SESSION['csrf_token_login']) ?>">
             <div class="field">
                 <label class="field-label" for="email">
                     <svg class="field-label__icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -145,7 +156,7 @@ require __DIR__ . '/../includes/ui.header.php';
                     </label>
                 </div>
                 <span class="auth-form__forgot">
-                    <a href="#" class="link-forgot" tabindex="0" aria-label="Forgot password (not available)">Forgot password?</a>
+                    <a href="forgot-password.php" class="link-forgot">Forgot password?</a>
                 </span>
             </div>
 

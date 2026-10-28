@@ -336,7 +336,8 @@
             if (stopped || cycle !== lifecycle) { throw new Error('Page closed.'); }
             if (authStatus) { throw { status: authStatus }; }
             if (document.hidden || navigating) { return null; }
-            return request('GET');
+            return Promise.all([request('GET'), window.hopiaOrderLive
+                ? window.hopiaOrderLive.refresh() : Promise.resolve()]).then(function (results) { return results[0]; });
         }).then(function (data) {
             if (!data || stopped || cycle !== lifecycle) { return; }
             render(data);

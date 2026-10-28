@@ -168,6 +168,14 @@ if (!function_exists('customer_notifications_create')) {
         }
 
         $message = customer_notifications_message($type, $orderId, $trackingNumber);
+        if ($type === 'ORDER_DELIVERED') {
+            $receipt = $pdo->prepare('SELECT received_at FROM orders WHERE id = ?');
+            $receipt->execute([$orderId]);
+            $receivedAt = $receipt->fetchColumn();
+            if ($receivedAt !== false && $receivedAt !== null) {
+                $message = 'Your order #' . $orderId . ' has been delivered and your receipt confirmation is recorded. Thank you!';
+            }
+        }
         if (function_exists('mb_substr') && mb_strlen($message, 'UTF-8') > 255) {
             $message = mb_substr($message, 0, 255, 'UTF-8');
         } elseif (strlen($message) > 255) {

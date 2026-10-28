@@ -14,7 +14,13 @@ $footer_root = $footer_prefix === 'customer/' ? '' : '../';
 $ui_is_admin = isset($ui_section) && $ui_section === 'admin';
 
 ?>
+<?php if (!empty($ui_order_live)): ?>
+    <script src="<?= hopia_e(hopia_asset('js/order-live.js')) ?>" defer></script>
+<?php endif; ?>
 <?php if ($ui_is_admin): ?>
+    <?php if (!empty($ui_admin_order_list)): ?>
+        <script src="<?= hopia_e(hopia_asset('js/admin-order-management.js')) ?>" defer></script>
+    <?php endif; ?>
                 </div><!-- .admin-content__inner -->
             </main>
         </div><!-- .admin-main -->

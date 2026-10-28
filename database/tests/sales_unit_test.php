@@ -114,6 +114,13 @@ final class SalesUnitPDO extends PDO
     {
         return new SalesUnitStatement($this, preg_replace('/\s+/', ' ', trim($query)));
     }
+    public function query(string $query, ?int $fetchMode = null, mixed ...$fetchModeArgs): PDOStatement|false
+    {
+        if ($query !== 'SELECT NOW()') throw new LogicException('Undeclared direct query in the memory fixture.');
+        $statement = $this->prepare($query);
+        $statement->execute();
+        return $statement;
+    }
     public function inTransaction(): bool { return $this->active; }
     public function lastInsertId(?string $name = null): string|false { return '901'; }
     public function beginTransaction(): bool
@@ -146,6 +153,7 @@ final class SalesUnitPDO extends PDO
 final class SalesUnitStatement extends PDOStatement
 {
     private array $rows = [];
+    private int $affected = 1;
     public function __construct(private SalesUnitPDO $pdo, private string $sql) {}
     public function execute(?array $params = null): bool
     {
@@ -173,6 +181,7 @@ final class SalesUnitStatement extends PDOStatement
             throw $step[2];
         }
         $this->rows = $step[2];
+        $this->affected = $step[3] ?? 1;
         if ($isWrite) {
             check('write is transactional', $this->pdo->inTransaction(), true);
             $this->pdo->staged[] = [$this->sql, $params];
@@ -194,7 +203,7 @@ final class SalesUnitStatement extends PDOStatement
         $this->rows = [];
         return $mode === PDO::FETCH_COLUMN ? array_map(static fn (array $row) => array_values($row)[0], $rows) : $rows;
     }
-    public function rowCount(): int { return 1; }
+    public function rowCount(): int { return $this->affected; }
 }
 
 echo "== Phase 7 COD (DB-free) ==\n";
@@ -520,6 +529,103 @@ $error = null;
 try { payment_courier_sale_inventory_error($pdo, 19); } catch (LogicException $e) { $error = $e->getMessage(); }
 check('inventory helper requires caller transaction', $error, 'Sale inventory checks require the order transaction.');
 check('inventory helper without transaction does not read or write', [$pdo->events, $pdo->reads, $pdo->writes], [[], [], []]);
+
+echo "== Customer courier receipt (DB-free locked transaction) ==\n";
+require_once __DIR__ . '/../../includes/delivery.php';
+$receiptOwner = [':order_id' => 19, ':customer_id' => 8];
+$receiptOrder = array_replace($codOrder, ['status' => 'SHIPPED', 'received_at' => null,
+    'pickup_status' => null, 'picked_up_at' => null]);
+$receiptShipment = array_replace($codShipment, ['shipment_status' => 'OUT_FOR_DELIVERY',
+    'tracking_number' => 'SYNTHETIC-19', 'shipped_at' => $clock, 'delivered_at' => null,
+    'delivery_cycle' => 1, 'delivery_revision' => 3, 'failed_attempts' => 0]);
+$receiptProbe = [
+    ['^SELECT id, status, cancellation_status, received_at FROM orders WHERE id = :order_id AND customer_id = :customer_id LIMIT 1 FOR UPDATE$', $receiptOwner, [$receiptOrder]],
+    [$lockedReads[1][0], $orderParams, [$codPayment]],
+    [$lockedReads[2][0], $orderParams, [$receiptShipment]],
+    $lockedReads[3],
+    ['^SELECT \* FROM shipments WHERE order_id = \? FOR UPDATE$', [19], [$receiptShipment]],
+];
+$receiptGuards = [
+    ['FROM orders o WHERE o\.id = :order_id AND o\.customer_id = :customer_id LIMIT 1 FOR UPDATE$', $receiptOwner, [$receiptOrder]],
+    $receiptProbe[1], $receiptProbe[4],
+    ['^SELECT id FROM sales_transactions WHERE order_id = \? FOR UPDATE$', [19], []],
+    ['^SELECT \* FROM delivery_events WHERE action_key = \? ORDER BY event_index DESC FOR UPDATE$',
+        static fn ($params): bool => count($params) === 1 && sales_is_valid_request_key($params[0]), []],
+    ['^SELECT delivery_cycle, delivery_revision, resulting_state FROM delivery_events WHERE order_id = \? ORDER BY id DESC LIMIT 1 FOR UPDATE$', [19],
+        [['delivery_cycle' => 1, 'delivery_revision' => 3, 'resulting_state' => 'OUT_FOR_DELIVERY']]],
+    ["^SELECT attempt_number FROM delivery_events WHERE order_id = \\? AND delivery_cycle = \\? AND event_type = 'DELIVERY_ATTEMPT_FAILED' ORDER BY attempt_number FOR UPDATE$", [19, 1], []],
+    ['^SELECT \* FROM order_items WHERE order_id = \? ORDER BY id FOR UPDATE$', [19], [['id' => 19, 'product_id' => 2, 'quantity' => 1]]],
+    ['^SELECT id, status, retired_at, barcode_value FROM products WHERE id IN \(\?\) ORDER BY id FOR UPDATE$', [2],
+        [['id' => 2, 'status' => 'SOLD', 'retired_at' => null, 'barcode_value' => 'SYNTHETIC-2']]],
+    ['^SELECT id FROM sales_transaction_items WHERE product_id IN \(\?\) FOR UPDATE$', [2], []],
+    ['^SELECT id FROM sales_transaction_items WHERE order_item_id = \? FOR UPDATE$', [19], []],
+    $inventoryReads[2],
+    ['^SELECT \* FROM order_item_verifications WHERE order_id = \? ORDER BY order_item_id FOR UPDATE$', [19],
+        [['order_item_id' => 19, 'product_id' => 2, 'verified_by' => 3, 'verified_at' => $clock, 'method' => 'MANUAL', 'reason' => 'Identified garment']]],
+    ['^SELECT i\.\*, e\.order_id AS event_order_id, .* WHERE i\.order_id = \? AND i\.delivery_cycle = \? FOR UPDATE$', [19, 1], []],
+    ['^SELECT NOW\(\)$', null, [[$clock]]],
+];
+$receiptWrites = [
+    ["^UPDATE shipments SET shipment_status = \\?, delivery_revision = \\?, failed_attempts = \\?, delivered_at = CASE WHEN \\? = 'DELIVERED' THEN COALESCE\\(delivered_at, \\?\\) ELSE delivered_at END WHERE order_id = \\? AND delivery_cycle = \\? AND delivery_revision = \\? AND shipment_status = \\?$",
+        ['DELIVERED', 4, 0, 'DELIVERED', $clock, 19, 1, 3, 'OUT_FOR_DELIVERY'], []],
+    ["^UPDATE orders SET status = 'DELIVERED', received_at = \\? WHERE id = \\? AND customer_id = \\? AND status = 'SHIPPED' AND received_at IS NULL$", [$clock, 19, 8], []],
+    ['^SELECT received_at FROM orders WHERE id = \?$', [19], [[$clock]]],
+    ['^INSERT INTO customer_order_notifications .* ON DUPLICATE KEY UPDATE id = customer_order_notifications\.id$',
+        [':type' => 'ORDER_DELIVERED', ':message' => 'Your order #19 has been delivered and your receipt confirmation is recorded. Thank you!', ':order_id' => 19], []],
+];
+foreach (['COD' => $codPayment, 'GCASH' => array_replace($gcashPayment,
+    ['submitted_at' => $gcashAt, 'gcash_reference' => '1234567890123', 'rejection_reason' => null, 'rejected_at' => null])]
+    as $method => $receiptPayment) {
+    $probe = $receiptProbe; $guards = $receiptGuards;
+    $probe[1][2] = $guards[1][2] = [$receiptPayment];
+    if ($method === 'GCASH') array_splice($guards, 6, 0,
+        [['^SELECT id FROM admins WHERE id = \? LOCK IN SHARE MODE$', [8], [['id' => 8]]]]);
+    $pdo = new SalesUnitPDO(array_merge($probe, $guards, $receiptWrites));
+    $result = sales_confirm_receipt_online($pdo, 8, 19);
+    check($method . ' receipt atomically delivers the order with the DB receipt timestamp',
+        [$result['ok'], $result['idempotent'] ?? null, $result['state'] ?? null, $result['received_at'] ?? null, $result['sale'] ?? null],
+        [true, false, 'DELIVERED', $clock, null]);
+    check($method . ' receipt commits only shipment, order and one existing notification',
+        [$pdo->events, count($pdo->committed), $pdo->queue, $pdo->inTransaction()],
+        [['begin', 'rollback', 'begin', 'commit'], 3, [], false]);
+    check($method . ' receipt never writes payment, sales, profit, stock or admin-attributed ledger entries',
+        count(array_filter($pdo->committed, static fn ($write): bool => !preg_match('/^(UPDATE shipments |UPDATE orders |INSERT INTO customer_order_notifications )/', $write[0]))), 0);
+
+    $retry = array_slice($probe, 0, 4);
+    $retry[0][2] = [array_replace($receiptOrder, ['status' => 'DELIVERED', 'received_at' => $clock])];
+    $retry[2][2] = [array_replace($receiptShipment, ['shipment_status' => 'DELIVERED', 'delivered_at' => $clock])];
+    $pdo = new SalesUnitPDO($retry, readOnly: true);
+    check($method . ' receipt retry succeeds from persisted receipt only',
+        sales_confirm_receipt_online($pdo, 8, 19)['idempotent'], true);
+    check($method . ' retry creates no duplicated sale, ledger or notification',
+        [$pdo->events, $pdo->writes, $pdo->queue], [['begin', 'commit'], [], []]);
+}
+$pdo = new SalesUnitPDO([[$receiptProbe[0][0], $receiptOwner, []]], readOnly: true);
+check('foreign receipt order has the same generic not-found rejection', sales_confirm_receipt_online($pdo, 8, 19)['reason'], 'not_found');
+check('foreign receipt changes no rows', [$pdo->events, $pdo->queue, $pdo->writes], [['begin', 'rollback'], [], []]);
+foreach (['PENDING', 'CONFIRMED', 'PACKED', 'CANCELLED'] as $status) {
+    $probe = [$receiptProbe[0]]; $probe[0][2] = [array_replace($receiptOrder, ['status' => $status])];
+    $pdo = new SalesUnitPDO($probe, readOnly: true);
+    check($status . ' cannot confirm receipt', sales_confirm_receipt_online($pdo, 8, 19)['reason'], 'not_delivered');
+    check($status . ' rejection never writes', [$pdo->queue, $pdo->writes], [[], []]);
+}
+foreach (['STORE_PICKUP', 'IN_TRANSIT', 'DELIVERY_ATTEMPT_FAILED', 'RETURN_TO_SELLER', 'RETURNED_TO_SHOP'] as $state) {
+    $probe = array_slice($receiptProbe, 0, 4);
+    $probe[2][2] = [array_replace($receiptShipment, $state === 'STORE_PICKUP'
+        ? ['delivery_method' => 'STORE_PICKUP'] : ['shipment_status' => $state])];
+    $pdo = new SalesUnitPDO($probe, readOnly: true);
+    check($state . ' receipt is ineligible', sales_confirm_receipt_online($pdo, 8, 19)['reason'], $state === 'STORE_PICKUP' ? 'not_courier_order' : 'not_delivered');
+    check($state . ' receipt rejection never writes', [$pdo->queue, $pdo->writes], [[], []]);
+}
+foreach ([['notification error', 3, new RuntimeException('Synthetic notification failure'), 'error'],
+    ['conditional order conflict', 1, null, 'conflict']] as [$label, $at, $error, $reason]) {
+    $tail = array_slice($receiptWrites, 0, $at + 1);
+    if ($error !== null) $tail[$at][2] = $error; else $tail[$at][3] = 0;
+    $pdo = new SalesUnitPDO(array_merge($receiptProbe, $receiptGuards, $tail));
+    check($label . ' rejects receipt instead of reporting success', sales_confirm_receipt_online($pdo, 8, 19)['reason'], $reason);
+    check($label . ' rolls back both order and shipment and commits no notification',
+        [$pdo->events, $pdo->committed, $pdo->queue, $pdo->inTransaction()], [['begin', 'rollback', 'begin', 'rollback'], [], [], false]);
+}
 
 echo "\n";
 echo "Ran {$tests} checks, {$failures} failure(s).\n";

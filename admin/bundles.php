@@ -12,6 +12,12 @@ require_once __DIR__ . '/../includes/sales.php';
 require_once __DIR__ . '/../includes/payment.php';
 require_once __DIR__ . '/../includes/pickup.php';
 require_once __DIR__ . '/../includes/bundle_metrics.php';
+require_once __DIR__ . '/../includes/dynamsoft_scanner.php';
+
+if (empty($_SESSION['bundle_barcode_csrf'])) {
+    $_SESSION['bundle_barcode_csrf'] = bin2hex(random_bytes(32));
+}
+$bundleBarcodeCsrf = $_SESSION['bundle_barcode_csrf'];
 
 $validCategories = ['SHIRTS', 'PANTS', 'SHORTS'];
 
@@ -250,6 +256,102 @@ function fmt_date(string $date): string
         </div>
     </section>
 
+    <!-- BARCODE IDENTIFICATION -->
+    <section
+        class="bp-identify card"
+        id="bundle-identification"
+        data-lookup-url="api/bundle-barcode-lookup.php"
+        data-csrf="<?= hopia_e($bundleBarcodeCsrf) ?>"
+        aria-labelledby="bundle-identification-title"
+    >
+        <div class="card-body">
+            <div class="bp-identify__head">
+                <div>
+                    <p class="bp-toolbar__eyebrow">Registered item lookup</p>
+                    <h2 class="bp-identify__title" id="bundle-identification-title">Identify an item and its bundle</h2>
+                    <p class="bp-identify__intro">Scan a garment barcode or enter it manually. This lookup is read-only and accepts sold, held, available, and retired registered items.</p>
+                </div>
+            </div>
+
+            <div class="bp-identify__methods">
+                <div class="bp-identify__method" aria-labelledby="bundle-scan-title">
+                    <div class="bp-identify__method-head">
+                        <span class="bp-identify__mode-icon" aria-hidden="true">
+                            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7V5a1 1 0 0 1 1-1h2M17 4h2a1 1 0 0 1 1 1v2M20 17v2a1 1 0 0 1-1 1h-2M7 20H5a1 1 0 0 1-1-1v-2M7 9v6M10 9v6M14 9v6M17 9v6"/></svg>
+                        </span>
+                        <div><span class="bp-identify__option">Camera</span><h3 id="bundle-scan-title">Scan Barcode</h3></div>
+                    </div>
+                    <p class="bp-identify__hint">Use this device&rsquo;s camera to scan a Code 128 garment label.</p>
+
+                    <div class="bp-identify__controls">
+                        <button type="button" id="bundle-camera-start" class="btn btn-secondary btn-sm">Open Camera Scanner</button>
+                        <button type="button" id="bundle-camera-stop" class="btn btn-ghost btn-sm" hidden>Close Scanner</button>
+                        <button type="button" id="bundle-camera-torch" class="btn btn-secondary btn-sm" aria-pressed="false" hidden>Flashlight: Off</button>
+                        <label id="bundle-camera-zoom-control" class="bp-identify__zoom" hidden>
+                            <span>Zoom</span>
+                            <input type="range" id="bundle-camera-zoom" aria-label="Camera zoom">
+                        </label>
+                    </div>
+
+                    <div id="bundle-reader-off" class="bp-identify__reader-off">Camera is off. Manual entry remains available without camera access.</div>
+                    <div id="bundle-reader-wrap" class="bp-identify__reader-wrap" hidden>
+                        <div id="bundle-barcode-reader" class="bp-identify__reader"></div>
+                        <p class="bp-identify__camera-hint">Fit the entire barcode inside the frame and hold the camera steady.</p>
+                        <p id="bundle-camera-state" class="bp-identify__camera-state" role="status" data-kind="starting">Starting camera&hellip;</p>
+                    </div>
+                </div>
+
+                <div class="bp-identify__method" aria-labelledby="bundle-enter-title">
+                    <div class="bp-identify__method-head">
+                        <span class="bp-identify__mode-icon" aria-hidden="true">
+                            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 5v14M7 5v14M10.5 5v14M14 5v14M17 5v14M20 5v14"/></svg>
+                        </span>
+                        <div><span class="bp-identify__option">Manual</span><h3 id="bundle-enter-title">Enter Barcode</h3></div>
+                    </div>
+                    <p class="bp-identify__hint">Type or paste the exact registered barcode. Leading and trailing spaces are ignored.</p>
+
+                    <form id="bundle-barcode-form" class="bp-identify__form" autocomplete="off">
+                        <div class="bp-identify__field">
+                            <label class="bp-filter__label" for="bundle-barcode-input">Barcode</label>
+                            <input
+                                class="bp-filter__input"
+                                type="text"
+                                id="bundle-barcode-input"
+                                name="barcode"
+                                maxlength="64"
+                                inputmode="text"
+                                autocapitalize="characters"
+                                placeholder="HOPEBUNDLE-000001-01"
+                            >
+                        </div>
+                        <button class="btn btn-primary bp-identify__submit" type="submit" id="bundle-barcode-submit">Find Item</button>
+                    </form>
+                    <p class="bp-identify__hint">Press Enter or select Find Item to run the same lookup used by the camera scanner.</p>
+                </div>
+            </div>
+
+            <section class="bp-identify__result" id="bundle-identification-result" aria-labelledby="bundle-result-title" hidden>
+                <div class="bp-identify__result-head">
+                    <p class="bp-toolbar__eyebrow">Identification result</p>
+                    <h3 id="bundle-result-title">Registered item</h3>
+                    <p id="bundle-result-message"></p>
+                </div>
+                <dl class="bp-identify__details">
+                    <div data-result-row="barcode" hidden><dt>Barcode</dt><dd data-result-field="barcode"></dd></div>
+                    <div data-result-row="product-category" hidden><dt>Item category</dt><dd data-result-field="product-category"></dd></div>
+                    <div data-result-row="product-status" hidden><dt>Item status</dt><dd data-result-field="product-status"></dd></div>
+                    <div data-result-row="description" hidden><dt>Description</dt><dd data-result-field="description"></dd></div>
+                    <div data-result-row="item-number" hidden><dt>Bundle item no.</dt><dd data-result-field="item-number"></dd></div>
+                    <div data-result-row="bundle-code" hidden><dt>Registered bundle</dt><dd data-result-field="bundle-code"></dd></div>
+                    <div data-result-row="bundle-category" hidden><dt>Bundle category</dt><dd data-result-field="bundle-category"></dd></div>
+                    <div data-result-row="bundle-capital" hidden><dt>Total Puhunan</dt><dd data-result-field="bundle-capital"></dd></div>
+                    <div data-result-row="bundle-quantity" hidden><dt>Original quantity</dt><dd data-result-field="bundle-quantity"></dd></div>
+                    <div data-result-row="purchase-date" hidden><dt>Purchase date</dt><dd data-result-field="purchase-date"></dd></div>
+                </dl>
+            </section>
+        </div>
+    </section>
+
     <?php if (isset($_GET['created'])): ?>
         <div class="alert alert-success" role="status">
             Bundle created successfully.
@@ -298,9 +400,6 @@ function fmt_date(string $date): string
                     </div>
                     <span class="badge"><?= (int) $legacySummary['total'] ?> items</span>
                 </div>
-                <p class="bp-legacy__note">
-                    Excluded from per-bundle metrics. Assign them via the Legacy Assignment workflow.
-                </p>
                 <div class="bp-legacy__tiles">
                     <div class="bp-inv-tile">
                         <p class="bp-inv-tile__label">Available</p>
@@ -327,6 +426,10 @@ function fmt_date(string $date): string
                         Review Legacy Assignment
                     </a>
                 </div>
+                <details class="bp-legacy__details">
+                    <summary>Why these products are separate</summary>
+                    <p>Unassigned legacy products are excluded from per-bundle metrics until they are assigned through the existing Legacy Assignment workflow. Their inventory classifications above remain unchanged.</p>
+                </details>
             </div>
         </section>
         <?php endif; ?>
@@ -480,112 +583,118 @@ function fmt_date(string $date): string
                 // Progress percentage
                 $regPct = $originalQty > 0 ? min(100, round(($registeredCount / $originalQty) * 100)) : 0;
             ?>
-                <article class="bp-card card" aria-labelledby="bp-card-<?= $bundleId ?>-title">
+                <article class="bp-card card" data-bundle-id="<?= $bundleId ?>" aria-labelledby="bp-card-<?= $bundleId ?>-title">
 
-                    <!-- CARD HEADER -->
-                    <div class="bp-card__head">
-                        <div class="bp-card__identity">
-                            <p class="bp-card__code" id="bp-card-<?= $bundleId ?>-title"><?= htmlspecialchars($code) ?></p>
-                            <div class="bp-card__meta">
-                                <span class="badge"><?= htmlspecialchars($bundle['category']) ?></span>
-                                <?php if ($formattedDate !== ''): ?>
-                                    <span class="bp-card__date"><?= htmlspecialchars($formattedDate) ?></span>
+                    <div class="bp-card__summary">
+                        <!-- CARD HEADER -->
+                        <div class="bp-card__head">
+                            <div class="bp-card__identity">
+                                <p class="bp-card__code" id="bp-card-<?= $bundleId ?>-title"><?= htmlspecialchars($code) ?></p>
+                                <div class="bp-card__meta">
+                                    <span class="badge"><?= htmlspecialchars($bundle['category']) ?></span>
+                                    <?php if ($formattedDate !== ''): ?>
+                                        <span class="bp-card__date"><?= htmlspecialchars($formattedDate) ?></span>
+                                    <?php endif; ?>
+                                </div>
+                            </div>
+                            <div class="bp-card__capital">
+                                <p class="bp-card__capital-label">Total Puhunan</p>
+                                <p class="bp-card__capital-value"><?= bpc($capitalTotal) ?></p>
+                            </div>
+                        </div>
+
+                        <!-- REGISTRATION PROGRESS -->
+                        <div class="bp-card__reg">
+                            <div class="bp-card__reg-head">
+                                <p class="bp-card__reg-label">
+                                    Registered
+                                    <span class="bp-card__reg-count">
+                                        <?= $registeredCount ?> of <?= $originalQty ?>
+                                    </span>
+                                </p>
+                                <?php if ($unregisteredQty > 0): ?>
+                                    <span class="bp-card__unreg-badge">Registration needed</span>
+                                <?php else: ?>
+                                    <span class="badge badge-success">Complete</span>
                                 <?php endif; ?>
                             </div>
+                            <div class="bp-progress" role="progressbar" aria-valuenow="<?= $regPct ?>" aria-valuemin="0" aria-valuemax="100" aria-label="Registration progress">
+                                <div class="bp-progress__bar" style="width:<?= $regPct ?>%"></div>
+                            </div>
                         </div>
-                        <div class="bp-card__capital">
-                            <p class="bp-card__capital-label">Total Puhunan</p>
-                            <p class="bp-card__capital-value"><?= bpc($capitalTotal) ?></p>
-                            <p class="bp-card__unit-cost">
-                                Item cost: <?= bpc($unitCost) ?><span class="muted"> / item</span>
-                                &nbsp;&middot;&nbsp; Orig. qty <?= $originalQty ?>
-                            </p>
-                        </div>
-                    </div>
 
-                    <!-- REGISTRATION PROGRESS -->
-                    <div class="bp-card__reg">
-                        <div class="bp-card__reg-head">
-                            <p class="bp-card__reg-label">
-                                Registered
-                                <span class="bp-card__reg-count">
-                                    <?= $registeredCount ?> of <?= $originalQty ?>
-                                </span>
+                        <!-- INVENTORY STATUS TILES -->
+                        <div class="bp-card__inv">
+                            <div class="bp-inv-tile bp-inv-tile--held">
+                                <p class="bp-inv-tile__label">Online-held</p>
+                                <p class="bp-inv-tile__value"><?= $onlineHeldCount ?></p>
+                            </div>
+                            <div class="bp-inv-tile bp-inv-tile--sold">
+                                <p class="bp-inv-tile__label">Recorded Sold Items</p>
+                                <p class="bp-inv-tile__value"><?= $recordedSoldCount ?></p>
+                            </div>
+                        </div>
+
+                        <!-- COMPLETED FINANCIAL RESULTS -->
+                        <div class="bp-card__results">
+                            <div class="bp-results-grid">
+                                <div class="bp-result-item">
+                                    <p class="bp-result-item__label">Eligible Completed Sales</p>
+                                    <p class="bp-result-item__value"><?= bpc($totalCompletedRevenue) ?></p>
+                                    <p class="bp-result-item__sub muted">
+                                        <?= $hasCompletedSales ? bpc_items($totalCompletedItems) . ' financially eligible' : 'No eligible sales yet' ?>
+                                    </p>
+                                </div>
+                                <div class="bp-result-item">
+                                    <p class="bp-result-item__label">Profit So Far</p>
+                                    <p class="bp-result-item__value <?= $totalGrossProfit >= 0 ? 'is-profit' : 'is-loss' ?>">
+                                        <?= bpc($totalGrossProfit) ?>
+                                    </p>
+                                    <p class="bp-result-item__sub muted">
+                                        COGS (eligible items): <?= bpc($totalCompletedCogs) ?>
+                                    </p>
+                                </div>
+                            </div>
+                            <p class="bp-profit-note muted">
+                                Eligible completed revenue minus allocated item cost. Not net business profit &mdash; operating expenses are not included.
                             </p>
-                            <?php if ($unregisteredQty > 0): ?>
-                                <span class="bp-card__unreg-badge"><?= $unregisteredQty ?> unregistered</span>
+                        </div>
+
+                        <!-- PRIMARY BUNDLE ACTIONS -->
+                        <div class="bp-card__actions">
+                            <?php if ($isFullyRegistered): ?>
+                                <span class="badge badge-sold bp-card__full-badge">Full — all items registered</span>
                             <?php else: ?>
-                                <span class="badge badge-success">Complete</span>
+                                <a class="btn btn-secondary btn-sm" href="product-create.php?bundle_id=<?= $bundleId ?>">
+                                    <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                                    Register Item
+                                </a>
                             <?php endif; ?>
+                            <a class="btn btn-outline btn-sm" href="labels.php?bundle_id=<?= $bundleId ?>">
+                                <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 5v14M7 5v14M10.5 5v14M14 5v14M17 5v14M20 5v14"/></svg>
+                                Print Labels
+                            </a>
                         </div>
-                        <div class="bp-progress" role="progressbar" aria-valuenow="<?= $regPct ?>" aria-valuemin="0" aria-valuemax="100" aria-label="Registration progress">
-                            <div class="bp-progress__bar" style="width:<?= $regPct ?>%"></div>
-                        </div>
+
+                        <button
+                            class="bp-card__expand"
+                            type="button"
+                            aria-expanded="false"
+                            aria-controls="bp-card-<?= $bundleId ?>-details"
+                        >
+                            <span>View bundle details</span>
+                            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
+                        </button>
                     </div>
 
-                    <!-- INVENTORY STATUS TILES -->
-                    <div class="bp-card__inv">
-                        <?php if ($availableCount > 0): ?>
-                        <div class="bp-inv-tile bp-inv-tile--available">
-                            <p class="bp-inv-tile__label">Available</p>
-                            <p class="bp-inv-tile__value"><?= $availableCount ?></p>
+                    <div class="bp-card__details-panel" id="bp-card-<?= $bundleId ?>-details" role="region" aria-label="Bundle details" tabindex="0" hidden>
+                        <div class="bp-card__facts" aria-label="Bundle inventory details">
+                            <div><span>Item cost</span><strong><?= bpc($unitCost) ?> / item</strong></div>
+                            <div><span>Original quantity</span><strong><?= $originalQty ?></strong></div>
+                            <div><span>Available</span><strong><?= $availableCount ?></strong></div>
+                            <div><span>Unregistered</span><strong><?= $unregisteredQty ?></strong></div>
+                            <div><span>Retired</span><strong><?= $retiredCount ?></strong></div>
                         </div>
-                        <?php endif; ?>
-                        <?php if ($onlineHeldCount > 0): ?>
-                        <div class="bp-inv-tile bp-inv-tile--held">
-                            <p class="bp-inv-tile__label">Online-held</p>
-                            <p class="bp-inv-tile__value"><?= $onlineHeldCount ?></p>
-                            <p class="bp-inv-tile__sub">In active order</p>
-                        </div>
-                        <?php endif; ?>
-                        <?php if ($recordedSoldCount > 0): ?>
-                        <div class="bp-inv-tile bp-inv-tile--sold">
-                            <p class="bp-inv-tile__label">Recorded Sold Items</p>
-                            <p class="bp-inv-tile__value"><?= $recordedSoldCount ?></p>
-                            <p class="bp-inv-tile__sub">Sale-item history, not financial eligibility</p>
-                        </div>
-                        <?php endif; ?>
-                        <?php if ($retiredCount > 0): ?>
-                        <div class="bp-inv-tile bp-inv-tile--retired">
-                            <p class="bp-inv-tile__label">Retired</p>
-                            <p class="bp-inv-tile__value"><?= $retiredCount ?></p>
-                        </div>
-                        <?php endif; ?>
-                        <?php if ($availableCount === 0 && $onlineHeldCount === 0 && $recordedSoldCount === 0 && $retiredCount === 0): ?>
-                        <div class="bp-inv-tile">
-                            <p class="bp-inv-tile__label muted">No items registered</p>
-                        </div>
-                        <?php endif; ?>
-                    </div>
-
-                    <!-- COMPLETED FINANCIAL RESULTS -->
-                    <div class="bp-card__results">
-                        <?php if (!$hasCompletedSales): ?>
-                        <p class="bp-card__results-empty muted text-small">Eligible Completed Sales: 0 items. No eligible merchandise revenue or COGS yet.</p>
-                        <?php else: ?>
-                        <div class="bp-results-grid">
-                            <div class="bp-result-item">
-                                <p class="bp-result-item__label">Eligible Completed Sales</p>
-                                <p class="bp-result-item__value"><?= bpc($totalCompletedRevenue) ?></p>
-                                <p class="bp-result-item__sub muted">
-                                    <?= bpc_items($totalCompletedItems) ?> financially eligible
-                                </p>
-                            </div>
-                            <div class="bp-result-item">
-                                <p class="bp-result-item__label">Profit So Far</p>
-                                <p class="bp-result-item__value <?= $totalGrossProfit >= 0 ? 'is-profit' : 'is-loss' ?>">
-                                    <?= bpc($totalGrossProfit) ?>
-                                </p>
-                                <p class="bp-result-item__sub muted">
-                                    COGS (eligible items): <?= bpc($totalCompletedCogs) ?>
-                                </p>
-                            </div>
-                        </div>
-                        <p class="bp-profit-note muted">
-                            Eligible completed revenue minus allocated item cost. Not net business profit &mdash; operating expenses are not included.
-                        </p>
-                        <?php endif; ?>
-                    </div>
 
                     <!-- ITEMS IN ACTIVE ORDERS (visibility strip) -->
                     <?php if ($onlineHeldCount > 0): ?>
@@ -658,35 +767,15 @@ function fmt_date(string $date): string
                     </div>
                     <?php endif; ?>
 
-                    <!-- CARD ACTIONS -->
-                    <div class="bp-card__actions">
-                        <?php if ($isFullyRegistered): ?>
-                            <span class="badge badge-sold bp-card__full-badge">Full — all items registered</span>
-                        <?php else: ?>
-                            <a class="btn btn-secondary btn-sm" href="product-create.php?bundle_id=<?= $bundleId ?>">
-                                <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                                Register Item
-                            </a>
-                        <?php endif; ?>
-                        <a class="btn btn-outline btn-sm" href="labels.php?bundle_id=<?= $bundleId ?>">
-                            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 5v14M7 5v14M10.5 5v14M14 5v14M17 5v14M20 5v14"/></svg>
-                            Print Labels
-                        </a>
-                    </div>
-
                     <!-- EXPANDABLE FINANCIAL DETAILS -->
-                    <details class="bp-card__details">
-                        <summary class="bp-card__details-toggle">
-                            <svg class="bp-card__details-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
-                            Financial details
-                        </summary>
+                    <div class="bp-card__details">
+                        <h3 class="bp-card__details-heading">Financial and diagnostic details</h3>
                         <div class="bp-card__details-body">
 
                             <?php if (!$hasCompletedSales && $recordedSoldCount === 0 && !$hasRemaining && $onlineHeldCount === 0 && $retiredCount === 0 && $unregisteredQty === 0): ?>
                             <p class="muted text-small bp-details-empty">Nothing to break down yet.</p>
                             <?php endif; ?>
 
-                            <?php if ($hasCompletedSales || $recordedSoldCount > 0): ?>
                             <details class="bp-sub">
                                 <summary class="bp-sub__toggle">
                                     <span class="bp-sub__title">A. Eligible Completed Sales</span>
@@ -719,7 +808,6 @@ function fmt_date(string $date): string
                                     </div>
                                 </div>
                             </details>
-                            <?php endif; ?>
 
                             <details class="bp-sub">
                                 <summary class="bp-sub__toggle">
@@ -969,7 +1057,9 @@ function fmt_date(string $date): string
                             </details>
 
                         </div>
-                    </details>
+                    </div>
+
+                    </div>
 
                 </article>
             <?php endforeach; ?>
@@ -1126,7 +1216,7 @@ function fmt_date(string $date): string
 
 /* Filter toolbar */
 .bp-toolbar .card-body {
-    padding: 1.25rem 1.5rem;
+    padding: 1rem 1.25rem;
 }
 
 .bp-toolbar__head {
@@ -1134,7 +1224,7 @@ function fmt_date(string $date): string
     align-items: flex-start;
     justify-content: space-between;
     gap: 1rem;
-    margin-bottom: 1rem;
+    margin-bottom: 0.75rem;
 }
 
 .bp-toolbar__eyebrow {
@@ -1172,15 +1262,14 @@ function fmt_date(string $date): string
 }
 
 .bp-filter__row {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.75rem;
+    display: grid;
+    grid-template-columns: minmax(0, 2fr) minmax(10rem, 1fr) auto;
+    gap: 0.65rem;
     align-items: flex-end;
 }
 
 .bp-filter__field {
-    flex: 1 1 200px;
-    min-width: 160px;
+    min-width: 0;
 }
 
 .bp-filter__label {
@@ -1212,6 +1301,7 @@ function fmt_date(string $date): string
 }
 
 .bp-filter__input {
+    box-sizing: border-box;
     width: 100%;
     padding: 0.5rem 0.75rem;
     min-height: 38px;
@@ -1230,12 +1320,307 @@ function fmt_date(string $date): string
 }
 
 .bp-filter__submit {
-    flex: 0 0 auto;
+    min-width: 0;
 }
 .bp-filter__btn {
     min-height: 38px;
     padding: 0.5rem 1rem;
     font-size: 0.8125rem;
+}
+
+/* Barcode identification */
+.bp-identify .card-body {
+    padding: 1rem 1.25rem;
+}
+
+.bp-identify__head {
+    margin-bottom: 0.75rem;
+}
+
+.bp-identify__title {
+    margin-top: 0.2rem;
+    color: var(--admin-ink);
+    font-size: 1.125rem;
+    font-weight: 750;
+}
+
+.bp-identify__intro,
+.bp-identify__hint {
+    color: var(--color-text-muted);
+    font-size: 0.8125rem;
+}
+
+.bp-identify__intro {
+    margin-top: 0.35rem;
+    max-width: 72ch;
+}
+
+.bp-identify__methods {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.75rem;
+}
+
+.bp-identify__method {
+    min-width: 0;
+    padding: 0.875rem;
+    border: 1px solid var(--color-border);
+    border-radius: 12px;
+    background: var(--color-surface-muted);
+}
+
+.bp-identify__method-head {
+    display: flex;
+    align-items: center;
+    gap: 0.65rem;
+}
+
+.bp-identify__method-head h3 {
+    margin: 0;
+    color: var(--admin-ink);
+    font-size: 0.95rem;
+}
+
+.bp-identify__mode-icon {
+    display: grid;
+    flex: 0 0 36px;
+    width: 36px;
+    height: 36px;
+    place-items: center;
+    border-radius: 9px;
+    background: var(--admin-accent-soft);
+    color: var(--admin-accent-strong);
+}
+
+.bp-identify__method-head > div {
+    min-width: 0;
+}
+
+.bp-identify__option {
+    display: block;
+    margin-bottom: 0.1rem;
+    color: var(--admin-accent-strong);
+    font-size: 0.62rem;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+
+.bp-identify__hint {
+    margin: 0.5rem 0 0;
+}
+
+.bp-identify__controls {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+    margin-top: 0.85rem;
+}
+
+.bp-identify__controls .btn[hidden],
+.bp-identify__zoom[hidden],
+.bp-identify__reader-wrap[hidden],
+.bp-identify__result[hidden],
+.bp-identify__details > div[hidden] {
+    display: none;
+}
+
+.bp-identify__zoom {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    color: var(--color-text-soft);
+    font-size: 0.8125rem;
+}
+
+.bp-identify__zoom input {
+    width: 110px;
+}
+
+.bp-identify__reader-off,
+.bp-identify__reader-wrap {
+    width: 100%;
+    margin-top: 0.85rem;
+    border: 1px dashed var(--color-border-strong);
+    border-radius: 10px;
+}
+
+.bp-identify__reader-off {
+    padding: 0.6rem 0.75rem;
+    color: var(--color-text-muted);
+    font-size: 0.8125rem;
+    text-align: center;
+}
+
+.bp-identify__reader-wrap {
+    position: relative;
+    min-height: 220px;
+    overflow: hidden;
+    border-style: solid;
+    background: #11100e;
+    transition: box-shadow 150ms ease;
+}
+
+.bp-identify__reader-wrap.is-flash {
+    box-shadow: 0 0 0 4px var(--admin-success, #1a7f37);
+}
+
+.bp-identify__reader,
+.bp-identify__reader video {
+    width: 100% !important;
+}
+
+.bp-identify__reader video {
+    display: block;
+    height: auto;
+}
+
+.bp-identify__camera-hint,
+.bp-identify__camera-state {
+    position: absolute;
+    left: 0.65rem;
+    right: 0.65rem;
+    margin: 0;
+    padding: 0.4rem 0.65rem;
+    border-radius: 8px;
+    background: rgba(17, 16, 14, 0.78);
+    color: #fff;
+    font-size: 0.75rem;
+    text-align: center;
+    pointer-events: none;
+}
+
+.bp-identify__camera-hint {
+    top: 0.65rem;
+}
+
+.bp-identify__camera-state {
+    right: auto;
+    bottom: 0.65rem;
+    max-width: calc(100% - 1.3rem);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.bp-identify__camera-state[data-kind="starting"],
+.bp-identify__camera-state[data-kind="warn"] {
+    background: rgba(138, 90, 0, 0.94);
+}
+
+.bp-identify__camera-state[data-kind="ready"],
+.bp-identify__camera-state[data-kind="ok"] {
+    background: rgba(29, 122, 60, 0.94);
+}
+
+.bp-identify__camera-state[data-kind="error"] {
+    background: rgba(180, 35, 24, 0.94);
+}
+
+.bp-identify__form {
+    display: flex;
+    align-items: flex-end;
+    gap: 0.65rem;
+    margin-top: 0.85rem;
+}
+
+.bp-identify__field {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.bp-identify__submit {
+    flex: 0 0 auto;
+    min-height: 38px;
+}
+
+.bp-identify__result {
+    margin-top: 1rem;
+    padding: 1rem;
+    border: 1px solid var(--admin-success-border, #bbf7d0);
+    border-left: 4px solid var(--admin-accent);
+    border-radius: 12px;
+    background: var(--admin-accent-soft);
+}
+
+.bp-identify__result[data-result-state="warning"] {
+    border-color: var(--admin-warning-border, #fde68a);
+    border-left-color: var(--admin-warning, #92400e);
+    background: var(--admin-warning-bg, #fef9c3);
+}
+
+.bp-identify__result[data-result-state="error"] {
+    border-color: var(--admin-danger-border, #f0cfcd);
+    border-left-color: var(--color-danger);
+    background: var(--color-danger-soft);
+}
+
+.bp-identify__result-head h3 {
+    margin: 0.2rem 0 0;
+    color: var(--admin-ink);
+    font-size: 1rem;
+}
+
+.bp-identify__result-head p:last-child {
+    margin: 0.35rem 0 0;
+    color: var(--color-text-soft);
+    font-size: 0.8125rem;
+}
+
+.bp-identify__details {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.5rem 1rem;
+    margin: 0.85rem 0 0;
+}
+
+.bp-identify__details > div {
+    min-width: 0;
+    padding-top: 0.5rem;
+    border-top: 1px solid var(--color-border);
+}
+
+.bp-identify__details dt {
+    color: var(--color-text-muted);
+    font-size: 0.65rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+
+.bp-identify__details dd {
+    margin: 0.15rem 0 0;
+    color: var(--admin-ink);
+    font-size: 0.8125rem;
+    font-weight: 650;
+    overflow-wrap: anywhere;
+}
+
+.bp-card.is-barcode-match {
+    border-color: var(--admin-accent-strong);
+    box-shadow: 0 0 0 3px var(--admin-success-bg, rgba(22, 163, 74, 0.15)), var(--shadow-md);
+}
+
+.admin-bundles-page #admin-success[data-bundle-kind="error"] {
+    border-color: var(--admin-danger-border, #f0cfcd);
+    border-left-color: var(--color-danger);
+    background: var(--color-danger-soft);
+    color: var(--admin-danger, var(--color-danger-dark));
+}
+
+.admin-bundles-page #admin-success[data-bundle-kind="warning"] {
+    border-color: var(--admin-warning-border, #fde68a);
+    border-left-color: var(--admin-warning, #92400e);
+    background: var(--admin-warning-bg, #fef9c3);
+    color: var(--admin-warning, #92400e);
+}
+
+.admin-bundles-page #admin-success[data-bundle-kind="error"] .admin-success__icon,
+.admin-bundles-page #admin-success[data-bundle-kind="error"] .admin-success__close:hover,
+.admin-bundles-page #admin-success[data-bundle-kind="warning"] .admin-success__icon,
+.admin-bundles-page #admin-success[data-bundle-kind="warning"] .admin-success__close:hover {
+    background: rgba(255, 255, 255, 0.45);
 }
 
 /* Result count */
@@ -1268,7 +1653,7 @@ function fmt_date(string $date): string
 
 /* Legacy section */
 .bp-legacy .card-body {
-    padding: 1.25rem 1.5rem;
+    padding: 1rem 1.25rem;
 }
 
 .bp-legacy__head {
@@ -1302,15 +1687,40 @@ function fmt_date(string $date): string
 }
 
 .bp-legacy__tiles {
-    display: flex;
-    flex-wrap: wrap;
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 0.5rem;
-    margin-bottom: 1rem;
+    margin-bottom: 0.75rem;
 }
 
 .bp-legacy__action {
     display: flex;
     gap: 0.5rem;
+}
+
+.bp-legacy__details {
+    margin-top: 0.75rem;
+    border-top: 1px solid var(--color-border);
+    padding-top: 0.65rem;
+}
+
+.bp-legacy__details summary {
+    color: var(--color-text-muted);
+    cursor: pointer;
+    font-size: 0.75rem;
+    font-weight: 650;
+}
+
+.bp-legacy__details summary:focus-visible {
+    outline: 2px solid var(--admin-success, var(--admin-accent));
+    outline-offset: 3px;
+}
+
+.bp-legacy__details p {
+    margin: 0.55rem 0 0;
+    color: var(--color-text-muted);
+    font-size: 0.78rem;
+    line-height: 1.5;
 }
 
 /* Inventory tiles — shared compact tile used in both legacy and bundle cards */
@@ -1381,18 +1791,20 @@ function fmt_date(string $date): string
 /* Bundle cards grid */
 .bp-grid {
     display: grid;
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
+    align-items: start;
     gap: 1rem;
 }
 
-@media (min-width: 640px) {
+@media (min-width: 900px) {
     .bp-grid {
-        grid-template-columns: repeat(2, 1fr);
+        grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 }
 
 /* Bundle card */
 .bp-card {
+    box-sizing: border-box;
     background: var(--admin-surface, #ffffff);
     border: 1px solid var(--color-border);
     border-radius: 16px;
@@ -1400,6 +1812,25 @@ function fmt_date(string $date): string
     box-shadow: var(--shadow-sm);
     display: flex;
     flex-direction: column;
+    align-self: start;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+}
+
+.bp-card.is-expanded {
+    border-color: var(--admin-accent-strong);
+    box-shadow: var(--shadow-md);
+}
+
+.bp-card__summary {
+    flex: 0 0 auto;
+    width: 100%;
+    min-width: 0;
+}
+
+.bp-card:not(.is-expanded) .bp-card__expand {
+    border-radius: 0 0 15px 15px;
 }
 
 /* Card header */
@@ -1529,11 +1960,15 @@ function fmt_date(string $date): string
 
 /* Inventory status tiles */
 .bp-card__inv {
-    display: flex;
-    flex-wrap: wrap;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 0.5rem;
     padding: 0.875rem 1.25rem;
     border-bottom: 1px solid var(--color-border);
+}
+
+.bp-card__inv .bp-inv-tile {
+    min-width: 0;
 }
 
 /* Completed financial results */
@@ -1645,13 +2080,133 @@ function fmt_date(string $date): string
     border-bottom: 1px solid var(--color-border);
 }
 
+.bp-card__expand {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    width: 100%;
+    padding: 0.72rem 1.25rem;
+    border: 0;
+    background: var(--color-surface-muted);
+    color: var(--admin-accent-strong);
+    cursor: pointer;
+    font: inherit;
+    font-size: 0.8rem;
+    font-weight: 750;
+    text-align: left;
+}
+
+.bp-card__expand:hover {
+    background: var(--color-border);
+    color: var(--admin-ink);
+}
+
+.bp-card__expand:focus-visible,
+.bp-card__details-panel:focus-visible {
+    outline: 2px solid var(--admin-success, var(--admin-accent));
+    outline-offset: -3px;
+}
+
+.bp-card__expand svg {
+    flex-shrink: 0;
+    transition: transform var(--transition);
+}
+
+.bp-card__expand[aria-expanded="true"] svg {
+    transform: rotate(180deg);
+}
+
+.bp-card__details-panel[hidden] {
+    display: none;
+}
+
+.bp-card__details-panel {
+    box-sizing: border-box;
+    flex: 0 1 auto;
+    width: 100%;
+    max-width: 100%;
+    min-height: 0;
+    min-width: 0;
+    max-height: min(22rem, 50vh);
+    max-height: min(22rem, 50dvh);
+    border-radius: 0 0 15px 15px;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-gutter: stable;
+    scroll-padding-block: 0.75rem;
+    -webkit-overflow-scrolling: touch;
+}
+
+.bp-card__details-panel .bp-detail-row,
+.bp-card__details-panel .bp-detail-row__label,
+.bp-card__details-panel .bp-detail-row__value,
+.bp-card__details-panel .bp-detail-row__sub {
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.bp-card__details-panel .bp-detail-row__value {
+    max-width: 100%;
+    white-space: normal;
+}
+
+.bp-card__details-panel .bp-sub__toggle {
+    flex-wrap: wrap;
+}
+
+.bp-card__details-panel .bp-sub__hint {
+    max-width: 100%;
+    white-space: normal;
+    overflow-wrap: anywhere;
+}
+
+.bp-card__facts {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 0.5rem;
+    padding: 0.875rem 1.25rem;
+    border-top: 1px solid var(--color-border);
+    border-bottom: 1px solid var(--color-border);
+}
+
+.bp-card__facts > div {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: 0.15rem;
+}
+
+.bp-card__facts span {
+    color: var(--color-text-muted);
+    font-size: 0.65rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+
+.bp-card__facts strong {
+    color: var(--admin-ink);
+    font-size: 0.88rem;
+    overflow-wrap: anywhere;
+}
+
 .bp-card__full-badge {
     font-size: 0.75rem;
 }
 
 /* Expandable financial details */
 .bp-card__details {
-    border-top: 0;
+    border-top: 1px solid var(--color-border);
+}
+
+.bp-card__details-heading {
+    margin: 0;
+    padding: 0.85rem 1.25rem 0;
+    color: var(--admin-ink);
+    font-size: 0.85rem;
+    font-weight: 750;
 }
 
 .bp-card__details-toggle {
@@ -1993,7 +2548,48 @@ details summary::-webkit-details-marker { display: none; }
 }
 
 /* Responsive adjustments */
+@media (max-width: 767px) {
+    .bp-filter__row {
+        grid-template-columns: minmax(0, 1fr);
+        align-items: stretch;
+        gap: 0.65rem;
+    }
+    .bp-filter__field,
+    .bp-filter__submit {
+        width: 100%;
+        min-width: 0;
+        margin: 0;
+    }
+    .bp-filter__input,
+    .bp-filter__btn {
+        width: 100%;
+        min-height: 42px;
+    }
+    .bp-filter__btn {
+        margin-top: 0.1rem;
+    }
+    .bp-card__details-panel {
+        max-height: min(18rem, 45vh);
+        max-height: min(18rem, 45dvh);
+    }
+}
+
 @media (max-width: 639px) {
+    .bp-identify__methods,
+    .bp-identify__details {
+        grid-template-columns: 1fr;
+    }
+    .bp-identify__form {
+        align-items: stretch;
+        flex-direction: column;
+    }
+    .bp-identify__submit {
+        width: 100%;
+    }
+    .bp-legacy__tiles,
+    .bp-card__facts {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
     .bp-card__head {
         flex-direction: column;
     }
@@ -2008,19 +2604,45 @@ details summary::-webkit-details-marker { display: none; }
     .bp-card__held {
         flex-wrap: wrap;
     }
-    .bp-filter__row {
-        flex-direction: column;
-    }
-    .bp-filter__field {
-        min-width: 0;
-    }
-    .bp-filter__submit {
-        width: 100%;
-    }
-    .bp-filter__btn {
-        width: 100%;
-    }
 }
 </style>
+
+<script>
+(function () {
+    'use strict';
+
+    var cards = Array.prototype.slice.call(document.querySelectorAll('.bp-card'));
+
+    function setExpanded(card, expanded) {
+        var button = card.querySelector('.bp-card__expand');
+        var panel = card.querySelector('.bp-card__details-panel');
+        if (!button || !panel) { return; }
+
+        if (!expanded && panel.contains(document.activeElement)) {
+            button.focus({ preventScroll: true });
+        }
+
+        button.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+        button.querySelector('span').textContent = expanded ? 'Hide bundle details' : 'View bundle details';
+        panel.hidden = !expanded;
+        card.classList.toggle('is-expanded', expanded);
+    }
+
+    cards.forEach(function (card) {
+        var button = card.querySelector('.bp-card__expand');
+        if (!button) { return; }
+
+        button.addEventListener('click', function () {
+            var opening = button.getAttribute('aria-expanded') !== 'true';
+            cards.forEach(function (otherCard) {
+                setExpanded(otherCard, opening && otherCard === card);
+            });
+        });
+    });
+}());
+</script>
+
+<?php hopia_dynamsoft_assets(); ?>
+<script src="<?= hopia_e(hopia_asset('js/bundle-identification.js')) ?>"></script>
 
 <?php require __DIR__ . '/../includes/ui.footer.php';

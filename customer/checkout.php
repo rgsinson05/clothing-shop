@@ -2,13 +2,220 @@
 
 session_start();
 
+require_once __DIR__ . '/../includes/payment.php';
+require_once __DIR__ . '/../includes/customer_auth.php';
+
+// Retain an authenticated, quoted receipt even if the database is unavailable on this request.
+$receiptToken = $_POST['checkout_token'] ?? $_POST['buy_now'] ?? $_GET['checkout'] ?? $_GET['buy_now'] ?? '';
+$receiptQuoteToken = $_POST['gcash_quote_token'] ?? '';
+$receiptCsrf = $_POST['csrf_token'] ?? '';
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['payment_method'] ?? '') === 'GCASH'
+    && is_string($receiptToken) && is_string($receiptQuoteToken) && is_string($receiptCsrf)
+    && isset($_SESSION['customer_id'], $_SESSION['csrf_token'], $_SESSION['checkout_attempts'][$receiptToken])
+    && hash_equals($_SESSION['csrf_token'], $receiptCsrf)) {
+    $receiptAttempt =& $_SESSION['checkout_attempts'][$receiptToken];
+    if ($receiptAttempt['customer_id'] === (int) $_SESSION['customer_id'] && empty($receiptAttempt['order_id'])
+        && !empty($receiptAttempt['quote']) && hash_equals($receiptAttempt['quote']['token'], $receiptQuoteToken)) {
+        $receiptReference = payment_normalize_reference($_POST['gcash_reference'] ?? '');
+        if (payment_is_valid_reference($receiptReference)) {
+            $receiptKey = checkoutReferenceKey($receiptReference);
+            if ((!empty($receiptAttempt['reference_valid']) && checkoutReferenceKey($receiptAttempt['reference']) !== $receiptKey)
+                || (isset($_SESSION['gcash_reference_checkouts'][$receiptKey]) && $_SESSION['gcash_reference_checkouts'][$receiptKey] !== $receiptToken)) {
+                $receiptAttempt['review_required'] = true;
+            } else {
+                $_SESSION['gcash_reference_checkouts'][$receiptKey] = $receiptToken;
+                $receiptAttempt['reference'] = $receiptReference;
+                $receiptAttempt['reference_valid'] = true;
+            }
+        }
+        if (empty($receiptAttempt['proof_path']) && is_array($_FILES['proof'] ?? null)
+            && ($_FILES['proof']['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_NO_FILE) {
+            try {
+                $receiptResult = payment_proof_store($_FILES['proof']);
+                if ($receiptResult['ok'] && !empty($receiptResult['path'])) {
+                    $receiptAttempt['proof_path'] = $receiptResult['path'];
+                    $receiptAttempt['submitted_at'] = time();
+                    checkoutBindProof($receiptAttempt, $receiptToken);
+                }
+            } catch (Throwable $receiptError) {
+                $receiptAttempt['retention_error'] = true;
+            }
+        }
+    }
+    unset($receiptAttempt);
+}
+
 require_once __DIR__ . '/../includes/database.php';
 require_once __DIR__ . '/../includes/shipping.php';
 require_once __DIR__ . '/../includes/gcash.php';
 require_once __DIR__ . '/../includes/payment.php';
 require_once __DIR__ . '/../includes/admin_notifications.php';
+require_once __DIR__ . '/../includes/cart_selection.php';
+
+function checkoutLoadItems(PDO $pdo, bool $buyNow, int $productId, int $cartId, array $selectedIds, bool $lock = false): array
+{
+    if (($buyNow && $productId < 1) || (!$buyNow && $selectedIds === [])) {
+        return [];
+    }
+    $sql = 'SELECT ' . ($buyNow ? '0' : 'ci.id') . ' AS cart_item_id,
+                   p.id, p.id AS product_id, p.name, p.size, p.category, p.color, p.price, p.status, p.retired_at';
+    if (!$lock) {
+        $sql .= ', pi.image_path';
+    }
+    $sql .= $buyNow ? ' FROM products p' : ' FROM cart_items ci INNER JOIN products p ON p.id = ci.product_id';
+    if (!$lock) {
+        $sql .= ' LEFT JOIN product_images pi ON pi.id = (
+                    SELECT pi2.id FROM product_images pi2 WHERE pi2.product_id = p.id
+                    ORDER BY pi2.sort_order ASC, pi2.id ASC LIMIT 1)';
+    }
+    if ($buyNow) {
+        $sql .= ' WHERE p.id = ?';
+        $params = [$productId];
+    } else {
+        $sql .= ' WHERE ci.cart_id = ? AND ci.id IN (' . implode(',', array_fill(0, count($selectedIds), '?')) . ')';
+        $params = array_merge([$cartId], $selectedIds);
+    }
+    $sql .= ($lock || $buyNow) ? ' ORDER BY p.id' : ' ORDER BY ci.created_at ASC, ci.id ASC';
+    if ($lock) {
+        $sql .= ' FOR UPDATE';
+    }
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute($params);
+    return $stmt->fetchAll();
+}
+
+function checkoutSnapshot(array $items): array
+{
+    $snapshot = array_map(static function (array $item): array {
+        return [
+            'cart_item_id' => (int) $item['cart_item_id'],
+            'product_id' => (int) $item['product_id'],
+            'price_cents' => (int) round((float) $item['price'] * 100),
+            'name' => $item['name'],
+            'size' => $item['size'],
+            'color' => $item['color'],
+        ];
+    }, $items);
+    usort($snapshot, static function (array $left, array $right): int {
+        return $left['product_id'] <=> $right['product_id'];
+    });
+    return $snapshot;
+}
+
+function checkoutMissingItems(array $snapshot, array $items): array
+{
+    $found = [];
+    foreach ($items as $item) {
+        $found[(int) $item['cart_item_id'] . ':' . (int) $item['product_id']] = true;
+    }
+    $missing = [];
+    foreach ($snapshot as $item) {
+        if (!isset($found[$item['cart_item_id'] . ':' . $item['product_id']])) {
+            $missing[] = $item['name'] . ' (#' . $item['product_id'] . ')';
+        }
+    }
+    return $missing;
+}
+
+function checkoutJson(array $payload, int $status = 200): void
+{
+    header('Content-Type: application/json; charset=UTF-8');
+    header('Cache-Control: no-store');
+    http_response_code($status);
+    echo json_encode($payload);
+    exit;
+}
+
+function checkoutReferenceKey(string $reference): string
+{
+    return strtoupper(str_replace([' ', '-'], '', $reference));
+}
+
+function checkoutBindProof(array &$attempt, string $token): void
+{
+    $path = payment_proof_abspath($attempt['proof_path']);
+    $fingerprint = $path === null ? false : hash_file('sha256', $path);
+    if ($fingerprint === false || (isset($_SESSION['gcash_proof_checkouts'][$fingerprint])
+        && $_SESSION['gcash_proof_checkouts'][$fingerprint] !== $token)) {
+        $attempt['review_required'] = true;
+        return;
+    }
+    $_SESSION['gcash_proof_checkouts'][$fingerprint] = $token;
+    $attempt['proof_fingerprint'] = $fingerprint;
+}
+
+$isQuoteRequest = $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['checkout_action'] ?? '') === 'prepare_gcash';
+$isRestartRequest = $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['checkout_action'] ?? '') === 'restart_checkout';
+$wantsCheckoutJson = $isQuoteRequest && ($_SERVER['HTTP_X_REQUESTED_WITH'] ?? '') === 'XMLHttpRequest';
+
+// Buy Now selects an item, but never creates or changes a persistent cart.
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['checkout_action'] ?? '') === 'buy_now') {
+    $submittedToken = $_POST['csrf_token'] ?? '';
+    $storedToken = $_SESSION['csrf_token_buy_now'] ?? '';
+    $productId = filter_input(INPUT_POST, 'product_id', FILTER_VALIDATE_INT);
+    $returnTo = $productId > 0 && ($_POST['return_to'] ?? '') === 'product.php?id=' . $productId
+        ? 'product.php?id=' . $productId
+        : 'products.php';
+
+    if (!is_string($submittedToken) || !is_string($storedToken) || $storedToken === ''
+        || !hash_equals($storedToken, $submittedToken)) {
+        $_SESSION['buy_now_error'] = 'Your session expired. Please try again.';
+    } elseif ($productId === false || $productId === null || $productId < 1) {
+        $_SESSION['buy_now_error'] = 'This item could not be purchased.';
+    } else {
+        $previousBuyNow = $_SESSION['buy_now_checkout'] ?? null;
+        $previousAttempt = is_array($previousBuyNow) && is_string($previousBuyNow['token'] ?? null)
+            ? ($_SESSION['checkout_attempts'][$previousBuyNow['token']] ?? null) : null;
+        if (isset($_SESSION['customer_id']) && is_array($previousAttempt)
+            && $previousAttempt['customer_id'] === (int) $_SESSION['customer_id']
+            && $previousAttempt['product_id'] === $productId && empty($previousAttempt['order_id'])
+            && (!empty($previousAttempt['proof_path']) || !empty($previousAttempt['reference_valid']))) {
+            if ((int) $previousBuyNow['created_at'] >= time() - 1800) {
+                header('Location: checkout.php?buy_now=' . rawurlencode($previousBuyNow['token']), true, 303);
+            } else {
+                $_SESSION['buy_now_error'] = 'Your original GCash submission is retained, but this Buy Now session needs shop assistance. Do not pay again.';
+                header('Location: ' . $returnTo, true, 303);
+            }
+            exit;
+        }
+
+        $productStmt = $pdo->prepare(
+            "SELECT id FROM products
+             WHERE id = :id AND status = 'AVAILABLE' AND retired_at IS NULL"
+        );
+        $productStmt->execute([':id' => $productId]);
+
+        if ($productStmt->fetch() === false) {
+            $_SESSION['buy_now_error'] = 'Sorry, this piece is no longer available.';
+        } else {
+            $contextToken = bin2hex(random_bytes(32));
+            $_SESSION['buy_now_checkout'] = [
+                'token' => $contextToken,
+                'product_id' => $productId,
+                'customer_id' => isset($_SESSION['customer_id']) ? (int) $_SESSION['customer_id'] : null,
+                'created_at' => time(),
+            ];
+            unset($_SESSION['buy_now_error'], $_SESSION['buy_now_pending_login']);
+
+            if (!isset($_SESSION['customer_id'])) {
+                $_SESSION['buy_now_pending_login'] = $contextToken;
+                header('Location: login.php', true, 303);
+            } else {
+                header('Location: checkout.php?buy_now=' . $contextToken, true, 303);
+            }
+            exit;
+        }
+    }
+
+    header('Location: ' . $returnTo, true, 303);
+    exit;
+}
 
 if (!isset($_SESSION['customer_id'])) {
+    if ($wantsCheckoutJson) {
+        checkoutJson(['ok' => false, 'message' => 'Your session expired. Please sign in again.'], 401);
+    }
+    hopia_customer_set_intended_destination('checkout.php');
     header('Location: login.php');
     exit;
 }
@@ -32,6 +239,41 @@ if (empty($_SESSION['csrf_token'])) {
 $csrfToken = $_SESSION['csrf_token'];
 $errors = [];
 $message = '';
+
+// An explicit context prevents stale tabs or invalid tokens from checking out the cart instead.
+$isBuyNowCheckout = array_key_exists('buy_now', $_GET) || array_key_exists('buy_now', $_POST);
+$buyNowToken = $_GET['buy_now'] ?? $_POST['buy_now'] ?? '';
+$buyNowContext = $_SESSION['buy_now_checkout'] ?? null;
+$buyNowProductId = 0;
+$buyNowContextValid = false;
+
+if ($isBuyNowCheckout) {
+    $buyNowContextValid = is_string($buyNowToken) && $buyNowToken !== ''
+        && is_array($buyNowContext)
+        && is_string($buyNowContext['token'] ?? null)
+        && hash_equals($buyNowContext['token'], $buyNowToken)
+        && ($buyNowContext['customer_id'] ?? null) === $customerId
+        && (int) ($buyNowContext['product_id'] ?? 0) > 0
+        && (int) ($buyNowContext['created_at'] ?? 0) >= time() - 1800
+        && (!array_key_exists('buy_now', $_POST) || $_POST['buy_now'] === $buyNowToken);
+
+    if (!$buyNowContextValid) {
+        $errors[] = 'Your Buy Now session has expired. Please choose the piece again.';
+    } elseif (!empty($buyNowContext['order_id'])) {
+        // Replaying a completed checkout returns its confirmation, not a second order.
+        header('Location: order-confirmation.php?id=' . (int) $buyNowContext['order_id'], true, 303);
+        exit;
+    } else {
+        $buyNowProductId = (int) $buyNowContext['product_id'];
+    }
+}
+
+$checkoutUrl = $isBuyNowCheckout && is_string($buyNowToken)
+    ? 'checkout.php?buy_now=' . rawurlencode($buyNowToken)
+    : 'checkout.php';
+$checkoutBackUrl = $isBuyNowCheckout
+    ? ($buyNowProductId > 0 ? 'product.php?id=' . $buyNowProductId : 'products.php')
+    : 'cart.php';
 
 $regionNames = [
     'National Capital Region',
@@ -96,6 +338,119 @@ if ($customer !== false) {
     $formValues['shipping_phone'] = trim($customer['phone'] ?? '');
 }
 
+$cart = false;
+$currentSelectedIds = [];
+if (!$isBuyNowCheckout) {
+    $cartStmt = $pdo->prepare('SELECT id FROM carts WHERE customer_id = ? LIMIT 1');
+    $cartStmt->execute([$customerId]);
+    $cart = $cartStmt->fetch();
+    if ($cart !== false) {
+        $currentSelectedIds = $_SERVER['REQUEST_METHOD'] === 'GET'
+            ? cart_selection_prune($pdo, (int) $cart['id'])
+            : cart_selection_get((int) $cart['id']);
+    }
+}
+$cartId = $cart === false ? 0 : (int) $cart['id'];
+$checkoutItems = checkoutLoadItems($pdo, $isBuyNowCheckout, $buyNowProductId, $cartId, $currentSelectedIds);
+$currentSnapshot = checkoutSnapshot($checkoutItems);
+$checkoutToken = $isBuyNowCheckout ? $buyNowToken : ($_GET['checkout'] ?? $_POST['checkout_token'] ?? '');
+$checkoutAttemptValid = false;
+$checkoutAttempt = null;
+$_SESSION['checkout_attempts'] = $_SESSION['checkout_attempts'] ?? [];
+
+if ($_SERVER['REQUEST_METHOD'] === 'GET' && (!$isBuyNowCheckout || $buyNowContextValid)) {
+    if (!$isBuyNowCheckout && !array_key_exists('checkout', $_GET) && $currentSelectedIds !== []) {
+        foreach (array_reverse($_SESSION['checkout_attempts'], true) as $token => $attempt) {
+            if ($attempt['customer_id'] === $customerId && $attempt['mode'] === 'cart'
+                && $attempt['cart_id'] === $cartId && $attempt['selected_ids'] === $currentSelectedIds
+                && $attempt['selection_revision'] === cart_selection_revision($cartId) && empty($attempt['order_id'])
+                && empty($attempt['closed'])
+                && ($attempt['snapshot'] === $currentSnapshot || !empty($attempt['quote']) || !empty($attempt['proof_path']))) {
+                $checkoutToken = $token;
+                break;
+            }
+        }
+        if ($checkoutToken === '') {
+            $checkoutToken = bin2hex(random_bytes(32));
+        }
+    }
+    if (is_string($checkoutToken) && preg_match('/^[a-f0-9]{64}$/D', $checkoutToken) === 1
+        && !isset($_SESSION['checkout_attempts'][$checkoutToken])
+        && ($isBuyNowCheckout || !array_key_exists('checkout', $_GET))) {
+        $_SESSION['checkout_attempts'][$checkoutToken] = [
+            'customer_id' => $customerId,
+            'mode' => $isBuyNowCheckout ? 'buy_now' : 'cart',
+            'cart_id' => $cartId,
+            'product_id' => $buyNowProductId,
+            'selected_ids' => $currentSelectedIds,
+            'selection_revision' => $isBuyNowCheckout ? 0 : cart_selection_revision($cartId),
+            'snapshot' => $currentSnapshot,
+            'created_at' => time(),
+        ];
+    }
+}
+
+if (is_string($checkoutToken) && preg_match('/^[a-f0-9]{64}$/D', $checkoutToken) === 1
+    && isset($_SESSION['checkout_attempts'][$checkoutToken])) {
+    $checkoutAttempt =& $_SESSION['checkout_attempts'][$checkoutToken];
+    $checkoutAttemptValid = $checkoutAttempt['customer_id'] === $customerId
+        && $checkoutAttempt['mode'] === ($isBuyNowCheckout ? 'buy_now' : 'cart')
+        && (!$isBuyNowCheckout || ($buyNowContextValid && $checkoutAttempt['product_id'] === $buyNowProductId))
+        && (!array_key_exists('checkout_token', $_POST) || $_POST['checkout_token'] === $checkoutToken)
+        && (!$isBuyNowCheckout || !array_key_exists('checkout', $_GET));
+}
+
+if ($checkoutAttemptValid && !empty($checkoutAttempt['order_id'])) {
+    header('Location: order-confirmation.php?id=' . (int) $checkoutAttempt['order_id'], true, 303);
+    exit;
+}
+if (!$isBuyNowCheckout && $currentSelectedIds === []) {
+    $errors[] = 'Select at least one item';
+} elseif (!$checkoutAttemptValid) {
+    $errors[] = 'Your checkout session has expired. Return to your ' . ($isBuyNowCheckout ? 'product' : 'cart') . ' to review the items.';
+} elseif (!$isBuyNowCheckout && ($checkoutAttempt['cart_id'] !== $cartId
+    || $checkoutAttempt['selected_ids'] !== $currentSelectedIds
+    || $checkoutAttempt['selection_revision'] !== cart_selection_revision($cartId))) {
+    $errors[] = 'Your cart selection changed after checkout started. Return to your cart and review your selection.';
+}
+if ($checkoutAttemptValid && !empty($checkoutAttempt['review_required'])) {
+    $errors[] = 'This checkout needs shop assistance before it can be retried. '
+        . (!empty($checkoutAttempt['proof_path']) || !empty($checkoutAttempt['reference_valid'])
+            ? 'Your GCash evidence is retained; do not send another payment.'
+            : 'The order result must be checked before an automatic retry is allowed.');
+}
+if ($checkoutAttemptValid && !empty($checkoutAttempt['closed'])) {
+    $errors[] = 'This checkout was restarted. Do not pay its old GCash amount. Contact the shop if you sent a payment for it.';
+}
+$relatedPayment = null;
+if ($checkoutAttemptValid) {
+    foreach ($_SESSION['checkout_attempts'] as $token => $attempt) {
+        if ($token !== $checkoutToken && $attempt['customer_id'] === $customerId && empty($attempt['order_id'])
+            && (!empty($attempt['proof_path']) || !empty($attempt['reference_valid']))
+            && array_intersect(array_column($attempt['snapshot'], 'product_id'), array_column($checkoutAttempt['snapshot'], 'product_id')) !== []) {
+            $relatedPayment = $attempt;
+            $errors[] = 'An earlier GCash checkout for these products has submitted payment evidence. Resume the original checkout or contact the shop before ordering these items again. Do not pay again.';
+            break;
+        }
+    }
+}
+
+if (!$isBuyNowCheckout && $checkoutAttemptValid) {
+    $checkoutUrl = 'checkout.php?checkout=' . rawurlencode($checkoutToken);
+}
+$retainedProof = $checkoutAttemptValid && !empty($checkoutAttempt['proof_path']);
+if ($checkoutAttemptValid && !empty($checkoutAttempt['reference'])) {
+    $formValues['gcash_reference'] = $checkoutAttempt['reference'];
+    $formValues['payment_method'] = 'GCASH';
+}
+if ($checkoutAttemptValid && !empty($checkoutAttempt['quote'])) {
+    $formValues['delivery_method'] = $checkoutAttempt['quote']['delivery_method'];
+    $formValues['region'] = $checkoutAttempt['quote']['region'];
+    if ($gcashConfigured) {
+        $formValues['payment_method'] = 'GCASH';
+    }
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     foreach (array_keys($formValues) as $field) {
         if ($field === 'delivery_method') {
@@ -126,6 +481,87 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     ) {
         $errors[] = 'Your form session has expired. Please submit the form again.';
     }
+}
+
+$requestTrusted = $checkoutAttemptValid && $_SERVER['REQUEST_METHOD'] === 'POST'
+    && is_string($_POST['csrf_token'] ?? null) && hash_equals($csrfToken, $_POST['csrf_token']);
+
+if ($isRestartRequest) {
+    if (!$requestTrusted || ($_POST['confirm_unpaid'] ?? '') !== '1') {
+        $errors[] = 'Confirm that you have not sent this GCash payment before restarting checkout.';
+    } elseif (!empty($checkoutAttempt['proof_path']) || !empty($checkoutAttempt['reference_valid']) || !empty($checkoutAttempt['review_required'])) {
+        $errors[] = 'This checkout has submitted payment evidence or needs review. Contact the shop instead of restarting or paying again.';
+    } elseif (empty($checkoutAttempt['quote'])) {
+        $errors[] = 'There is no confirmed GCash amount to restart. Review your current checkout instead.';
+    } else {
+        // Keep the old quote as evidence; a new checkout gets a different server token.
+        $checkoutAttempt['closed'] = true;
+        header('Location: ' . ($isBuyNowCheckout ? $checkoutBackUrl : 'checkout.php'), true, 303);
+        exit;
+    }
+}
+
+if ($isQuoteRequest) {
+    $quoteFulfillment = shipping_resolve_fulfillment($formValues['delivery_method'], $formValues['region']);
+    if (!$gcashConfigured) {
+        $errors[] = 'GCash is currently unavailable. Please choose the cash payment option.';
+    }
+    if (!$quoteFulfillment['ok']) {
+        $errors[] = $quoteFulfillment['message'];
+    }
+    $missingQuoteItems = $checkoutAttemptValid ? checkoutMissingItems($checkoutAttempt['snapshot'], $checkoutItems) : [];
+    if ($missingQuoteItems !== [] || count($checkoutItems) !== ($isBuyNowCheckout ? 1 : count($currentSelectedIds))) {
+        $errors[] = 'Selected items missing or changed: ' . ($missingQuoteItems === [] ? 'cart entries #' . implode(', #', $currentSelectedIds) : implode(', ', $missingQuoteItems)) . '. Review the whole selection before proceeding.';
+    }
+    $unavailable = [];
+    foreach ($checkoutItems as $item) {
+        if ($item['status'] !== 'AVAILABLE' || $item['retired_at'] !== null) {
+            $unavailable[] = $item['name'] . ' (#' . (int) $item['product_id'] . ')';
+        }
+    }
+    if ($unavailable !== []) {
+        $errors[] = $isBuyNowCheckout ? 'Sorry, this piece is no longer available.' : cart_selection_unavailable_message($unavailable);
+    }
+    if ($checkoutAttemptValid && $checkoutAttempt['snapshot'] !== $currentSnapshot) {
+        $errors[] = 'The selected products or prices changed. Do not pay this amount. Review checkout again; if you already paid, contact the shop.';
+    }
+    if ($errors === []) {
+        $subtotalCents = array_sum(array_column($currentSnapshot, 'price_cents'));
+        $quoteValues = [
+            'snapshot' => $currentSnapshot,
+            'subtotal_cents' => $subtotalCents,
+            'shipping_cents' => (int) $quoteFulfillment['rate_cents'],
+            'total_cents' => $subtotalCents + (int) $quoteFulfillment['rate_cents'],
+            'delivery_method' => $formValues['delivery_method'],
+            'region' => $formValues['delivery_method'] === 'STORE_PICKUP' ? '' : $formValues['region'],
+            'receiver' => hash('sha256', $gcashConfig['name'] . '|' . $gcashConfig['number']),
+        ];
+        if (!empty($checkoutAttempt['quote']) && array_diff_key($checkoutAttempt['quote'], ['token' => true]) !== $quoteValues) {
+            $errors[] = 'The GCash amount or delivery option changed. The original payment amount is kept. If you already paid, contact the shop; otherwise start checkout again from your ' . ($isBuyNowCheckout ? 'product' : 'cart') . '.';
+        } else {
+            if (empty($checkoutAttempt['quote'])) {
+                $checkoutAttempt['quote'] = array_merge($quoteValues, ['token' => bin2hex(random_bytes(32))]);
+            }
+            $formValues['payment_method'] = 'GCASH';
+        }
+    }
+    if ($wantsCheckoutJson) {
+        if ($errors !== []) {
+            checkoutJson(['ok' => false, 'message' => implode(' ', array_unique($errors))], 422);
+        }
+        checkoutJson([
+            'ok' => true,
+            'quote_token' => $checkoutAttempt['quote']['token'],
+            'subtotal_cents' => $checkoutAttempt['quote']['subtotal_cents'],
+            'shipping_cents' => $checkoutAttempt['quote']['shipping_cents'],
+            'total_cents' => $checkoutAttempt['quote']['total_cents'],
+            'delivery_method' => $checkoutAttempt['quote']['delivery_method'],
+            'region' => $checkoutAttempt['quote']['region'],
+        ]);
+    }
+}
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$isQuoteRequest && !$isRestartRequest) {
 
     if ($formValues['shipping_name'] === '') {
         $errors[] = 'Full name is required.';
@@ -210,10 +646,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
      * button state is convenience only and is never trusted here.
      */
     $isGcashSubmission = $gcashConfigured && $formValues['payment_method'] === 'GCASH';
+    $isGcashEvidenceSubmission = $requestTrusted && $formValues['payment_method'] === 'GCASH'
+        && ($gcashConfigured || !empty($checkoutAttempt['quote']));
     $gcashReference = '';
     $proofFile = null;
+    $storedProofPath = null;
 
-    if ($isGcashSubmission) {
+    if ($checkoutAttemptValid && $formValues['payment_method'] !== 'GCASH'
+        && (!empty($checkoutAttempt['proof_path']) || !empty($checkoutAttempt['reference_valid']))) {
+        $errors[] = 'GCash evidence has already been submitted for this checkout. Use this same GCash checkout or contact the shop before changing payment. Do not pay again.';
+    }
+
+    if ($isGcashSubmission || $isGcashEvidenceSubmission) {
         $gcashReference = payment_normalize_reference($_POST['gcash_reference'] ?? '');
         $formValues['gcash_reference'] = $gcashReference;
 
@@ -232,7 +676,42 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             ? $proofFile['name']
             : '';
 
-        if (!is_array($proofFile) || $proofError === UPLOAD_ERR_NO_FILE || $proofName === '') {
+        if ($requestTrusted && !empty($checkoutAttempt['reference_valid'])
+            && checkoutReferenceKey($gcashReference) !== checkoutReferenceKey($checkoutAttempt['reference'])) {
+            $errors[] = 'The submitted GCash reference belongs to this original checkout and cannot be replaced here. Contact the shop if it needs correction.';
+            $gcashReference = $checkoutAttempt['reference'];
+            $formValues['gcash_reference'] = $gcashReference;
+        }
+
+        if ($requestTrusted && payment_is_valid_reference($gcashReference)) {
+            $referenceKey = checkoutReferenceKey($gcashReference);
+            $boundCheckout = $_SESSION['gcash_reference_checkouts'][$referenceKey] ?? $checkoutToken;
+            if ($boundCheckout !== $checkoutToken) {
+                $errors[] = 'That GCash reference is already attached to another checkout. It cannot be applied to different selected items.';
+                $checkoutAttempt['review_required'] = true;
+            } else {
+                $_SESSION['gcash_reference_checkouts'][$referenceKey] = $checkoutToken;
+                $checkoutAttempt['reference'] = $gcashReference;
+                $checkoutAttempt['reference_valid'] = true;
+            }
+        } elseif ($requestTrusted && $gcashReference !== '') {
+            $checkoutAttempt['reference_input'] = substr($gcashReference, 0, 100);
+        }
+
+        if ($requestTrusted && !empty($checkoutAttempt['proof_path'])) {
+            $storedProofPath = $checkoutAttempt['proof_path'];
+            $retainedProofPath = payment_proof_abspath($storedProofPath);
+            if ($retainedProofPath === null || !is_file($retainedProofPath)) {
+                $errors[] = 'Your retained GCash proof could not be accessed. Contact the shop with your receipt; do not send another payment.';
+                $checkoutAttempt['review_required'] = true;
+            } else {
+                $retainedFingerprint = hash_file('sha256', $retainedProofPath);
+                if (!is_string($retainedFingerprint) || !hash_equals($checkoutAttempt['proof_fingerprint'] ?? '', $retainedFingerprint)) {
+                    $errors[] = 'The retained GCash proof changed or could not be read. Contact the shop before retrying; do not pay again.';
+                    $checkoutAttempt['review_required'] = true;
+                }
+            }
+        } elseif (!is_array($proofFile) || $proofError === UPLOAD_ERR_NO_FILE || $proofName === '') {
             $errors[] = 'Please upload a screenshot of your GCash payment.';
         } else {
             $proofTmp = is_string($proofFile['tmp_name'] ?? null) ? $proofFile['tmp_name'] : '';
@@ -264,7 +743,34 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     }
 
                     $errors[] = payment_message($proofReason);
+                } elseif ($requestTrusted) {
+                    // A database rollback cannot reverse a transfer. Keep valid evidence before any order write.
+                    try {
+                        $storeResult = payment_proof_store($proofFile);
+                        if (!$storeResult['ok'] || empty($storeResult['path'])) {
+                            $errors[] = payment_message($storeResult['reason'] ?? 'proof_failed');
+                        } else {
+                            $storedProofPath = $storeResult['path'];
+                            $checkoutAttempt['proof_path'] = $storedProofPath;
+                            $checkoutAttempt['submitted_at'] = time();
+                            checkoutBindProof($checkoutAttempt, $checkoutToken);
+                            if (!empty($checkoutAttempt['review_required'])) {
+                                $errors[] = 'This GCash proof could not be bound to this checkout or was already submitted for another checkout. It is retained for shop review, not reused for new selected items.';
+                            }
+                        }
+                    } catch (Throwable $e) {
+                        $errors[] = 'We could not retain your screenshot. Keep your GCash receipt and contact the shop if you have already paid. Do not pay again.';
+                    }
                 }
+            }
+        }
+
+        $quote = $checkoutAttemptValid ? ($checkoutAttempt['quote'] ?? null) : null;
+        $quoteToken = $_POST['gcash_quote_token'] ?? '';
+        if (!is_array($quote) || !is_string($quoteToken) || !hash_equals($quote['token'], $quoteToken)) {
+            $errors[] = 'The GCash amount was not confirmed for this checkout. If you already paid, contact the shop; do not send another payment.';
+            if ($requestTrusted && ($storedProofPath !== null || !empty($checkoutAttempt['reference_valid']))) {
+                $checkoutAttempt['review_required'] = true;
             }
         }
     }
@@ -287,57 +793,72 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     if (count($errors) === 0) {
-        $storedProofPath = null;
+        $referenceLock = null;
+        $commitStarted = false;
+        $placedOrderId = null;
+        $orderId = null;
 
         try {
+            if ($isGcashSubmission) {
+                // Serialize new orders using the same reference without adding a database column.
+                $lockName = 'gcash-' . substr(hash('sha256', checkoutReferenceKey($gcashReference)), 0, 58);
+                $lockStmt = $pdo->prepare('SELECT GET_LOCK(?, 0)');
+                $lockStmt->execute([$lockName]);
+                if ((int) $lockStmt->fetchColumn() !== 1) {
+                    $errors[] = 'This GCash reference is being processed. Retry this same checkout later without sending another payment.';
+                    throw new RuntimeException('GCash reference is locked.');
+                }
+                $referenceLock = $lockName;
+            }
             $pdo->beginTransaction();
 
-            /* Re-fetch the cart from the authenticated customer, never from POST data. */
-            $transactionCartStmt = $pdo->prepare(
-                'SELECT id
-                 FROM carts
-                 WHERE customer_id = :customer_id
-                 LIMIT 1'
-            );
-            $transactionCartStmt->execute([':customer_id' => $customerId]);
-            $transactionCart = $transactionCartStmt->fetch();
-
-            if ($transactionCart === false) {
-                $pdo->rollBack();
-                $errors[] = 'Your cart is empty. Please add an item before checking out.';
-            } else {
-                /* Lock every product in the cart before checking availability or pricing. */
-                $lockedItemsStmt = $pdo->prepare(
-                    'SELECT p.id AS product_id, p.name, p.size, p.color, p.price, p.status, p.retired_at
-                     FROM cart_items ci
-                     INNER JOIN products p ON p.id = ci.product_id
-                     WHERE ci.cart_id = :cart_id
-                     ORDER BY ci.created_at ASC, ci.id ASC
-                     FOR UPDATE'
+            $transactionCart = false;
+            if (!$isBuyNowCheckout) {
+                /* Re-fetch the cart from the authenticated customer, never from POST data. */
+                $transactionCartStmt = $pdo->prepare(
+                    'SELECT id
+                     FROM carts
+                     WHERE customer_id = :customer_id
+                     LIMIT 1 FOR UPDATE'
                 );
-                $lockedItemsStmt->execute([':cart_id' => (int) $transactionCart['id']]);
-                $lockedItems = $lockedItemsStmt->fetchAll();
+                $transactionCartStmt->execute([':customer_id' => $customerId]);
+                $transactionCart = $transactionCartStmt->fetch();
+            }
 
-                if (count($lockedItems) === 0) {
+            if (!$isBuyNowCheckout && $transactionCart === false) {
+                $pdo->rollBack();
+                $errors[] = 'Select at least one item';
+            } else {
+                if (!$isBuyNowCheckout && ((int) $transactionCart['id'] !== $checkoutAttempt['cart_id']
+                    || cart_selection_get((int) $transactionCart['id']) !== $checkoutAttempt['selected_ids']
+                    || cart_selection_revision((int) $transactionCart['id']) !== $checkoutAttempt['selection_revision'])) {
+                    $errors[] = 'Your selected cart items changed. Review the selection before proceeding.';
+                    throw new RuntimeException('Cart selection changed.');
+                }
+                $lockedItems = checkoutLoadItems(
+                    $pdo, $isBuyNowCheckout, $buyNowProductId, $checkoutAttempt['cart_id'], $checkoutAttempt['selected_ids'], true
+                );
+
+                $missingLockedItems = checkoutMissingItems($checkoutAttempt['snapshot'], $lockedItems);
+                if ($missingLockedItems !== [] || count($lockedItems) === 0 || count($lockedItems) !== ($isBuyNowCheckout ? 1 : count($checkoutAttempt['selected_ids']))) {
                     $pdo->rollBack();
-                    $errors[] = 'Your cart is empty. Please add an item before checking out.';
+                    $errors[] = $isBuyNowCheckout
+                        ? 'Sorry, this piece is no longer available.'
+                        : 'Selected items missing or changed: ' . ($missingLockedItems === [] ? 'cart entries #' . implode(', #', $checkoutAttempt['selected_ids']) : implode(', ', $missingLockedItems)) . '. Review the whole selection before proceeding.';
                 } else {
-                        $unavailable = false;
+                        $unavailable = [];
 
                         foreach ($lockedItems as $lockedItem) {
-                            if ($lockedItem['status'] !== 'AVAILABLE') {
-                                $unavailable = true;
-                                break;
-                            }
-                            if (!empty($lockedItem['retired_at'])) {
-                                $unavailable = true;
-                                break;
+                            if ($lockedItem['status'] !== 'AVAILABLE' || $lockedItem['retired_at'] !== null) {
+                                $unavailable[] = $lockedItem['name'] . ' (#' . (int) $lockedItem['product_id'] . ')';
                             }
                         }
 
                         if ($unavailable) {
                             $pdo->rollBack();
-                            $errors[] = 'One or more items in your cart are no longer available. Please return to your cart and review the items.';
+                            $errors[] = $isBuyNowCheckout
+                                ? 'Sorry, this piece is no longer available.'
+                                : cart_selection_unavailable_message($unavailable);
                         } else {
                             /*
                              * Merchandise subtotal is computed from the
@@ -354,6 +875,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                             $shippingFeeCents = $fulfillment['ok'] ? (int) $fulfillment['rate_cents'] : 0;
                             $totalCents = $subtotalCents + $shippingFeeCents;
+
+                            if ($isGcashSubmission) {
+                                $quote = $checkoutAttempt['quote'];
+                                if ($quote['snapshot'] !== checkoutSnapshot($lockedItems)
+                                    || $quote['subtotal_cents'] !== $subtotalCents
+                                    || $quote['shipping_cents'] !== $shippingFeeCents
+                                    || $quote['total_cents'] !== $totalCents
+                                    || $quote['delivery_method'] !== $formValues['delivery_method']
+                                    || $quote['region'] !== ($isPickupOrder ? '' : $formValues['region'])
+                                    || $quote['receiver'] !== hash('sha256', $gcashConfig['name'] . '|' . $gcashConfig['number'])) {
+                                    $errors[] = 'The selected products, prices, or delivery amount changed after GCash payment was established. No order was created. Your evidence is retained; contact the shop and do not pay again.';
+                                    $checkoutAttempt['review_required'] = true;
+                                    throw new RuntimeException('GCash quote mismatch.');
+                                }
+                                $referenceStmt = $pdo->prepare(
+                                    "SELECT order_id FROM payments
+                                     WHERE UPPER(REPLACE(REPLACE(gcash_reference, ' ', ''), '-', '')) = ?
+                                     LIMIT 1 FOR UPDATE"
+                                );
+                                $referenceStmt->execute([checkoutReferenceKey($gcashReference)]);
+                                if ($referenceStmt->fetchColumn() !== false) {
+                                    $errors[] = 'This GCash reference already belongs to an existing order and cannot fund another checkout. Contact the shop if needed; do not pay again.';
+                                    $checkoutAttempt['review_required'] = true;
+                                    throw new RuntimeException('GCash reference already used.');
+                                }
+                            }
 
                             $subtotalAmount = number_format($subtotalCents / 100, 2, '.', '');
                             $shippingFee = number_format($shippingFeeCents / 100, 2, '.', '');
@@ -460,25 +1007,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             ]);
                         }
 
-                        /*
-                         * Store the proof now that every pre-flight check has
-                         * passed and the order rows exist inside the
-                         * transaction. The upload was already validated
-                         * before the transaction; payment_proof_store()
-                         * re-validates and writes a random private filename.
-                         * If anything below fails, the catch block rolls the
-                         * database back AND removes this newly stored file.
-                         */
-                        if ($isGcashSubmission) {
-                            $storeResult = payment_proof_store($proofFile);
-
-                            if (!$storeResult['ok'] || ($storeResult['path'] ?? null) === null) {
-                                throw new RuntimeException('The payment proof could not be stored.');
-                            }
-
-                            $storedProofPath = $storeResult['path'];
-                        }
-
                         $paymentSubmittedAtSql = $isGcashSubmission ? 'NOW()' : 'NULL';
                         $paymentStmt = $pdo->prepare(
                             'INSERT INTO payments (
@@ -554,7 +1082,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             'UPDATE products
                              SET status = ?
                              WHERE status = ?
-                               AND id IN (' . $productPlaceholders . ')'
+                               AND retired_at IS NULL
+                                AND id IN (' . $productPlaceholders . ')'
                         );
                         $soldProductsStmt->execute(array_merge(
                             ['SOLD', 'AVAILABLE'],
@@ -565,103 +1094,107 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             throw new RuntimeException('The ordered products could not be updated.');
                         }
 
-                        $cartItemIdsStmt = $pdo->prepare(
-                            'SELECT ci.id
-                             FROM cart_items ci
-                             WHERE ci.cart_id = ?
-                               AND ci.product_id IN (' . $productPlaceholders . ')
-                             FOR UPDATE'
-                        );
-                        $cartItemIdsStmt->execute(array_merge(
-                            [$transactionCart['id']],
-                            $productIds
-                        ));
-                        $cartItemIds = $cartItemIdsStmt->fetchAll(PDO::FETCH_COLUMN);
-
-                        if (count($cartItemIds) !== count($productIds)) {
-                            throw new RuntimeException('The ordered cart items could not be found.');
-                        }
-
-                        $cartItemPlaceholders = implode(',', array_fill(0, count($cartItemIds), '?'));
-                        $removeCartItemsStmt = $pdo->prepare(
-                            'DELETE FROM cart_items
-                             WHERE cart_id = ?
-                               AND id IN (' . $cartItemPlaceholders . ')'
-                        );
-                        $removeCartItemsStmt->execute(array_merge(
-                            [$transactionCart['id']],
-                            $cartItemIds
-                        ));
-
-                        if ($removeCartItemsStmt->rowCount() !== count($cartItemIds)) {
-                            throw new RuntimeException('The ordered cart items could not be removed.');
+                        if (!$isBuyNowCheckout) {
+                            $cartItemIds = array_map('intval', array_column($lockedItems, 'cart_item_id'));
+                            $cartItemPlaceholders = implode(',', array_fill(0, count($cartItemIds), '?'));
+                            $removeCartItemsStmt = $pdo->prepare(
+                                'DELETE FROM cart_items WHERE cart_id = ? AND id IN (' . $cartItemPlaceholders . ')'
+                            );
+                            $removeCartItemsStmt->execute(array_merge([(int) $transactionCart['id']], $cartItemIds));
+                            if ($removeCartItemsStmt->rowCount() !== count($cartItemIds)) {
+                                throw new RuntimeException('The ordered cart items could not be removed.');
+                            }
                         }
 
                         // Phase 13: commit the placement notification with the order.
                         admin_notifications_create($pdo, $orderId);
+                        $commitStarted = true;
                         $pdo->commit();
 
-                        header('Location: order-confirmation.php?id=' . $orderId);
-                        exit;
+                        $checkoutAttempt['order_id'] = $orderId;
+                        if ($isBuyNowCheckout) {
+                            $_SESSION['buy_now_checkout']['order_id'] = $orderId;
+                        } else {
+                            cart_selection_remove((int) $transactionCart['id'], $cartItemIds);
+                        }
+
+                        $placedOrderId = $orderId;
                     }
                 }
             }
         } catch (Throwable $e) {
             if ($pdo->inTransaction()) {
-                $pdo->rollBack();
+                try {
+                    $pdo->rollBack();
+                } catch (Throwable $rollbackError) {
+                    $checkoutAttempt['review_required'] = true;
+                }
             }
 
-            /*
-             * Filesystem writes are not part of the database transaction. A
-             * proof stored for THIS submission must not survive a failed
-             * order/payment write, so remove exactly the path created above
-             * (never a pre-existing payment's proof).
-             */
-            if ($storedProofPath !== null) {
-                payment_proof_delete($storedProofPath);
+            if ($commitStarted) {
+                $checkoutAttempt['review_required'] = true;
+                $checkoutAttempt['candidate_order_id'] = $orderId;
+                $errors[] = 'We could not confirm the order result. Contact the shop before retrying. Any submitted GCash evidence is retained; do not pay again.';
+            } elseif (!empty($checkoutAttempt['review_required'])) {
+                $errors[] = 'This checkout needs shop assistance before retrying. Any GCash evidence is retained; do not send another payment.';
+            } elseif ($errors === []) {
+                $errors[] = $isGcashSubmission
+                    ? 'We could not place your order. Your GCash reference and proof are kept for this same checkout. Retry without sending another payment, or contact the shop.'
+                    : 'We could not place your order right now. Please try again.';
             }
-
-            $errors[] = 'We could not place your order right now. Please try again.';
+        } finally {
+            if ($referenceLock !== null) {
+                try {
+                    $releaseStmt = $pdo->prepare('SELECT RELEASE_LOCK(?)');
+                    $releaseStmt->execute([$referenceLock]);
+                } catch (Throwable $releaseError) {
+                    // A non-persistent PDO connection also releases its advisory locks on close.
+                }
+            }
+        }
+        if ($placedOrderId !== null) {
+            header('Location: order-confirmation.php?id=' . $placedOrderId, true, 303);
+            exit;
         }
     }
 }
 
-/* Retrieve only the products currently in this customer's cart. */
-$cartStmt = $pdo->prepare(
-    'SELECT id
-     FROM carts
-     WHERE customer_id = :customer_id
-     LIMIT 1'
-);
-$cartStmt->execute([':customer_id' => $customerId]);
-$cart = $cartStmt->fetch();
-
-$cartItems = [];
-$subtotal = 0.0;
-
-if ($cart !== false) {
-    $itemsStmt = $pdo->prepare(
-        'SELECT ci.id AS cart_item_id, p.id, p.name, p.size, p.category, p.color, p.price, pi.image_path
-         FROM cart_items ci
-         INNER JOIN products p ON p.id = ci.product_id
-         LEFT JOIN product_images pi
-             ON pi.id = (
-                 SELECT pi2.id
-                 FROM product_images pi2
-                 WHERE pi2.product_id = p.id
-                 ORDER BY pi2.sort_order ASC, pi2.id ASC
-                 LIMIT 1
-             )
-         WHERE ci.cart_id = :cart_id
-         ORDER BY ci.created_at ASC, ci.id ASC'
-    );
-    $itemsStmt->execute([':cart_id' => (int) $cart['id']]);
-    $cartItems = $itemsStmt->fetchAll();
-
-    foreach ($cartItems as $item) {
-        $subtotal += (float) $item['price'];
+/* Display the same server-owned item set used by the transaction, including blocked products. */
+$summaryIds = $checkoutAttemptValid ? $checkoutAttempt['selected_ids'] : $currentSelectedIds;
+$cartItems = checkoutLoadItems($pdo, $isBuyNowCheckout, $buyNowProductId, $cartId, $summaryIds);
+$summarySnapshot = checkoutSnapshot($cartItems);
+$subtotal = array_sum(array_column($summarySnapshot, 'price_cents')) / 100;
+$unavailableDisplay = [];
+foreach ($cartItems as $item) {
+    if ($item['status'] !== 'AVAILABLE' || $item['retired_at'] !== null) {
+        $unavailableDisplay[] = $item['name'] . ' (#' . (int) $item['product_id'] . ')';
     }
 }
+$expectedItemCount = $isBuyNowCheckout ? 1 : count($summaryIds);
+$missingDisplayItems = $checkoutAttemptValid ? checkoutMissingItems($checkoutAttempt['snapshot'], $cartItems) : [];
+$selectionIsCurrent = $checkoutAttemptValid && ($isBuyNowCheckout
+    || ($checkoutAttempt['cart_id'] === $cartId && $checkoutAttempt['selected_ids'] === $currentSelectedIds
+        && $checkoutAttempt['selection_revision'] === cart_selection_revision($cartId)));
+if ($unavailableDisplay !== []) {
+    $errors[] = $isBuyNowCheckout ? 'Sorry, this piece is no longer available.' : cart_selection_unavailable_message($unavailableDisplay);
+}
+if ($missingDisplayItems !== [] || count($cartItems) !== $expectedItemCount) {
+    $errors[] = $isBuyNowCheckout ? 'Sorry, this piece is no longer available.'
+        : 'Selected items missing or changed: ' . ($missingDisplayItems === [] ? 'cart entries #' . implode(', #', $summaryIds) : implode(', ', $missingDisplayItems)) . '. Review your whole selection.';
+}
+$checkoutAttemptOwned = is_array($checkoutAttempt) && $checkoutAttempt['customer_id'] === $customerId
+    && $checkoutAttempt['mode'] === ($isBuyNowCheckout ? 'buy_now' : 'cart');
+$savedGcashQuote = $checkoutAttemptOwned ? ($checkoutAttempt['quote'] ?? null) : null;
+$retainedProof = $checkoutAttemptOwned && !empty($checkoutAttempt['proof_path']);
+$hasGcashEvidence = $checkoutAttemptOwned && ($retainedProof || !empty($checkoutAttempt['reference_valid']));
+if ($hasGcashEvidence) {
+    $formValues['gcash_reference'] = $checkoutAttempt['reference'] ?? $formValues['gcash_reference'];
+}
+$checkoutCanSubmit = $selectionIsCurrent && $cartItems !== [] && count($cartItems) === $expectedItemCount
+    && $unavailableDisplay === [] && empty($checkoutAttempt['review_required']) && empty($checkoutAttempt['closed'])
+    && $missingDisplayItems === []
+    && $relatedPayment === null && (!$hasGcashEvidence || $gcashConfigured);
+$errors = array_values(array_unique($errors));
 
 /*
  * Display-time fulfillment preview. Mirrors the server resolution so
@@ -675,6 +1208,15 @@ $displayFulfillment = shipping_resolve_fulfillment(
 );
 $displayRateCents = $displayFulfillment['ok'] ? (int) $displayFulfillment['rate_cents'] : null;
 $displayIsland = $displayFulfillment['ok'] ? $displayFulfillment['island'] : null;
+$savedQuoteMatches = is_array($savedGcashQuote) && $savedGcashQuote['snapshot'] === $summarySnapshot
+    && $savedGcashQuote['shipping_cents'] === $displayRateCents
+    && $savedGcashQuote['delivery_method'] === $formValues['delivery_method']
+    && $savedGcashQuote['region'] === ($formValues['delivery_method'] === 'STORE_PICKUP' ? '' : $formValues['region'])
+    && $savedGcashQuote['receiver'] === hash('sha256', $gcashConfig['name'] . '|' . $gcashConfig['number']);
+$gcashQuoteReady = $checkoutCanSubmit && $savedQuoteMatches;
+if ($savedGcashQuote !== null && !$savedQuoteMatches && $formValues['payment_method'] === 'GCASH') {
+    $errors[] = 'The original GCash amount no longer matches the current products or delivery details. Do not pay a new amount. If already paid, contact the shop with your receipt.';
+}
 
 /*
  * Payment option rendered for the currently selected fulfillment
@@ -692,6 +1234,10 @@ if ($gcashConfigured) {
 if (!in_array($formValues['payment_method'], $allowedPaymentsDisplay, true)) {
     $formValues['payment_method'] = $cashPaymentDisplay;
 }
+if ($hasGcashEvidence && $gcashConfigured) {
+    $formValues['payment_method'] = 'GCASH';
+}
+$errors = array_values(array_unique($errors));
 
 /*
  * Region -> rate map for the client-side live preview. The server
@@ -732,9 +1278,9 @@ require __DIR__ . '/../includes/ui.header.php';
     <header class="checkout-header">
         <div>
             <h1>CHECKOUT</h1>
-            <p class="checkout-header__count"><?= count($cartItems) ?> ITEM FROM YOUR CART</p>
+            <p class="checkout-header__count"><?= $isBuyNowCheckout ? 'BUY NOW &middot; ' . count($cartItems) . ' SELECTED ITEM' : count($cartItems) . ' SELECTED ' . (count($cartItems) === 1 ? 'ITEM' : 'ITEMS') . ' FROM YOUR CART' ?></p>
         </div>
-        <a class="link-subtle checkout-header__back" href="cart.php">Back to cart</a>
+        <a class="link-subtle checkout-header__back" href="<?= hopia_e($checkoutBackUrl) ?>"><?= $isBuyNowCheckout ? 'Back to shop' : 'Back to cart' ?></a>
     </header>
 
     <?php if (count($errors) > 0): ?>
@@ -752,11 +1298,19 @@ require __DIR__ . '/../includes/ui.header.php';
         <p class="alert alert-success" role="status"><?= hopia_e($message) ?></p>
     <?php endif; ?>
 
+    <?php if ($hasGcashEvidence): ?>
+        <div class="alert alert-warning" role="status">
+            Your GCash <?= $retainedProof ? 'proof' : 'reference' ?> is retained for this checkout.
+            <?php if (!empty($checkoutAttempt['reference'])): ?>Reference: <strong><?= hopia_e($checkoutAttempt['reference']) ?></strong>.<?php endif; ?>
+            It is not automatically marked paid. Do not send another payment. Retry this same checkout only if eligible, or contact the shop with your receipt.
+        </div>
+    <?php endif; ?>
+
     <?php if (count($cartItems) === 0): ?>
 
         <div class="checkout-empty">
-            <h2>Your cart is empty</h2>
-            <p>Add an item before continuing to checkout.</p>
+            <h2><?= $isBuyNowCheckout ? 'This piece cannot be checked out' : 'No items selected for checkout' ?></h2>
+            <p><?= $isBuyNowCheckout ? 'Choose an available piece to start Buy Now again. Your cart has not changed.' : 'Select at least one item' ?></p>
             <div class="checkout-empty__actions">
                 <a class="btn btn-primary" href="products.php">SHOP ALL FINDS</a>
                 <a class="btn btn-ghost" href="cart.php">View cart</a>
@@ -766,8 +1320,13 @@ require __DIR__ . '/../includes/ui.header.php';
     <?php else: ?>
 
         <div class="checkout-layout">
-            <form id="checkout-form" class="checkout-form" method="POST" action="checkout.php" enctype="multipart/form-data">
+            <form id="checkout-form" class="checkout-form" method="POST" action="<?= hopia_e($checkoutUrl) ?>" enctype="multipart/form-data">
                 <input type="hidden" name="csrf_token" value="<?= hopia_e($csrfToken) ?>">
+                <input type="hidden" name="checkout_token" value="<?= hopia_e(is_string($checkoutToken) ? $checkoutToken : '') ?>">
+                <input type="hidden" name="gcash_quote_token" id="gcash-quote-token" value="<?= hopia_e($savedGcashQuote['token'] ?? '') ?>">
+                <?php if ($isBuyNowCheckout): ?>
+                    <input type="hidden" name="buy_now" value="<?= hopia_e($buyNowToken) ?>">
+                <?php endif; ?>
 
                 <section class="checkout-card" aria-labelledby="checkout-contact-heading">
                     <div class="checkout-card__head">
@@ -946,6 +1505,7 @@ require __DIR__ . '/../includes/ui.header.php';
                                     name="payment_method"
                                     value="COD"
                                     data-fulfillment="courier"
+                                    <?= $hasGcashEvidence ? 'disabled' : '' ?>
                                     <?= $formValues['delivery_method'] !== 'STORE_PICKUP' && $formValues['payment_method'] === 'COD' ? 'checked' : '' ?>
                                 >
                                 <span class="payment-option__body">
@@ -979,6 +1539,7 @@ require __DIR__ . '/../includes/ui.header.php';
                                     name="payment_method"
                                     value="CASH_ON_PICKUP"
                                     data-fulfillment="pickup"
+                                    <?= $hasGcashEvidence ? 'disabled' : '' ?>
                                     <?= $formValues['delivery_method'] === 'STORE_PICKUP' && $formValues['payment_method'] === 'CASH_ON_PICKUP' ? 'checked' : '' ?>
                                 >
                                 <span class="payment-option__body">
@@ -1006,16 +1567,18 @@ require __DIR__ . '/../includes/ui.header.php';
                         </div>
                     </div>
 
+                    <p class="alert alert-warning" id="gcash-cash-warning" <?= $savedGcashQuote === null || $formValues['payment_method'] === 'GCASH' ? 'hidden' : '' ?>>Only switch to cash if you have not sent the GCash payment. If already paid, choose GCash and submit your original receipt or contact the shop.</p>
+
                     <?php if ($gcashConfigured): ?>
                         <div class="gcash-checkout" id="gcash-checkout" <?= $formValues['payment_method'] === 'GCASH' ? '' : 'hidden' ?>>
                             <div class="gcash-checkout__head">
                                 <?= hopia_checkout_icon('gcash') ?>
-                                <p class="gcash-checkout__title">Send your GCash payment</p>
+                                <p class="gcash-checkout__title"><?= $hasGcashEvidence ? 'Your submitted GCash payment' : 'Send your GCash payment' ?></p>
                             </div>
                             <dl class="gcash-checkout__details">
                                 <div class="gcash-checkout__row">
                                     <dt>Amount due</dt>
-                                    <dd class="gcash-checkout__amount" id="gcash-checkout-amount">&#8369;<?= number_format($subtotal + ($displayRateCents ?? 0) / 100, 2) ?></dd>
+                                    <dd class="gcash-checkout__amount" id="gcash-checkout-amount"><?= $savedGcashQuote === null ? 'Confirm the amount before paying' : '&#8369;' . number_format($savedGcashQuote['total_cents'] / 100, 2) ?></dd>
                                 </div>
                                 <div class="gcash-checkout__row">
                                     <dt>Account name</dt>
@@ -1030,13 +1593,22 @@ require __DIR__ . '/../includes/ui.header.php';
                                     </dd>
                                 </div>
                             </dl>
+                            <button type="button" class="btn btn-secondary btn-sm" id="gcash-confirm-amount" <?= !$checkoutCanSubmit || $hasGcashEvidence ? 'disabled' : '' ?>>Confirm GCash amount</button>
+                            <p class="alert alert-warning" id="gcash-quote-status" role="status" <?= $gcashQuoteReady ? 'hidden' : '' ?>>Confirm your selected items and delivery amount before sending payment. If you have already paid, do not send another payment.</p>
+                            <?php if (!$hasGcashEvidence): ?>
+                                <div class="field" id="gcash-restart-controls" <?= $savedGcashQuote === null ? 'hidden' : '' ?>>
+                                    <label class="checkbox-label"><input type="checkbox" name="confirm_unpaid" value="1"> I have not sent this GCash payment.</label>
+                                    <button type="submit" name="checkout_action" value="restart_checkout" formnovalidate class="btn btn-ghost btn-sm" id="gcash-restart-checkout">Restart checkout if not paid</button>
+                                    <p class="hint">If you have already paid, keep this checkout and contact the shop instead.</p>
+                                </div>
+                            <?php endif; ?>
                             <?php if ($gcashConfig['has_qr']): ?>
                                 <figure class="gcash-checkout__qr">
                                     <img src="<?= hopia_e(hopia_asset($gcashConfig['qr'])) ?>" alt="GCash QR code for <?= hopia_e($gcashConfig['name']) ?>" loading="lazy" width="160" height="160">
                                     <figcaption>Scan to pay in the GCash app</figcaption>
                                 </figure>
                             <?php endif; ?>
-                            <ol class="gcash-panel__steps">
+                            <ol class="gcash-panel__steps" <?= $hasGcashEvidence || !$checkoutCanSubmit ? 'hidden' : '' ?>>
                                 <li>Open your GCash app and send the exact amount shown above to the account details provided.</li>
                                 <li>Copy the reference number shown on your GCash receipt.</li>
                                 <li>Enter that reference and attach your payment screenshot below.</li>
@@ -1053,6 +1625,7 @@ require __DIR__ . '/../includes/ui.header.php';
                                     maxlength="64"
                                     autocomplete="off"
                                     inputmode="latin"
+                                    <?= $checkoutAttemptValid && !empty($checkoutAttempt['reference_valid']) ? 'readonly' : '' ?>
                                 >
                                 <p class="hint">Enter the reference exactly as shown on your GCash receipt.</p>
                             </div>
@@ -1066,6 +1639,7 @@ require __DIR__ . '/../includes/ui.header.php';
                                     accept="image/jpeg,image/png,image/webp"
                                 >
                                 <p class="hint">JPG, PNG, or WebP, up to 5 MB. Only you and the shop can view it.</p>
+                                <?php if ($retainedProof): ?><p class="hint">Your original uploaded proof is retained. No new payment or screenshot is required for this retry.</p><?php endif; ?>
                             </div>
 
                             <p class="alert alert-warning" id="gcash-requirement" role="status" hidden>Please complete GCash payment first before placing order.</p>
@@ -1134,7 +1708,7 @@ require __DIR__ . '/../includes/ui.header.php';
 
                     <div class="checkout-summary__totals">
                         <div class="checkout-summary__row">
-                            <span>Merchandise subtotal</span>
+                            <span><?= $isBuyNowCheckout ? 'Merchandise subtotal' : 'Selected merchandise subtotal' ?></span>
                             <span class="price">₱<?= number_format($subtotal, 2) ?></span>
                         </div>
                         <div class="checkout-summary__row checkout-summary__row--muted">
@@ -1153,6 +1727,7 @@ require __DIR__ . '/../includes/ui.header.php';
                             form="checkout-form"
                             class="checkout-submit"
                             id="checkout-submit"
+                            <?= !$checkoutCanSubmit || ($formValues['payment_method'] === 'GCASH' && (!$gcashQuoteReady || !$retainedProof || empty($checkoutAttempt['reference_valid']))) ? 'disabled' : '' ?>
                         >
                             <span class="checkout-submit__spinner" aria-hidden="true"></span>
                             <svg class="checkout-submit__icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
@@ -1163,11 +1738,11 @@ require __DIR__ . '/../includes/ui.header.php';
                             <span class="checkout-submit__label">PLACE ORDER</span>
                         </button>
 
-                        <a class="checkout-back" href="cart.php">
+                        <a class="checkout-back" href="<?= hopia_e($checkoutBackUrl) ?>">
                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                                 <path d="m15 18-6-6 6-6"></path>
                             </svg>
-                            BACK TO CART
+                            <?= $isBuyNowCheckout ? 'BACK TO SHOP' : 'BACK TO CART' ?>
                         </a>
                     </div>
                 </div>
@@ -1270,6 +1845,24 @@ require __DIR__ . '/../includes/ui.header.php';
             var gcashReferenceInput = document.getElementById('gcash_reference');
             var gcashProofInput = document.getElementById('gcash-proof');
             var gcashRequirement = document.getElementById('gcash-requirement');
+            var gcashQuoteToken = document.getElementById('gcash-quote-token');
+            var gcashConfirmAmount = document.getElementById('gcash-confirm-amount');
+            var gcashQuoteStatus = document.getElementById('gcash-quote-status');
+            var gcashCashWarning = document.getElementById('gcash-cash-warning');
+            var gcashRestartControls = document.getElementById('gcash-restart-controls');
+            var gcashRestartButton = document.getElementById('gcash-restart-checkout');
+            var checkoutEligible = <?= json_encode($checkoutCanSubmit) ?>;
+            var retainedGcashProof = <?= json_encode($retainedProof) ?>;
+            var submittedGcashEvidence = <?= json_encode($hasGcashEvidence) ?>;
+            var quoteBusy = false;
+            var quoteError = '';
+            var gcashQuote = <?= json_encode($savedGcashQuote === null ? null : [
+                'quote_token' => $savedGcashQuote['token'],
+                'total_cents' => $savedGcashQuote['total_cents'],
+                'delivery_method' => $savedGcashQuote['delivery_method'],
+                'region' => $savedGcashQuote['region'],
+                'usable' => $gcashQuoteReady,
+            ]) ?>;
 
             function selectedPaymentMethod() {
                 var checked = form
@@ -1292,9 +1885,14 @@ require __DIR__ . '/../includes/ui.header.php';
             }
 
             function gcashProofSelected() {
-                return !!(gcashProofInput
+                return retainedGcashProof || !!(gcashProofInput
                     && gcashProofInput.files
                     && gcashProofInput.files.length > 0);
+            }
+
+            function gcashQuoteMatchesSelection() {
+                return gcashQuote && gcashQuote.usable && gcashQuote.delivery_method === currentMethod()
+                    && gcashQuote.region === (currentMethod() === 'STORE_PICKUP' ? '' : (fields.region ? fields.region.value : ''));
             }
 
             function gcashRequirementsMet() {
@@ -1302,18 +1900,25 @@ require __DIR__ . '/../includes/ui.header.php';
                     return true;
                 }
 
-                return gcashReferenceLooksValid(gcashReferenceValue())
+                return !quoteBusy && gcashQuoteMatchesSelection() && gcashReferenceLooksValid(gcashReferenceValue())
                     && gcashProofSelected();
             }
 
             function refreshGcashCheckout() {
+                var isGcash = selectedPaymentMethod() === 'GCASH';
+                if (submitBtn && !submitBtn.classList.contains('is-loading')) {
+                    submitBtn.disabled = !checkoutEligible || quoteBusy || !gcashRequirementsMet();
+                }
+                if (gcashCashWarning) {
+                    gcashCashWarning.hidden = !gcashQuote || isGcash;
+                }
                 if (!gcashCheckout) {
                     return;
                 }
-                var isGcash = selectedPaymentMethod() === 'GCASH';
                 gcashCheckout.hidden = !isGcash;
-                if (isGcash && gcashCheckoutAmount && totalOut) {
-                    gcashCheckoutAmount.textContent = totalOut.textContent;
+                if (isGcash && gcashCheckoutAmount) {
+                    gcashCheckoutAmount.textContent = gcashQuote
+                        ? formatPeso(gcashQuote.total_cents) : 'Confirm the amount before paying';
                 }
 
                 /* GCash-only fields are required only while GCash is the
@@ -1321,9 +1926,11 @@ require __DIR__ . '/../includes/ui.header.php';
                  * stale native validation blocking a valid checkout. */
                 if (gcashReferenceInput) {
                     gcashReferenceInput.required = isGcash;
+                    gcashReferenceInput.disabled = !isGcash;
                 }
                 if (gcashProofInput) {
-                    gcashProofInput.required = isGcash;
+                    gcashProofInput.required = isGcash && !retainedGcashProof;
+                    gcashProofInput.disabled = !isGcash || retainedGcashProof;
                 }
 
                 var met = gcashRequirementsMet();
@@ -1332,11 +1939,67 @@ require __DIR__ . '/../includes/ui.header.php';
                     gcashRequirement.hidden = !isGcash || met;
                 }
 
-                /* Convenience only: the server independently enforces both
-                 * requirements before creating any order or payment row. */
-                if (submitBtn && !submitBtn.classList.contains('is-loading')) {
-                    submitBtn.disabled = !met;
+                if (gcashConfirmAmount) {
+                    gcashConfirmAmount.disabled = !isGcash || quoteBusy || !checkoutEligible || submittedGcashEvidence;
+                    gcashConfirmAmount.textContent = quoteBusy ? 'Confirming amount...' : 'Confirm GCash amount';
                 }
+                if (gcashQuoteStatus) {
+                    gcashQuoteStatus.hidden = !quoteError && !!gcashQuoteMatchesSelection();
+                    gcashQuoteStatus.textContent = quoteError || (gcashQuote
+                        ? 'The original payment amount is kept. Restore its delivery details or, if you already paid, contact the shop. Do not pay a changed amount.'
+                        : 'Confirm your selected items and delivery amount before paying. If you have already paid, do not send another payment.');
+                }
+                if (gcashRestartControls) {
+                    gcashRestartControls.hidden = !gcashQuote;
+                }
+                if (gcashRestartButton) {
+                    gcashRestartButton.disabled = !isGcash || !gcashQuote || quoteBusy || submittedGcashEvidence;
+                }
+            }
+
+            if (gcashConfirmAmount) {
+                gcashConfirmAmount.addEventListener('click', function (event) {
+                    event.preventDefault();
+                    if (quoteBusy || !checkoutEligible || submittedGcashEvidence) {
+                        return;
+                    }
+                    var data = new FormData();
+                    data.append('checkout_action', 'prepare_gcash');
+                    data.append('csrf_token', form.elements.csrf_token.value);
+                    data.append('checkout_token', form.elements.checkout_token.value);
+                    data.append('delivery_method', currentMethod());
+                    data.append('region', fields.region ? fields.region.value : '');
+                    data.append('payment_method', 'GCASH');
+                    if (form.elements.buy_now) {
+                        data.append('buy_now', form.elements.buy_now.value);
+                    }
+                    quoteBusy = true;
+                    quoteError = '';
+                    refreshGcashCheckout();
+                    fetch(form.action, {
+                        method: 'POST',
+                        body: data,
+                        credentials: 'same-origin',
+                        headers: {'X-Requested-With': 'XMLHttpRequest'}
+                    }).then(function (response) {
+                        return response.json();
+                    }).then(function (payload) {
+                        if (!payload.ok) {
+                            throw new Error(payload.message);
+                        }
+                        gcashQuote = payload;
+                        gcashQuote.usable = true;
+                        gcashQuoteToken.value = payload.quote_token;
+                    }).catch(function (error) {
+                        quoteError = error.message || 'We could not confirm the amount. Do not pay until the checkout amount is confirmed.';
+                        if (gcashQuote) {
+                            gcashQuote.usable = false;
+                        }
+                    }).finally(function () {
+                        quoteBusy = false;
+                        refreshGcashCheckout();
+                    });
+                });
             }
 
             levelOrder.forEach(function (name) {
@@ -1755,7 +2418,7 @@ require __DIR__ . '/../includes/ui.header.php';
 
                 if (activeBlock && !activeBlock.querySelector('input[name="payment_method"]:checked')) {
                     var fallback = activeBlock.querySelector(
-                        'input[value="' + (isPickup ? 'CASH_ON_PICKUP' : 'COD') + '"]'
+                        'input[value="' + (submittedGcashEvidence ? 'GCASH' : (isPickup ? 'CASH_ON_PICKUP' : 'COD')) + '"]'
                     );
                     if (fallback) {
                         fallback.checked = true;
@@ -1847,6 +2510,14 @@ require __DIR__ . '/../includes/ui.header.php';
             refreshFulfillmentUi();
 
             form.addEventListener('submit', function (event) {
+                if (event.submitter && event.submitter.name === 'checkout_action') {
+                    // Quote confirmation and an explicitly unpaid restart do not create an order.
+                    return;
+                }
+                if (!checkoutEligible || quoteBusy) {
+                    event.preventDefault();
+                    return;
+                }
                 /*
                  * Block an incomplete GCash submission here as well: the
                  * hidden in-form submit button (Enter key) can fire even when
@@ -1861,6 +2532,8 @@ require __DIR__ . '/../includes/ui.header.php';
 
                     if (!gcashReferenceLooksValid(gcashReferenceValue()) && gcashReferenceInput) {
                         gcashReferenceInput.focus();
+                    } else if (!gcashQuoteMatchesSelection() && gcashConfirmAmount) {
+                        gcashConfirmAmount.focus();
                     } else if (!gcashProofSelected() && gcashProofInput) {
                         gcashProofInput.focus();
                     }
@@ -1903,10 +2576,14 @@ require __DIR__ . '/../includes/ui.header.php';
                 }
             });
 
-            window.addEventListener('pageshow', function () {
+            window.addEventListener('pageshow', function (event) {
+                if (event.persisted) {
+                    window.location.reload();
+                    return;
+                }
                 var label = submitBtn.querySelector('.checkout-submit__label');
 
-                submitBtn.disabled = false;
+                submitBtn.disabled = !checkoutEligible;
                 submitBtn.classList.remove('is-loading');
                 submitBtn.removeAttribute('aria-busy');
 

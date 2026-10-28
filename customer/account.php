@@ -3,6 +3,7 @@
 session_start();
 
 require_once __DIR__ . '/../includes/database.php';
+require_once __DIR__ . '/../includes/customer_auth.php';
 require_once __DIR__ . '/../includes/ui.php';
 
 /*
@@ -10,6 +11,7 @@ require_once __DIR__ . '/../includes/ui.php';
  */
 
 if (!isset($_SESSION['customer_id'])) {
+    hopia_customer_set_intended_destination('account.php');
     header('Location: login.php');
     exit;
 }
@@ -21,7 +23,7 @@ $customerId = (int) $_SESSION['customer_id'];
  */
 
 $customerStmt = $pdo->prepare(
-    'SELECT first_name, last_name, email, phone
+    'SELECT first_name, last_name, email, phone, password_hash
      FROM customers
      WHERE id = :customer_id
      LIMIT 1'
@@ -65,6 +67,8 @@ $firstName = trim((string) $customer['first_name']);
 $lastName = trim((string) $customer['last_name']);
 $email = trim((string) $customer['email']);
 $phone = trim((string) ($customer['phone'] ?? ''));
+$hasPassword = is_string($customer['password_hash'] ?? null)
+    && $customer['password_hash'] !== '';
 
 $fullName = trim($firstName . ' ' . $lastName);
 $initials = hopia_account_initials($firstName, $lastName);
@@ -246,6 +250,7 @@ require __DIR__ . '/../includes/ui.header.php';
                      differs from the stored one, so an ordinary name or phone
                      edit never asks for a password. -->
                 <div class="account-confirm" data-account-email-confirm hidden>
+                    <?php if ($hasPassword): ?>
                     <label class="account-field__label" for="account-email-password">
                         <span class="account-field__icon" aria-hidden="true"><?= hopia_account_icon('lock') ?></span>
                         <span class="account-field__label-text">CONFIRM WITH PASSWORD</span>
@@ -261,6 +266,9 @@ require __DIR__ . '/../includes/ui.header.php';
                         <?php hopia_account_eye_toggle('account-email-password', 'password'); ?>
                     </div>
                     <p class="account-field__error" data-account-error="current_password" hidden></p>
+                    <?php else: ?>
+                    <p class="account-panel__error">Email changes are unavailable for Google-only accounts.</p>
+                    <?php endif; ?>
                 </div>
 
                 <p class="account-panel__error" data-account-form-error role="alert" hidden></p>
@@ -307,11 +315,13 @@ require __DIR__ . '/../includes/ui.header.php';
                     <span class="account-field__label-text">PASSWORD</span>
                 </p>
                 <div class="account-field__control account-field__control--security">
-                    <p class="account-field__value account-field__value--mask" aria-label="Password hidden">••••••••••••</p>
-                    <button class="account-link account-link--sm" type="button" data-account-password-open>
-                        <span class="account-link__label">CHANGE PASSWORD</span>
-                        <span class="account-link__arrow" aria-hidden="true"><?= hopia_account_icon('arrow-right') ?></span>
-                    </button>
+                    <p class="account-field__value account-field__value--mask" aria-label="<?= $hasPassword ? 'Password hidden' : 'No password set' ?>"><?= $hasPassword ? '••••••••••••' : 'Google sign-in only' ?></p>
+                    <?php if ($hasPassword): ?>
+                        <button class="account-link account-link--sm" type="button" data-account-password-open>
+                            <span class="account-link__label">CHANGE PASSWORD</span>
+                            <span class="account-link__arrow" aria-hidden="true"><?= hopia_account_icon('arrow-right') ?></span>
+                        </button>
+                    <?php endif; ?>
                 </div>
             </div>
 
@@ -324,6 +334,7 @@ require __DIR__ . '/../includes/ui.header.php';
                         <input type="hidden" name="action" value="password">
                         <input type="hidden" name="csrf_token" value="<?= hopia_e($csrfToken) ?>" data-account-csrf>
 
+                        <?php if ($hasPassword): ?>
                         <div class="account-field">
                             <label class="account-field__label" for="account-current-password">
                                 <span class="account-field__icon" aria-hidden="true"><?= hopia_account_icon('lock') ?></span>
@@ -342,6 +353,7 @@ require __DIR__ . '/../includes/ui.header.php';
                             </div>
                             <p class="account-field__error" data-account-error="current_password" hidden></p>
                         </div>
+                        <?php endif; ?>
 
                         <div class="account-field">
                             <label class="account-field__label" for="account-new-password">
@@ -797,7 +809,8 @@ require __DIR__ . '/../includes/ui.header.php';
             clearSuccess('password');
             root.classList.add('is-password-editing');
 
-            var current = document.getElementById('account-current-password');
+            var current = document.getElementById('account-current-password')
+                || document.getElementById('account-new-password');
 
             if (current) {
                 current.focus();

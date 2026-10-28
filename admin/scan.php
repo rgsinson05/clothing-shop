@@ -23,6 +23,10 @@ if (!isset($_SESSION['admin_id'])) {
 }
 
 require_once __DIR__ . '/../includes/ui.php';
+require_once __DIR__ . '/../includes/dynamsoft_scanner.php';
+
+// The guarded test router sets this only after verifying its isolated database.
+$walkinScannerTest = defined('HOPIA_WALKIN_ZXING_TEST') && HOPIA_WALKIN_ZXING_TEST === true;
 
 /*
  * Stable per-session CSRF token for the walk-in endpoints. It is intentionally
@@ -82,6 +86,28 @@ require __DIR__ . '/../includes/ui.header.php';
 .scan-status { margin: .75rem 0; }
 .scan-remove { background: none; border: none; color: var(--admin-danger, #b42318); cursor: pointer; text-decoration: underline; font: inherit; }
 .scan-draft-empty { color: var(--admin-text-muted, #11100e99); padding: 1rem 0; }
+<?php if ($walkinScannerTest): ?>
+/* Reuse the admin popup; errors use the existing alert-error palette. */
+.ui-admin #admin-success[data-scan-kind="error"] { --admin-accent-soft: var(--color-danger-soft); --admin-accent-strong: var(--admin-danger, var(--color-danger-dark)); background: var(--color-danger-soft); color: var(--admin-danger, var(--color-danger-dark)); border-color: var(--admin-danger-border, #f0cfcd); border-left-color: var(--color-danger); }
+/* Keep the test camera preview and its controls in separate responsive rows. */
+.scan-grid > .card { min-width: 0; }
+.scan-reader-wrap, .scan-reader-frame { max-width: none; margin-top: .75rem; scroll-margin-top: 5rem; }
+.scan-reader-frame { min-height: clamp(320px, 52vh, 420px); min-height: clamp(320px, 52svh, 420px); }
+.scan-camera-preview { width: 100% !important; height: clamp(320px, 52vh, 420px) !important; height: clamp(320px, 52svh, 420px) !important; }
+.scan-reader video { height: 100% !important; object-fit: contain; }
+.scan-camera-settings { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .75rem; padding: .875rem; background: var(--admin-surface, #fff); color: var(--admin-text, #11100e); border-bottom: 1px solid var(--admin-border, #11100e22); }
+.scan-camera-setting { display: grid; gap: .35rem; min-width: 0; font-size: .85rem; font-weight: 600; }
+.scan-camera-setting select { width: 100%; max-width: 100%; min-width: 0; min-height: 44px; margin: 0 !important; padding: .5rem; font: inherit; color: inherit; background: var(--admin-surface, #fff); border: 1px solid var(--admin-border-strong, #11100e33); border-radius: 6px; text-overflow: ellipsis; }
+.scan-camera-setting[hidden] { display: none; }
+.scan-camera-preview { position: relative; }
+.scan-camera-guide { position: absolute; left: 5%; top: 25%; width: 90%; height: 50%; border: 2px solid #fe8e14; pointer-events: none; }
+.scan-camera-resolution { padding: .5rem 0; min-height: 44px; display: flex; align-items: center; }
+.scan-camera-capabilities { grid-column: 1 / -1; margin: 0; font-size: .8rem; font-weight: 400; }
+.scan-reader__hint { position: static; margin: 0; padding: .75rem .875rem; border-radius: 0; }
+.scan-reader__state { position: static; transform: none; width: fit-content; max-width: calc(100% - 1.75rem); margin: 0 auto .875rem; white-space: normal; overflow-wrap: anywhere; }
+@media (max-width: 480px) { .scan-camera-settings { grid-template-columns: minmax(0, 1fr); } }
+@media (max-height: 500px) and (orientation: landscape) { .scan-camera-preview { height: clamp(240px, 60vh, 320px) !important; height: clamp(240px, 60svh, 320px) !important; } }
+<?php endif; ?>
 </style>
 
 <div class="admin-products admin-scan">
@@ -146,6 +172,19 @@ require __DIR__ . '/../includes/ui.header.php';
                 </div>
 
                 <div id="scan-reader-wrap" class="scan-reader-wrap" hidden>
+<?php if ($walkinScannerTest): ?>
+                    <div class="scan-camera-settings" role="group" aria-label="Camera settings">
+                        <label class="scan-camera-setting">
+                            <span>Camera</span>
+                            <select id="scan-camera-select" disabled aria-label="Camera"></select>
+                        </label>
+                        <div class="scan-camera-setting">
+                            <span id="scan-resolution-label">Resolution</span>
+                            <output id="scan-camera-resolution" class="scan-camera-resolution" aria-labelledby="scan-resolution-label">Camera off</output>
+                        </div>
+                        <p id="scan-camera-capabilities" class="scan-camera-capabilities"></p>
+                    </div>
+<?php endif; ?>
                     <div id="scan-reader" class="scan-reader"></div>
                     <p class="scan-reader__hint">
                         Hold steady, 10&ndash;15&nbsp;cm away. Fit the <strong>entire</strong> barcode inside the
@@ -196,7 +235,12 @@ require __DIR__ . '/../includes/ui.header.php';
     </div>
 </div>
 
-<script src="<?= hopia_e(hopia_asset('js/vendor/html5-qrcode/html5-qrcode.min.js')) ?>"></script>
+<?php if ($walkinScannerTest): ?>
+<script src="https://cdn.jsdelivr.net/npm/@zxing/library@0.23.0/umd/index.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@zxing/browser@0.2.1/umd/zxing-browser.min.js"></script>
+<?php else: ?>
+<?php hopia_dynamsoft_assets(); ?>
+<?php endif; ?>
 <script>
 (function () {
     'use strict';
@@ -204,7 +248,7 @@ require __DIR__ . '/../includes/ui.header.php';
     var CONFIG = {
         csrf: <?= json_encode($walkinCsrf) ?>,
         lookupUrl: 'api/barcode-lookup.php',
-        saleUrl: 'api/walkin-sale.php'
+        saleUrl: 'api/walkin-sale.php',
     };
 
     var draft = [];          // [{id, name, category, size, color, barcode, price}]
@@ -223,13 +267,25 @@ require __DIR__ . '/../includes/ui.header.php';
     var elStart = document.getElementById('scan-camera-start');
     var elStop = document.getElementById('scan-camera-stop');
     var elReaderOff = document.getElementById('scan-reader-off');
+    var elReader = document.getElementById('scan-reader');
     var elReaderWrap = document.getElementById('scan-reader-wrap');
     var elCameraState = document.getElementById('scan-camera-state');
     var elTorch = document.getElementById('scan-torch');
     var elZoomControl = document.getElementById('scan-zoom-control');
     var elZoom = document.getElementById('scan-zoom');
 
+<?php if ($walkinScannerTest): ?>
+    var cameraControls = null;
+    var cameraStream = null;
+    var cameraVideo = null;
+    var cameraEpoch = 0;
+    var zoomRequest = 0;
+    var elCameraSelect = document.getElementById('scan-camera-select');
+    var elResolution = document.getElementById('scan-camera-resolution');
+    var elCapabilities = document.getElementById('scan-camera-capabilities');
+<?php else: ?>
     var cameraScanner = null;
+<?php endif; ?>
     var cameraRunning = false;
     var cameraStarting = false;
     var lastScan = { code: '', at: 0 };
@@ -311,6 +367,23 @@ require __DIR__ . '/../includes/ui.header.php';
         box.setAttribute('role', kind === 'error' ? 'alert' : 'status');
         box.textContent = message;
         elStatus.appendChild(box);
+    }
+
+    function setLookupStatus(message, kind) {
+        setStatus(message, kind);
+<?php if ($walkinScannerTest): ?>
+        // One shared popup replaces the previous result; decoded frames alone never call it.
+        var popup = document.getElementById('admin-success');
+        if (!popup || !window.hopiaAdminSuccess) { return; }
+        var isError = kind === 'error';
+        popup.setAttribute('data-scan-kind', kind);
+        var popupMessage = popup.querySelector('[data-admin-success-message]');
+        popupMessage.setAttribute('role', isError ? 'alert' : 'status');
+        popupMessage.setAttribute('aria-live', isError ? 'assertive' : 'polite');
+        popup.querySelector('[data-admin-success-close]').setAttribute('aria-label', 'Dismiss ' + (isError ? 'error' : 'success') + ' message');
+        popup.querySelector('.admin-success__icon path').setAttribute('d', isError ? 'M12 8v4m0 4h.01' : 'm8 12 2.5 2.5L16 9');
+        window.hopiaAdminSuccess.show(message);
+<?php endif; ?>
     }
 
     /* Camera overlay state bar — does NOT replace the page-level setStatus
@@ -433,7 +506,7 @@ require __DIR__ . '/../includes/ui.header.php';
                 draft.push(data.product);
                 resetRequestKey();
                 render();
-                setStatus('Added: ' + data.product.name + ' (\u20b1' + data.product.price + ').', 'success');
+                setLookupStatus(<?= $walkinScannerTest ? "'Added to sale draft: '" : "'Added: '" ?> + data.product.name + ' (\u20b1' + data.product.price + ').', 'success');
                 setCameraState('\u2713 ' + data.product.name, 'ok');
                 setTimeout(function () { setCameraState('Point camera at next barcode', 'ready'); }, 3000);
                 if (navigator.vibrate) { navigator.vibrate(80); }
@@ -441,11 +514,11 @@ require __DIR__ . '/../includes/ui.header.php';
                 // succeeded AND the product was actually added to the draft.
                 playSuccessBeep();
             } else {
-                setStatus(data.message || 'That item could not be added.', 'error');
+                setLookupStatus(data.message || 'That item could not be added.', 'error');
             }
         }).catch(function () {
             delete inFlight[barcode];
-            setStatus('Could not reach the server. Please check your connection and try again.', 'error');
+            setLookupStatus('Could not reach the server. Please check your connection and try again.', 'error');
         });
     }
 
@@ -532,7 +605,12 @@ require __DIR__ . '/../includes/ui.header.php';
 
     // ---- Camera ----
     function cameraSupported() {
-        return typeof Html5Qrcode !== 'undefined'
+<?php if ($walkinScannerTest): ?>
+        return typeof ZXingBrowser !== 'undefined' && ZXingBrowser.BrowserMultiFormatReader
+            && typeof ZXing !== 'undefined' && ZXing.DecodeHintType && ZXing.BarcodeFormat
+<?php else: ?>
+        return typeof HopiaDynamsoftScanner !== 'undefined' && HopiaDynamsoftScanner.isSupported()
+<?php endif; ?>
             && navigator.mediaDevices
             && typeof navigator.mediaDevices.getUserMedia === 'function';
     }
@@ -545,17 +623,251 @@ require __DIR__ . '/../includes/ui.header.php';
 
     function onScanSuccess(decodedText) {
         var now = Date.now();
-        // Suppress repeated frames of the same code so one physical label is
-        // not added (or re-messaged) many times.
+<?php if ($walkinScannerTest): ?>
+        // Keep the code latched until it leaves view; even failed lookups notify only once.
+        if (decodedText === lastScan.code) { lastScan.at = now; return; }
+<?php else: ?>
         if (decodedText === lastScan.code && (now - lastScan.at) < 1500) { return; }
+<?php endif; ?>
         lastScan = { code: decodedText, at: now };
         addBarcodeToDraft(decodedText);
     }
 
-    /* Probe the active video track for torch and zoom capabilities.
-       Torch (torch: true/false) and zoom (zoom.value, zoom.min/max) are ONLY
-       available on a small subset of devices; missing capabilities are silently
-       absent from the MediaTrackCapabilities object. */
+<?php if ($walkinScannerTest): ?>
+    function updateCapabilityMessage() {
+        var unavailable = [];
+        if (!torchSupported) { unavailable.push('Flashlight'); }
+        if (!zoomCaps) { unavailable.push('Zoom'); }
+        elCapabilities.textContent = unavailable.length ? unavailable.join(' and ') + ' unavailable on this camera/browser.' : '';
+    }
+
+    function probeCameraCaps(track) {
+        try {
+            var caps = track.getCapabilities();
+            var settings = track.getSettings();
+            torchSupported = caps.torch === true && typeof cameraControls.switchTorch === 'function';
+            elTorch.hidden = !torchSupported;
+            if (caps.zoom && caps.zoom.max > caps.zoom.min && typeof settings.zoom === 'number') {
+                zoomCaps = caps.zoom;
+                elZoom.min = caps.zoom.min;
+                elZoom.max = caps.zoom.max;
+                elZoom.step = caps.zoom.step > 0 ? caps.zoom.step : 0.1;
+                elZoom.value = settings.zoom;
+                elZoomControl.hidden = false;
+            }
+        } catch (error) { /* Missing capability APIs mean these controls stay hidden. */ }
+        updateCapabilityMessage();
+    }
+
+    async function applyZoom(rawValue) {
+        if (!zoomCaps || !cameraStream) { return; }
+        var track = cameraStream.getVideoTracks()[0];
+        var value = Math.min(zoomCaps.max, Math.max(zoomCaps.min, Number(rawValue)));
+        if (!isFinite(value)) { return; }
+        var run = cameraEpoch;
+        var request = ++zoomRequest;
+        try {
+            await track.applyConstraints({ advanced: [{ zoom: value }] });
+            if (run !== cameraEpoch || request !== zoomRequest) { return; }
+            var actual = track.getSettings().zoom;
+            if (typeof actual !== 'number' || Math.abs(actual - value) > Number(elZoom.step)) { throw new Error('Zoom not applied'); }
+            elZoom.value = actual;
+        } catch (error) {
+            if (run !== cameraEpoch || request !== zoomRequest) { return; }
+            zoomCaps = null;
+            elZoomControl.hidden = true;
+            updateCapabilityMessage();
+        }
+    }
+
+    async function toggleTorch() {
+        if (!torchSupported || !cameraControls) { return; }
+        var run = cameraEpoch;
+        var nextState = !torchOn;
+        elTorch.disabled = true;
+        try {
+            await cameraControls.switchTorch(nextState);
+            if (run !== cameraEpoch) { return; }
+            var actual = cameraStream.getVideoTracks()[0].getSettings().torch;
+            if (typeof actual === 'boolean' && actual !== nextState) { throw new Error('Torch not applied'); }
+            torchOn = nextState;
+            elTorch.textContent = 'Flashlight: ' + (torchOn ? 'On' : 'Off');
+            elTorch.setAttribute('aria-pressed', torchOn ? 'true' : 'false');
+            elReaderWrap.classList.toggle('is-flash', torchOn);
+        } catch (error) {
+            if (run !== cameraEpoch) { return; }
+            torchSupported = false;
+            torchOn = false;
+            elTorch.hidden = true;
+            elReaderWrap.classList.remove('is-flash');
+            updateCapabilityMessage();
+        } finally {
+            if (run === cameraEpoch) { elTorch.disabled = false; }
+        }
+    }
+
+    function releaseCamera() {
+        // Invalidate pending permission/start promises and callbacks before releasing anything.
+        cameraEpoch += 1;
+        if (cameraControls) {
+            try { Promise.resolve(cameraControls.stop()).catch(function () {}); } catch (error) { /* already stopped */ }
+        }
+        if (cameraStream) { cameraStream.getTracks().forEach(function (track) { track.stop(); }); }
+        if (cameraVideo) { cameraVideo.pause(); cameraVideo.srcObject = null; }
+        cameraControls = null;
+        cameraStream = null;
+        cameraVideo = null;
+        cameraRunning = false;
+        cameraStarting = false;
+        torchSupported = false;
+        torchOn = false;
+        zoomCaps = null;
+        lastScan = { code: '', at: 0 };
+        elReader.textContent = '';
+    }
+
+    function stopCamera() {
+        releaseCamera();
+        elStart.hidden = false;
+        elStop.hidden = true;
+        elReaderOff.hidden = false;
+        elReaderWrap.hidden = true;
+        elTorch.hidden = true;
+        elTorch.disabled = false;
+        elTorch.textContent = 'Flashlight: Off';
+        elTorch.setAttribute('aria-pressed', 'false');
+        elZoomControl.hidden = true;
+        elCameraSelect.disabled = true;
+        elResolution.textContent = 'Camera off';
+        elReaderWrap.classList.remove('is-flash');
+        setCameraState('', '');
+    }
+
+    function showCameraFailure(error) {
+        var name = error && error.name || '';
+        if (name === 'NotAllowedError' || name === 'PermissionDeniedError') {
+            setStatus('Camera permission was denied. Allow camera access in your browser settings, or use manual entry.', 'error');
+        } else if (name === 'NotFoundError' || name === 'DevicesNotFoundError') {
+            setStatus('No camera was found on this device. Manual entry still works.', 'error');
+        } else if (name === 'NotReadableError' || name === 'TrackStartError') {
+            setStatus('The camera is already in use by another app. Close it and try again, or use manual entry.', 'error');
+        } else if (name === 'OverconstrainedError') {
+            setStatus('The selected camera settings are not supported. Choose another camera or use manual entry.', 'error');
+        } else {
+            setStatus('The ZXing camera could not be started. Manual entry still works.', 'error');
+        }
+    }
+
+    async function startCamera(deviceId) {
+        if (cameraStarting || cameraRunning) { return; }
+        getAudioCtx();
+        if (!cameraSupported() || !secureContextOk()) {
+            setStatus('ZXing camera scanning needs HTTPS and a supported browser. Manual entry still works.', 'error');
+            return;
+        }
+        deviceId = typeof deviceId === 'string' ? deviceId : elCameraSelect.value;
+        var run = ++cameraEpoch;
+        var stream = null;
+        cameraStarting = true;
+        elStart.hidden = true;
+        elStop.hidden = false;
+        elReaderOff.hidden = true;
+        elReaderWrap.hidden = false;
+        elCameraSelect.disabled = true;
+        elCapabilities.textContent = '';
+        setCameraState('Starting ZXing camera\u2026', 'starting');
+        try {
+            stream = await navigator.mediaDevices.getUserMedia({
+                audio: false,
+                video: deviceId ? { deviceId: { exact: deviceId } } : { facingMode: { ideal: 'environment' } }
+            });
+            if (run !== cameraEpoch) { stream.getTracks().forEach(function (track) { track.stop(); }); return; }
+            cameraStream = stream;
+            var video = document.createElement('video');
+            video.autoplay = true;
+            video.muted = true;
+            video.playsInline = true;
+            cameraVideo = video;
+            var preview = document.createElement('div');
+            preview.className = 'scan-camera-preview';
+            preview.appendChild(video);
+            var guide = document.createElement('div');
+            guide.className = 'scan-camera-guide';
+            guide.setAttribute('aria-hidden', 'true');
+            preview.appendChild(guide);
+            elReader.appendChild(preview);
+            var hints = new Map();
+            hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [ZXing.BarcodeFormat.CODE_128]);
+            hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
+            var reader = new ZXingBrowser.BrowserMultiFormatReader(hints, {
+                delayBetweenScanAttempts: 100,
+                delayBetweenScanSuccess: 200
+            });
+            var controls = await reader.decodeFromStream(stream, video, function (result, error) {
+                if (run !== cameraEpoch) { return; }
+                if (result && result.getBarcodeFormat() === ZXing.BarcodeFormat.CODE_128) {
+                    onScanSuccess(result.getText());
+                } else {
+                    if (Date.now() - lastScan.at > 1200) { lastScan = { code: '', at: 0 }; }
+                    // ZXing's minified bundle shortens error.name; getKind() is its stable discriminator.
+                    var errorKind = error && typeof error.getKind === 'function' ? error.getKind() : error && error.name;
+                    if (error && ['NotFoundException', 'ChecksumException', 'FormatException'].indexOf(errorKind) === -1) {
+                        stopCamera();
+                        showCameraFailure(error);
+                    }
+                }
+            });
+            if (run !== cameraEpoch) {
+                Promise.resolve(controls.stop()).catch(function () {});
+                return;
+            }
+            cameraControls = controls;
+            cameraStarting = false;
+            cameraRunning = true;
+            var track = stream.getVideoTracks()[0];
+            function updateResolution() {
+                if (run === cameraEpoch) { elResolution.textContent = video.videoWidth + ' x ' + video.videoHeight; }
+            }
+            video.addEventListener('resize', updateResolution);
+            updateResolution();
+            probeCameraCaps(track);
+            track.addEventListener('ended', function () {
+                if (run === cameraEpoch) { stopCamera(); setStatus('Camera disconnected. Start it again or use manual entry.', 'error'); }
+            });
+            setCameraState('Point camera at barcode', 'ready');
+            setStatus('ZXing camera started. Point it at a Code 128 barcode.', 'info');
+            try {
+                var cameras = await ZXingBrowser.BrowserCodeReader.listVideoInputDevices();
+                if (run !== cameraEpoch) { return; }
+                elCameraSelect.textContent = '';
+                cameras.forEach(function (camera, index) {
+                    var option = document.createElement('option');
+                    option.value = camera.deviceId;
+                    option.textContent = camera.label || 'Camera ' + (index + 1);
+                    elCameraSelect.appendChild(option);
+                });
+                elCameraSelect.value = track.getSettings().deviceId || deviceId;
+                elCameraSelect.disabled = cameras.length < 2;
+            } catch (error) { /* Scanning still works if device enumeration is unavailable. */ }
+        } catch (error) {
+            if (stream) { stream.getTracks().forEach(function (track) { track.stop(); }); }
+            if (run !== cameraEpoch) { return; }
+            stopCamera();
+            showCameraFailure(error);
+        }
+    }
+
+    elCameraSelect.addEventListener('change', function () {
+        var deviceId = this.value;
+        stopCamera();
+        startCamera(deviceId);
+    });
+    elTorch.addEventListener('click', toggleTorch);
+    elZoom.addEventListener('input', function () { applyZoom(this.value); });
+    elZoom.addEventListener('change', function () { applyZoom(this.value); });
+    window.addEventListener('pagehide', stopCamera);
+<?php else: ?>
+    /* Keep the shipped camera adapter unchanged outside the isolated test router. */
     function probeCameraCaps(scanner) {
         if (torchSupported || !scanner) { return; }
         try {
@@ -565,11 +877,7 @@ require __DIR__ . '/../includes/ui.header.php';
                 elTorch.hidden = false;
             }
             if (caps && caps.zoom && typeof caps.zoom.min === 'number' && typeof caps.zoom.max === 'number' && caps.zoom.max > caps.zoom.min) {
-                zoomCaps = {
-                    min: caps.zoom.min,
-                    max: caps.zoom.max,
-                    current: 1.0
-                };
+                zoomCaps = { min: caps.zoom.min, max: caps.zoom.max, current: 1.0 };
                 var currentZoom = 1.0;
                 try {
                     var settings = scanner.getRunningTrackSettings();
@@ -590,7 +898,6 @@ require __DIR__ . '/../includes/ui.header.php';
         if (!isFinite(val)) { return; }
         zoomCaps.current = val;
         try {
-            // zoom is a ConstrainDouble: a plain number is the valid form.
             cameraScanner.applyVideoConstraints({ advanced: [{ zoom: val }] });
         } catch (e) { /* Constraint not supported; silently ignore */ }
     }
@@ -612,9 +919,7 @@ require __DIR__ . '/../includes/ui.header.php';
     elZoom.addEventListener('change', function () { applyZoom(this.value); });
 
     function startCamera() {
-        if (cameraStarting || cameraRunning) { return; }   // no concurrent starts
-        // Create/resume the audio context inside this explicit user gesture so
-        // browser autoplay policies allow the later scan-success beep.
+        if (cameraStarting || cameraRunning) { return; }
         getAudioCtx();
         if (!cameraSupported()) {
             setStatus('Camera scanning is not supported on this device or browser. You can still enter barcodes manually.', 'error');
@@ -624,19 +929,13 @@ require __DIR__ . '/../includes/ui.header.php';
             setStatus('The camera needs a secure connection (HTTPS or localhost). This page is served from an insecure origin, so camera scanning is disabled. Manual entry still works.', 'error');
             return;
         }
-
-        // Reset camera UI to starting state.
         elReaderOff.hidden = true;
         elReaderWrap.hidden = false;
         setCameraState('Starting camera\u2026', 'starting');
         elTorch.hidden = true;
         elZoomControl.hidden = true;
-
         try {
-            cameraScanner = new Html5Qrcode('scan-reader', {
-                formatsToSupport: [Html5QrcodeSupportedFormats.CODE_128],
-                verbose: false
-            });
+            cameraScanner = HopiaDynamsoftScanner.create('scan-reader');
         } catch (e) {
             cameraScanner = null;
             cameraStarting = false;
@@ -644,15 +943,7 @@ require __DIR__ . '/../includes/ui.header.php';
             setStatus('The scanner could not be initialized. Manual entry still works.', 'error');
             return;
         }
-
         cameraStarting = true;
-
-        // html5-qrcode 2.3.8 only accepts facingMode as a plain string or an
-        // { exact: ... } object in cameraIdOrConfig (createVideoConstraints
-        // throws on any other shape, e.g. { ideal: ... }). The plain string
-        // form prefers the rear camera and still falls back to any camera.
-        // Resolution is left to the browser (no forced width/aspectRatio), so
-        // unsupported constraints can never block the camera from starting.
         cameraScanner.start(
             { facingMode: 'environment' },
             { fps: 10, qrbox: { width: 280, height: 160 } },
@@ -667,9 +958,9 @@ require __DIR__ . '/../includes/ui.header.php';
             setStatus('Camera started. Point it at a Code 128 barcode.', 'info');
             probeCameraCaps(cameraScanner);
         }).catch(function (err) {
+            if (err && err.name === 'AbortError') { return; }
             cameraStarting = false;
             cameraRunning = false;
-            // Clean up the partially initialized scanner before a retry.
             if (cameraScanner) {
                 try { cameraScanner.clear(); } catch (e2) { /* noop */ }
                 cameraScanner = null;
@@ -679,8 +970,6 @@ require __DIR__ . '/../includes/ui.header.php';
             elStart.hidden = false;
             elStop.hidden = true;
             var name = (err && err.name) ? err.name : '';
-            // html5-qrcode 2.3.8 throws plain STRINGS for invalid config, so
-            // fall back to the string itself for the message.
             var detail = (err && err.message) ? err.message : (typeof err === 'string' ? err : '');
             if (name === 'NotAllowedError' || name === 'PermissionDeniedError') {
                 setStatus('Camera permission was denied. Allow camera access in your browser settings, or use manual entry.', 'error');
@@ -697,7 +986,7 @@ require __DIR__ . '/../includes/ui.header.php';
     }
 
     function stopCamera() {
-        if (!cameraScanner || !cameraRunning) {
+        if (!cameraScanner) {
             elStart.hidden = false;
             elStop.hidden = true;
             elReaderOff.hidden = false;
@@ -709,6 +998,7 @@ require __DIR__ . '/../includes/ui.header.php';
         zoomCaps = null;
         cameraScanner.stop().then(function () {
             cameraRunning = false;
+            cameraStarting = false;
             try { cameraScanner.clear(); } catch (e) { /* noop */ }
             cameraScanner = null;
             elStart.hidden = false;
@@ -725,6 +1015,7 @@ require __DIR__ . '/../includes/ui.header.php';
             elReaderWrap.hidden = true;
         });
     }
+<?php endif; ?>
 
     elStart.addEventListener('click', startCamera);
     elStop.addEventListener('click', stopCamera);
@@ -735,9 +1026,13 @@ require __DIR__ . '/../includes/ui.header.php';
     }
 
     window.addEventListener('beforeunload', function () {
+<?php if ($walkinScannerTest): ?>
+        releaseCamera();
+<?php else: ?>
         if (cameraScanner && cameraRunning) {
             try { cameraScanner.stop(); } catch (e) { /* noop */ }
         }
+<?php endif; ?>
     });
 
     elInput.focus();

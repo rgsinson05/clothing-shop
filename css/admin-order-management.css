@@ -1,0 +1,115 @@
+/* Styles for the two Order Management lists. */
+
+.ui-admin .om-page { --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-family: var(--font-sans); min-width: 0; }
+.ui-admin .om-page .admin-page-header h1 { color: var(--admin-ink); font-size: clamp(1.5rem, 2.5vw, 1.9rem); font-weight: 700; letter-spacing: -0.035em; }
+.ui-admin .om-page .admin-page-header__eyebrow { color: var(--admin-accent-strong); }
+.ui-admin .om-page .admin-page-header__copy { color: var(--color-text-muted); font-size: 0.875rem; max-width: 68ch; }
+.ui-admin .om-page .btn { border-radius: 10px; font-family: var(--font-sans); }
+.ui-admin .om-page .badge { border-radius: var(--radius-pill); font-size: 0.6875rem; line-height: 1.5; white-space: normal; }
+.ui-admin .om-search { display: flex; gap: 0.75rem; align-items: flex-end; margin-bottom: 1rem; }
+.ui-admin .om-search .field { flex: 1; min-width: 0; max-width: 32rem; margin: 0; }
+.ui-admin .om-search label { color: var(--color-text-soft); font-size: 0.75rem; font-weight: 600; }
+.ui-admin .om-search input { border-radius: 10px; background: var(--color-surface); color: var(--color-text); }
+.ui-admin .om-navigation { margin: 0 0 1rem; border: 1px solid var(--color-border); border-radius: 16px; background: var(--color-surface); box-shadow: var(--shadow-sm); overflow: hidden; }
+.ui-admin .om-navigation__categories { display: flex; gap: 0.25rem; padding: 0.5rem; overflow-x: auto; scrollbar-width: thin; }
+.ui-admin .om-category { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; gap: 0.45rem; padding: 0.65rem 0.85rem; border-radius: 10px; color: var(--color-text-soft); font-size: 0.8125rem; font-weight: 600; white-space: nowrap; text-decoration: none; }
+.ui-admin .om-category svg { width: 17px; height: 17px; flex: none; }
+.ui-admin .om-category:hover { color: var(--admin-accent-strong); background: var(--admin-accent-soft); }
+.ui-admin .om-category.is-active { background: var(--admin-accent); color: var(--color-on-primary); }
+.ui-admin .om-category.is-active .badge { color: inherit; background: transparent; border: 1px solid currentColor; }
+.ui-admin .om-navigation__selector { display: flex; flex-wrap: wrap; align-items: center; gap: 0.65rem; padding: 0.85rem 1rem; border-top: 1px solid var(--color-border); }
+.ui-admin .om-navigation__selector label { color: var(--color-text-soft); font-size: 0.75rem; font-weight: 700; }
+.ui-admin .om-navigation__selector select { flex: 1 1 220px; max-width: 25rem; min-width: 0; min-height: 40px; padding: 0.5rem 2rem 0.5rem 0.75rem; font: 600 0.8125rem var(--font-sans); border: 1px solid var(--color-border-strong); border-radius: 10px; background-color: var(--color-surface); color: var(--color-text); }
+.ui-admin .om-navigation__hint { flex-basis: 100%; margin: 0; color: var(--color-text-muted); font-size: 0.75rem; }
+.ui-admin .om-page .empty-state { border: 1px dashed var(--color-border-strong); border-radius: 16px; background: var(--color-surface); color: var(--color-text-soft); }
+
+.ui-admin .om-table-scroll { display: none; }
+.ui-admin .om-cards { display: grid; grid-template-columns: 1fr; gap: 0.75rem; }
+.ui-admin .om-card { display: block; padding: 1rem; margin: 0; min-width: 0; border: 1px solid var(--color-border); border-radius: 16px; background: var(--color-surface); color: var(--color-text); box-shadow: var(--shadow-sm); }
+.ui-admin .om-card.is-overdue { border-color: var(--color-danger); box-shadow: inset 3px 0 var(--color-danger); }
+.ui-admin .om-card :is(.admin-order-card__header, .admin-pickup-card__header) { flex-direction: row; flex-wrap: nowrap; gap: 0.65rem; align-items: flex-start; margin: 0 0 0.65rem; padding: 0; border: 0; }
+.ui-admin .om-card h2 { color: var(--admin-ink); font-size: 1rem; font-weight: 700; margin: 0; }
+.ui-admin .om-card :is(.admin-order-card__eyebrow, .admin-pickup-card__eyebrow) { display: none; }
+.ui-admin .om-card :is(.admin-order-card__statuses, .admin-pickup-card__statuses) { display: flex; flex: 1; flex-wrap: wrap; justify-content: flex-end; gap: 0.3rem; }
+.ui-admin .om-card :is(.admin-order-card__statuses, .admin-pickup-card__statuses) > .badge:first-child,
+.ui-admin .om-page .badge-cancellation-none { display: none; }
+.ui-admin .om-card-summary { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0.3rem 0.75rem; align-items: baseline; }
+.ui-admin .om-card-summary__customer { color: var(--admin-ink); font-weight: 600; font-size: 0.875rem; overflow-wrap: anywhere; }
+.ui-admin .om-card-summary__total { color: var(--admin-ink); font-size: 1rem; font-weight: 800; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.ui-admin .om-card-summary__meta { color: var(--color-text-muted); font-size: 0.75rem; }
+.ui-admin .om-card-summary__payment,
+.ui-admin .om-card-summary__deadline { grid-column: 1 / -1; color: var(--color-text-soft); font-size: 0.75rem; overflow-wrap: anywhere; }
+.ui-admin .om-card-toggle { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; width: 100%; min-height: 40px; margin-top: 0.65rem; padding: 0.5rem 0; border: 0; border-top: 1px solid var(--color-border); border-radius: 0; background: transparent; color: var(--admin-accent-strong); font: 600 0.75rem var(--font-sans); cursor: pointer; }
+.ui-admin .om-card-toggle svg { width: 16px; height: 16px; transition: transform 150ms ease; }
+.ui-admin .om-card-toggle[aria-expanded="true"] svg { transform: rotate(180deg); }
+.ui-admin .om-card-details[hidden] { display: none; }
+.ui-admin .om-card-details { padding-top: 0.75rem; border-top: 1px solid var(--color-border); overflow-wrap: anywhere; }
+.ui-admin .om-card :is(.admin-order-card__details, .admin-pickup-card__details),
+.ui-admin .om-extra-details { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.9rem; margin: 0 0 1rem; }
+.ui-admin .om-card dt { color: var(--color-text-muted); font-size: 0.6875rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; }
+.ui-admin .om-card .admin-pickup-card__details > div { display: block; }
+.ui-admin .om-card dd { margin: 0.25rem 0 0; color: var(--color-text); font-size: 0.8125rem; }
+.ui-admin .om-card :is(.admin-order-card__actions, .admin-pickup-card__actions) { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 1rem; }
+.ui-admin .om-card :is(.admin-order-card__actions, .admin-pickup-card__actions) .btn { width: auto; flex: 1 1 auto; white-space: normal; }
+.ui-admin .om-card form { margin: 0; max-width: 100%; }
+.ui-admin .om-card :is(.om-products, .om-history) { margin-bottom: 1rem; }
+.ui-admin .om-card h3 { color: var(--admin-ink); font-size: 0.8125rem; font-weight: 700; margin: 0 0 0.5rem; }
+.ui-admin .om-products ul { margin: 0; padding: 0; list-style: none; }
+.ui-admin .om-products li { display: flex; justify-content: space-between; gap: 0.75rem; padding: 0.6rem 0; border-bottom: 1px solid var(--color-border); font-size: 0.8125rem; }
+.ui-admin .om-products li > div { min-width: 0; }
+.ui-admin .om-products li > strong { white-space: nowrap; }
+.ui-admin .om-products li span,
+.ui-admin .om-history li span { display: block; color: var(--color-text-muted); font-size: 0.75rem; }
+.ui-admin .om-history ol { margin: 0; padding-left: 1.15rem; }
+.ui-admin .om-history li { margin-bottom: 0.75rem; font-size: 0.8125rem; }
+.ui-admin .om-history li p { margin: 0.25rem 0 0; color: var(--color-text-soft); }
+.ui-admin .om-page :is(a, button, select):focus-visible { outline: 2px solid var(--admin-accent-strong); outline-offset: 3px; }
+
+@media (max-width: 540px) {
+  .ui-admin .om-search { flex-wrap: wrap; }
+  .ui-admin .om-search .field { flex-basis: 100%; }
+  .ui-admin .om-category { padding: 0.6rem; font-size: 0.75rem; }
+  .ui-admin .om-navigation__selector { padding: 0.75rem; }
+  .ui-admin .om-navigation__selector label { flex-basis: 100%; }
+  .ui-admin .om-card :is(.admin-order-card__header, .admin-pickup-card__header) { flex-direction: row; }
+  .ui-admin .om-card :is(.admin-order-card__statuses, .admin-pickup-card__statuses) { min-width: 0; }
+}
+@media (max-width: 360px) {
+  .ui-admin .om-card :is(.admin-order-card__details, .admin-pickup-card__details),
+  .ui-admin .om-extra-details { grid-template-columns: 1fr; }
+}
+@media (min-width: 640px) and (max-width: 1199px) {
+  .ui-admin .om-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; }
+}
+@media (min-width: 1200px) {
+  .ui-admin .om-cards { display: none; }
+  .ui-admin .om-table-scroll { display: block; max-height: clamp(18rem, calc(100dvh - 22rem), 45rem); overflow: auto; border: 1px solid var(--color-border); border-radius: 16px; background: var(--color-surface); box-shadow: var(--shadow-sm); scrollbar-width: thin; scrollbar-color: var(--color-border-strong) var(--color-surface); scrollbar-gutter: stable; }
+  .ui-admin .admin-pickups .om-table-scroll { max-height: clamp(18rem, calc(100dvh - 32rem), 40rem); }
+  .ui-admin .om-table { width: 100%; min-width: 830px; margin: 0; border-collapse: separate; border-spacing: 0; font-size: 0.8125rem; }
+  .ui-admin .admin-pickups .om-table { min-width: 1000px; }
+  .ui-admin .om-table thead th { position: sticky; top: 0; z-index: 1; background: var(--color-surface-muted); color: var(--color-text-muted); font-size: 0.6875rem; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; border-bottom: 1px solid var(--color-border-strong); }
+  .ui-admin .om-table :is(th, td) { padding: 0.9rem 0.75rem; text-align: left; vertical-align: top; }
+  .ui-admin .om-table td { color: var(--color-text); border-bottom: 1px solid var(--color-border); background: var(--color-surface); overflow-wrap: anywhere; }
+  .ui-admin .om-table tbody tr:last-child td { border-bottom: 0; }
+  .ui-admin .om-table tbody tr:hover td { background: var(--color-surface-muted); }
+  .ui-admin .om-table tr.is-overdue td:first-child { box-shadow: inset 3px 0 var(--color-danger); }
+  .ui-admin .om-table__order { font-weight: 700; color: var(--admin-accent-strong); text-decoration: none; }
+  .ui-admin .om-table__sub { display: block; margin-top: 0.3rem; color: var(--color-text-muted); font-size: 0.75rem; }
+  .ui-admin .om-table__total { white-space: nowrap; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .ui-admin .om-table__statuses { min-width: 170px; max-width: 240px; }
+  .ui-admin .om-table__statuses > div { display: flex; flex-wrap: wrap; justify-content: flex-start; gap: 0.3rem; }
+  .ui-admin .om-table__statuses > div > .badge:first-child { display: none; }
+  .ui-admin .om-table__actions { min-width: 155px; max-width: 230px; }
+  .ui-admin .om-table__actions > div { display: flex; flex-direction: column; gap: 0.45rem; margin: 0; }
+  .ui-admin .om-table__actions form { margin: 0; }
+  .ui-admin .om-table__actions .btn { width: 100%; min-height: 36px; padding: 0.45rem 0.6rem; white-space: normal; font-size: 0.75rem; }
+}
+@media print {
+  .ui-admin .om-cards { display: block; }
+  .ui-admin .om-card { margin-bottom: 1rem; break-inside: avoid; }
+  .ui-admin .om-card-details[hidden] { display: block; }
+  .ui-admin :is(.om-table-scroll, .om-navigation, .om-search, .om-card-toggle) { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ui-admin .om-card-toggle svg { transition: none; }
+}

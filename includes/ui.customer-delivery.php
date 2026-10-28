@@ -31,7 +31,8 @@ if ($courierHistory['state'] !== 'ready' || $courierHistory['stage'] === null): 
                 <?php foreach ($courierEvents as $courierEvent): ?>
                     <?php
                     $courierIsCurrent = $courierCycleIsCurrent && $courierEvent['id'] === $courierHistory['current_event']
-                        && in_array($orderTimeline['stage'], ['SHIPPED', 'IN_TRANSIT', 'DELIVERED'], true);
+                        && in_array($orderTimeline['stage'], ['SHIPPED', 'IN_TRANSIT', 'DELIVERED'], true)
+                        && !($orderTimeline['stage'] === 'DELIVERED' && !empty($order['received_at']));
                     $courierDate = is_string($courierEvent['created_at'])
                         ? DateTimeImmutable::createFromFormat('!Y-m-d H:i:s', $courierEvent['created_at'], new DateTimeZone('Asia/Manila')) : false;
                     if ($courierDate !== false && $courierDate->format('Y-m-d H:i:s') !== $courierEvent['created_at']) $courierDate = false;
@@ -70,4 +71,23 @@ if ($courierHistory['state'] !== 'ready' || $courierHistory['stage'] === null): 
             </ol>
         </section>
     <?php endforeach; ?>
+    <?php if ($orderTimeline['stage'] === 'DELIVERED' && !empty($order['received_at'])
+        && $courierHistory['stage'] === 'DELIVERED'): ?>
+        <?php
+        $receiptDate = DateTimeImmutable::createFromFormat('!Y-m-d H:i:s', $order['received_at'], new DateTimeZone('Asia/Manila'));
+        if ($receiptDate !== false && $receiptDate->format('Y-m-d H:i:s') !== $order['received_at']) $receiptDate = false;
+        ?>
+        <ol class="od-courier__history" role="list" aria-label="Customer receipt confirmation">
+            <li class="od-courier__event is-current" aria-current="step" data-customer-receipt-event>
+                <span class="od-progress__node" aria-hidden="true"><?= hopia_order_icon('check-circle') ?></span>
+                <div class="od-courier__event-copy">
+                    <p class="od-courier__event-title">Delivered - Receipt Confirmed <span class="badge badge-info">Latest courier update</span></p>
+                    <?php if ($receiptDate !== false): ?>
+                        <time class="od-courier__time" datetime="<?= hopia_e($receiptDate->format('Y-m-d\TH:i:sP')) ?>"><?= hopia_e($receiptDate->format('M j, Y g:i A')) ?></time>
+                    <?php endif; ?>
+                    <p class="od-courier__note">You explicitly confirmed receipt of this parcel.</p>
+                </div>
+            </li>
+        </ol>
+    <?php endif; ?>
 </section>

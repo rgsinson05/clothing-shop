@@ -1,8 +1,10 @@
 <?php
 
 session_start();
+$orderLiveRequest = ($_SERVER['REQUEST_METHOD'] ?? '') === 'GET' && ($_GET['order_live'] ?? '') === '1';
 
 if (!isset($_SESSION['admin_id'])) {
+    if ($orderLiveRequest) { http_response_code(401); header('Cache-Control: no-store'); exit; }
     header('Location: login.php');
     exit;
 }
@@ -13,6 +15,8 @@ require_once __DIR__ . '/../includes/order_verify.php';
 require_once __DIR__ . '/../includes/payment.php';
 require_once __DIR__ . '/../includes/order_queues.php';
 require_once __DIR__ . '/../includes/admin_delivery.php';
+require_once __DIR__ . '/../includes/ui.php';
+require_once __DIR__ . '/../includes/admin_order_ui.php';
 
 /*
  * This page is the Local Courier order list. Store Pickup has its own page
@@ -147,6 +151,7 @@ $ordersStmt->bindValue(':offset', $offset, PDO::PARAM_INT);
 $ordersStmt->execute();
 
 $orders = $ordersStmt->fetchAll();
+$orderListDetails = admin_order_list_details($pdo, array_column($orders, 'id'), true);
 $pdo->commit();
 
 /*
@@ -254,16 +259,24 @@ $page_description = "Manage customer orders at Hopia's Ukay-Ukay.";
 $ui_section = 'admin';
 $ui_active = 'orders.php';
 $body_class = 'admin-orders-page';
+$ui_order_live = true;
+$ui_admin_order_list = true;
+$orderLiveVersion = hash('sha256', serialize([$orders, $orderTabCounts, $verifyProgressByOrder, $gcashStateByOrder, $orderListDetails]));
 
-require __DIR__ . '/../includes/ui.head.php';
-require __DIR__ . '/../includes/ui.header.php';
+if ($orderLiveRequest) {
+    header('Content-Type: text/html; charset=utf-8');
+    header('Cache-Control: no-store');
+} else {
+    require __DIR__ . '/../includes/ui.head.php';
+    require __DIR__ . '/../includes/ui.header.php';
+}
 ?>
 
-<div class="admin-orders">
+<div class="admin-orders om-page" data-order-live data-version="<?= htmlspecialchars($orderLiveVersion, ENT_QUOTES, 'UTF-8') ?>">
     <header class="admin-page-header">
         <div>
             <p class="admin-page-header__eyebrow">Order management</p>
-            <h1>ORDERS</h1>
+            <h1>Online Orders</h1>
             <p class="admin-page-header__copy">
                 Welcome, <?= htmlspecialchars($adminName) ?>. Review and manage Local Courier orders.
                 Store Pickup orders are managed on the Store Pickup page.
@@ -271,7 +284,7 @@ require __DIR__ . '/../includes/ui.header.php';
         </div>
     </header>
 
-    <form method="GET" action="orders.php" class="admin-orders__summary">
+    <form method="GET" action="orders.php" class="om-search">
         <?php if ($queueFilter !== null): ?><input type="hidden" name="queue" value="<?= htmlspecialchars($queueFilter, ENT_QUOTES, 'UTF-8') ?>"><?php endif; ?>
         <?php if ($statusFilter !== null): ?><input type="hidden" name="status" value="<?= htmlspecialchars($statusFilter, ENT_QUOTES, 'UTF-8') ?>"><?php endif; ?>
         <div class="field"><label for="order-search">Search order number or customer</label>
@@ -279,22 +292,12 @@ require __DIR__ . '/../includes/ui.header.php';
         <button class="btn btn-secondary btn-sm" type="submit">Search Orders</button>
     </form>
 
-    <nav class="orders-filters admin-list-filters" aria-label="Local Courier order filters">
-        <div class="orders-filter-tabs" role="list">
-            <?php foreach ($orderListFilters as $filterKey => $filterDefinition): ?>
-                <?php $isActiveFilter = $activeListFilterKey === $filterKey; ?>
-                <a class="orders-filter<?= $isActiveFilter ? ' is-active' : '' ?>"
-                   href="<?= htmlspecialchars($filterDefinition['href'] . ($orderSearch !== '' ? (str_contains($filterDefinition['href'], '?') ? '&' : '?') . http_build_query(['q' => $orderSearch]) : ''), ENT_QUOTES, 'UTF-8') ?>"
-                   role="listitem"
-                   <?= $isActiveFilter ? 'aria-current="page"' : '' ?>>
-                    <span class="orders-filter__icon" aria-hidden="true"><?= hopia_order_icon((string) ($filterDefinition['icon'] ?? 'status')) ?></span>
-                    <span class="orders-filter__label"><?= htmlspecialchars((string) $filterDefinition['label'], ENT_QUOTES, 'UTF-8') ?></span>
-                    <span class="badge"><?= (int) ($orderTabCounts[$filterKey] ?? 0) ?></span>
-                </a>
-            <?php endforeach; ?>
-        </div>
-    </nav>
+    <div data-order-live-region="filters">
+        <?php admin_order_filter_nav('orders', $orderListFilters, $activeListFilterKey, $orderSearch, $orderTabCounts,
+            $queueFilter === null && $statusFilter !== null ? ['name' => 'status', 'value' => $statusFilter, 'label' => $orderStatusLabels[$statusFilter] ?? $statusFilter] : null); ?>
+    </div>
 
+    <div data-order-live-region="orders">
     <?php if (count($orders) === 0): ?>
 
         <div class="empty-state">
@@ -327,7 +330,8 @@ require __DIR__ . '/../includes/ui.header.php';
             <?php endif; ?>
         </div>
 
-        <div class="admin-order-list">
+        <?php $desktopOrderRows = []; ?>
+        <div class="admin-order-list om-cards" data-order-card-section="online-orders">
             <?php foreach ($orders as $order): ?>
                 <?php
                 $orderProgress = admin_delivery_progress($order, isset($order['payment_method']) ? $order : null,
@@ -346,15 +350,27 @@ require __DIR__ . '/../includes/ui.header.php';
                 $paymentMethodLabel = isset($order['payment_method'])
                     ? ($paymentMethodLabels[$order['payment_method']] ?? $order['payment_method'])
                     : 'No payment record';
+                $listDetails = $orderListDetails[(int) $order['id']] ?? [];
+                if ($order['status'] === 'SHIPPED' && in_array($order['shipment_status'] ?? '', ['OUT_FOR_DELIVERY', 'DELIVERY_ATTEMPT_FAILED'], true)) {
+                    $orderStatusLabel = admin_delivery_labels()[$order['shipment_status']];
+                    $orderStatusBadgeClass = admin_delivery_badge($order['shipment_status']);
+                }
+                // Customer receipt completes delivery; sale/payment finalization stays independent.
+                if ($order['status'] === 'DELIVERED' && ($order['shipment_status'] ?? '') === 'DELIVERED'
+                    && !empty($order['received_at']) && in_array($cancellationStatus, ['NONE', 'REJECTED'], true)) {
+                    $orderStatusLabel = 'Completed';
+                    $orderStatusBadgeClass = 'badge-success';
+                }
                 ?>
 
-                <article class="admin-order-card">
+                <article class="admin-order-card om-card">
                     <div class="admin-order-card__header">
                         <div>
                             <p class="admin-order-card__eyebrow">Order</p>
                             <h2>#<?= htmlspecialchars((string) $order['id'], ENT_QUOTES, 'UTF-8') ?></h2>
                         </div>
 
+                        <?php ob_start(); ?>
                         <div class="admin-order-card__statuses">
                             <span class="badge">Local Courier</span>
                             <span class="badge <?= htmlspecialchars($orderStatusBadgeClass, ENT_QUOTES, 'UTF-8') ?>">
@@ -381,9 +397,24 @@ require __DIR__ . '/../includes/ui.header.php';
                             <?php if ($isGcashCompletionQueue): ?>
                                 <span class="badge badge-pending">Sale completion pending</span>
                             <?php endif; ?>
+                            <?php if ($orderStatusLabel === 'Completed' && $orderProgress['stage'] !== 'COMPLETED' && !$isCodCollectionQueue && !$isGcashCompletionQueue): ?>
+                                <span class="badge badge-pending">Sale finalization pending</span>
+                            <?php endif; ?>
                         </div>
+                        <?php $listStatusHtml = ob_get_clean(); echo $listStatusHtml; ?>
                     </div>
 
+                    <div class="om-card-summary">
+                        <strong class="om-card-summary__customer"><?= hopia_e($order['customer_name']) ?></strong>
+                        <strong class="om-card-summary__total">&#8369;<?= number_format((float) $order['total_amount'], 2) ?></strong>
+                        <span class="om-card-summary__meta"><?= hopia_e(date('M j, Y g:i A', strtotime($order['created_at']))) ?></span>
+                        <span class="om-card-summary__meta"><?= (int) ($listDetails['item_count'] ?? 0) ?> items</span>
+                        <span class="om-card-summary__payment"><?= hopia_e($paymentMethodLabel) ?> &middot; <?= hopia_e(ucfirst(strtolower($order['payment_status'] ?? 'No payment record'))) ?></span>
+                    </div>
+                    <button class="om-card-toggle" id="order-toggle-<?= (int) $order['id'] ?>" type="button" data-order-expand data-order-id="<?= (int) $order['id'] ?>" aria-expanded="false" aria-controls="order-details-<?= (int) $order['id'] ?>" aria-label="Expand details for order #<?= (int) $order['id'] ?>">
+                        <span data-order-toggle-label>Show Details</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+                    </button>
+                    <div class="om-card-details" id="order-details-<?= (int) $order['id'] ?>" hidden>
                     <dl class="admin-order-card__details">
                         <div>
                             <dt>Customer</dt>
@@ -443,6 +474,8 @@ require __DIR__ . '/../includes/ui.header.php';
                         <?php endif; ?>
                     </dl>
 
+                    <?php admin_order_expanded_details($order, $listDetails); ?>
+                    <?php ob_start(); ?>
                     <div class="admin-order-card__actions">
                         <a class="btn btn-primary btn-sm" href="order-view.php?id=<?= (int) $order['id'] ?>">
                             <?= $isCodCollectionQueue ? 'Review COD Collection' : ($isGcashCompletionQueue ? 'Finalize GCash Sale' : 'View Order') ?>
@@ -451,9 +484,14 @@ require __DIR__ . '/../includes/ui.header.php';
                             <a class="btn btn-secondary btn-sm" href="order-view.php?id=<?= (int) $order['id'] ?>#courier-workflow">Courier Delivery</a>
                         <?php endif; ?>
                     </div>
+                    <?php $listActionsHtml = ob_get_clean(); echo $listActionsHtml; ?>
+                    </div>
                 </article>
+                <?php $desktopOrderRows[] = ['order' => $order, 'item_count' => $listDetails['item_count'] ?? 0,
+                    'statuses' => $listStatusHtml, 'payment_method' => $paymentMethodLabel, 'actions' => $listActionsHtml]; ?>
             <?php endforeach; ?>
         </div>
+        <?php admin_order_desktop_table($desktopOrderRows); ?>
 
         <?php if ($totalPages > 1): ?>
             <nav class="inv-pagination" aria-label="Order list pagination">
@@ -466,6 +504,8 @@ require __DIR__ . '/../includes/ui.header.php';
         <?php endif; ?>
 
     <?php endif; ?>
+    </div>
 </div>
 
+<?php if ($orderLiveRequest) exit; ?>
 <?php require __DIR__ . '/../includes/ui.footer.php'; ?>

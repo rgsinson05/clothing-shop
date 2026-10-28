@@ -118,7 +118,10 @@ if ($currentCustomer === false) {
     ], 404);
 }
 
-$currentHash = (string) $currentCustomer['password_hash'];
+$currentHash = is_string($currentCustomer['password_hash'] ?? null)
+    ? $currentCustomer['password_hash']
+    : '';
+$hasPassword = $currentHash !== '';
 
 $action = isset($_POST['action']) && is_string($_POST['action'])
     ? strtolower(trim($_POST['action']))
@@ -147,6 +150,14 @@ function accountPostValue(string $key): string
  */
 
 if ($action === 'password') {
+    if (!$hasPassword) {
+        accountRespondJson([
+            'ok' => false,
+            'reason' => 'verification_required',
+            'message' => 'Password setup is not available for Google-only accounts.',
+        ], 422);
+    }
+
     $currentPassword = $_POST['current_password'] ?? '';
     $newPassword = $_POST['new_password'] ?? '';
     $confirmPassword = $_POST['confirm_password'] ?? '';
@@ -290,7 +301,9 @@ $emailChanged = strcasecmp($email, (string) $currentCustomer['email']) !== 0;
 if ($emailChanged && $actionErrors === []) {
     $confirmPassword = $_POST['current_password'] ?? '';
 
-    if (!is_string($confirmPassword) || $confirmPassword === '') {
+    if (!$hasPassword) {
+        $actionErrors['current_password'] = 'Email changes are unavailable for Google-only accounts.';
+    } elseif (!is_string($confirmPassword) || $confirmPassword === '') {
         $actionErrors['current_password'] = 'Enter your current password to change your email.';
     } elseif (!password_verify($confirmPassword, $currentHash)) {
         $actionErrors['current_password'] = 'That current password is incorrect.';

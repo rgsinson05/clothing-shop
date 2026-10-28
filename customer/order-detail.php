@@ -1,6 +1,13 @@
 <?php
 
 session_start();
+$orderLiveRequest = ($_SERVER['REQUEST_METHOD'] ?? '') === 'GET' && ($_GET['order_live'] ?? '') === '1';
+
+if (!isset($_SESSION['customer_id'])) {
+    if ($orderLiveRequest) { http_response_code(401); header('Cache-Control: no-store'); exit; }
+    header('Location: login.php');
+    exit;
+}
 
 require_once __DIR__ . '/../includes/database.php';
 require_once __DIR__ . '/../includes/feedback-data.php';
@@ -9,11 +16,6 @@ require_once __DIR__ . '/../includes/payment.php';
 require_once __DIR__ . '/../includes/pickup.php';
 require_once __DIR__ . '/../includes/shipping.php';
 require_once __DIR__ . '/../includes/customer_delivery.php';
-
-if (!isset($_SESSION['customer_id'])) {
-    header('Location: login.php');
-    exit;
-}
 
 $customerId = (int) $_SESSION['customer_id'];
 
@@ -118,6 +120,11 @@ $shipment = false;
 $courierHistory = null;
 
 if ($requestedOrderId !== null && $requestedOrderId !== false && $requestedOrderId > 0) {
+    if ($orderLiveRequest) {
+        $pdo->exec('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ');
+        $pdo->exec('SET TRANSACTION READ ONLY');
+        $pdo->beginTransaction();
+    }
     /*
      * Fetch the order using BOTH the requested order ID and the
      * authenticated customer's ID, so a customer can only ever
@@ -180,7 +187,7 @@ if ($requestedOrderId !== null && $requestedOrderId !== false && $requestedOrder
          */
 
         $shipmentStmt = $pdo->prepare(
-            'SELECT shipment_status, tracking_number, shipped_at, delivered_at, delivery_method
+            'SELECT *
              FROM shipments
              WHERE order_id = :order_id
              LIMIT 1'
@@ -209,6 +216,7 @@ if ($requestedOrderId !== null && $requestedOrderId !== false && $requestedOrder
             }, $orderItems)
         );
     }
+    if ($orderLiveRequest) $pdo->commit();
 }
 
 $orderStatusLabel = $order !== false
@@ -317,10 +325,8 @@ $receivedFlag = isset($_GET['received']);
 $receivedErrorFlag = isset($_GET['received_error']);
 // Match the receipt endpoint's existing legacy NULL-method courier handling.
 $receiptDeliveryEligible = $order !== false && $pickupProgress === null
-    && $order['status'] === 'DELIVERED' && $shipment !== false
-    && in_array($shipment['delivery_method'], [null, 'LOCAL_COURIER'], true) && $shipment['shipment_status'] === 'DELIVERED'
-    && in_array($order['cancellation_status'], ['NONE', 'REJECTED'], true)
-    && $orderTimeline['stage'] === 'DELIVERED';
+    && customer_receipt_delivery_eligible($order, $shipment !== false ? $shipment : null)
+    && ($order['status'] === 'DELIVERED' || ($courierHistory['state'] ?? '') === 'ready');
 
 /*
  * The cancellation request form is only offered while the order
@@ -358,6 +364,7 @@ $showCancelInfo = (
  */
 $showFeedbackAction = $order !== false
     && $receiptDeliveryEligible
+    && $order['status'] === 'DELIVERED'
     && $order['received_at'] !== null;
 $feedbackItem = $showFeedbackAction ? ($orderItems[0] ?? null) : null;
 $feedbackRow = $feedbackItem !== null
@@ -376,13 +383,23 @@ require_once __DIR__ . '/../includes/ui.php';
 $page_title = 'Order #' . ($order !== false ? (int) $order['id'] : '') . ' - ' . hopia_site_name();
 $page_description = 'Order details at ' . hopia_site_name() . '.';
 $ui_active = 'orders.php';
+$ui_order_live = $order !== false && $pickupProgress === null;
+$ui_feedback_overlay = $ui_order_live;
+$orderLiveVersion = hash('sha256', serialize([$order, $shipment,
+    $payment !== false ? array_diff_key($payment, ['checked_at' => true]) : false, $courierHistory]));
 
-require __DIR__ . '/../includes/ui.head.php';
-require __DIR__ . '/../includes/ui.header.php';
+if ($orderLiveRequest) {
+    header('Content-Type: text/html; charset=utf-8');
+    header('Cache-Control: no-store');
+    if (!$ui_order_live) { http_response_code($order === false ? 404 : 422); exit; }
+} else {
+    require __DIR__ . '/../includes/ui.head.php';
+    require __DIR__ . '/../includes/ui.header.php';
+}
 
 ?>
 
-<section class="order-detail-page">
+<section class="order-detail-page"<?= $ui_order_live ? ' data-order-live' : '' ?> data-version="<?= hopia_e($orderLiveVersion) ?>">
 
     <?php if ($order === false): ?>
 
@@ -445,7 +462,7 @@ require __DIR__ . '/../includes/ui.header.php';
             <p class="alert alert-error" role="alert"><?= hopia_e($gcashFlashMessage) ?></p>
         <?php endif; ?>
 
-        <header class="order-detail-hero">
+        <header class="order-detail-hero" data-order-live-region="header">
             <p class="order-detail-hero__eyebrow">Order details</p>
             <h1>Order #<?= hopia_e($order['id']) ?></h1>
             <p class="order-detail-hero__meta">
@@ -458,7 +475,7 @@ require __DIR__ . '/../includes/ui.header.php';
             </p>
         </header>
 
-        <section class="order-detail-card order-detail-card--progress" aria-labelledby="order-status-heading">
+        <section class="order-detail-card order-detail-card--progress" aria-labelledby="order-status-heading" data-order-live-region="status">
             <div class="order-detail-card__head">
                 <div class="order-detail-card__label">
                     <?= hopia_order_icon('status') ?>
@@ -582,7 +599,7 @@ require __DIR__ . '/../includes/ui.header.php';
         </section>
 
         <?php if ($pickupProgress === null && in_array($orderTimeline['closure'] ?? null, ['RECEIVED', 'RETURNED_TO_SHOP'], true)): ?>
-            <section class="order-detail-card order-detail-card--closure" aria-labelledby="delivery-journey-heading">
+            <section class="order-detail-card order-detail-card--closure" aria-labelledby="delivery-journey-heading" data-order-live-region="closure">
                 <div class="order-detail-card__head">
                     <div class="order-detail-card__label">
                         <?= hopia_order_icon('check-circle') ?>
@@ -596,6 +613,8 @@ require __DIR__ . '/../includes/ui.header.php';
                     <p>This parcel has been returned to Hopia Fits, and its delivery journey has ended. If you need assistance regarding your order, please contact the shop.</p>
                 <?php endif; ?>
             </section>
+        <?php else: ?>
+            <div data-order-live-region="closure" hidden></div>
         <?php endif; ?>
 
         <div class="order-detail-layout">
@@ -684,7 +703,7 @@ require __DIR__ . '/../includes/ui.header.php';
 
             <div class="order-detail-rail">
 
-                    <section class="order-detail-card order-detail-card--delivery" aria-labelledby="delivery-heading">
+                    <section class="order-detail-card order-detail-card--delivery" aria-labelledby="delivery-heading" data-order-live-region="delivery">
                         <div class="order-detail-card__head">
                             <div class="order-detail-card__heading">
                                 <div class="order-detail-card__label">
@@ -755,7 +774,7 @@ require __DIR__ . '/../includes/ui.header.php';
                         <?php endif; ?>
                     </section>
 
-                <section class="order-detail-card order-detail-card--payment" aria-labelledby="payment-heading">
+                <section class="order-detail-card order-detail-card--payment" aria-labelledby="payment-heading" data-order-live-region="payment">
                     <div class="order-detail-card__head">
                         <div class="order-detail-card__heading">
                             <div class="order-detail-card__label">
@@ -800,7 +819,7 @@ require __DIR__ . '/../includes/ui.header.php';
 
                 <?php if ($pickupProgress === null && ($shipment !== false || $trackingNumber !== '')): ?>
 
-                    <section class="order-detail-card order-detail-card--shipment" aria-labelledby="shipment-heading">
+                    <section class="order-detail-card order-detail-card--shipment" aria-labelledby="shipment-heading" data-order-live-region="shipment">
                         <div class="order-detail-card__head">
                             <div class="order-detail-card__heading">
                                 <div class="order-detail-card__label">
@@ -841,7 +860,7 @@ require __DIR__ . '/../includes/ui.header.php';
 
                 <?php endif; ?>
 
-                <section class="order-detail-card order-detail-card--footer" aria-labelledby="order-next-heading">
+                <section class="order-detail-card order-detail-card--footer" aria-labelledby="order-next-heading" data-order-live-region="actions">
                     <div class="order-detail-card__head">
                         <div class="order-detail-card__heading">
                             <div class="order-detail-card__label">
@@ -855,7 +874,7 @@ require __DIR__ . '/../includes/ui.header.php';
                     <div class="order-detail-actions">
                         <?php if ($receiptDeliveryEligible && $order['received_at'] === null && (!$isGcashOrder || $gcashState === 'PAID')): ?>
                             <p class="od-order-received-intro">
-                                Already received your parcel? Confirm below to unlock feedback.
+                                Confirm only after you have physically received your parcel. This marks the delivery as Delivered and unlocks feedback; it does not confirm payment collection.
                             </p>
                             <form method="POST" action="order-received.php"
                                   onsubmit="return confirm('Confirm that you have received your order?');">
@@ -968,4 +987,5 @@ require __DIR__ . '/../includes/ui.header.php';
     <?php endif; ?>
 </section>
 
+<?php if ($orderLiveRequest) exit; ?>
 <?php require __DIR__ . '/../includes/ui.footer.php'; ?>

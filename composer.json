@@ -1,5 +1,9 @@
 {
     "require": {
-        "vlucas/phpdotenv": "*"
+        "ext-openssl": "*",
+        "vlucas/phpdotenv": "*",
+        "google/auth": "^1.55",
+        "phpseclib/phpseclib": "^3.0",
+        "phpmailer/phpmailer": "^6.9"
     }
 }

@@ -34,7 +34,7 @@ function deliveryUiFixture(string $stage, int $failed = 0, int $cycle = 1): arra
     $allowed = match ($stage) {
         'SHIPPED', 'IN_TRANSIT' => ['out_for_delivery'],
         'DELIVERY_ATTEMPT_FAILED' => $failed === 3 ? ['return_to_seller'] : ['out_for_delivery'],
-        'OUT_FOR_DELIVERY' => ['fail_attempt', 'delivered'],
+        'OUT_FOR_DELIVERY' => ['fail_attempt'],
         'RETURN_TO_SELLER' => ['confirm_return'],
         default => [],
     };
@@ -201,7 +201,8 @@ foreach (['SHIPPED', 'IN_TRANSIT', 'DELIVERY_ATTEMPT_FAILED'] as $stage) {
 for ($attempt = 1; $attempt <= 3; $attempt++) {
     $html = deliveryUiRender(deliveryUiFixture('OUT_FOR_DELIVERY', $attempt - 1));
     $xpath = deliveryUiDocument($html);
-    deliveryUiCheck('attempt ' . $attempt . ' offers failure and delivery only', deliveryUiActions($html) === ['delivered', 'fail_attempt']);
+    deliveryUiCheck('attempt ' . $attempt . ' offers failure only; receipt is customer-driven', deliveryUiActions($html) === ['fail_attempt']
+        && str_contains($html, 'Awaiting Customer Order Received.') && !str_contains($html, 'Mark Delivered'));
     deliveryUiCheck('attempt ' . $attempt . ' is a server-rendered token', $xpath->evaluate('string(//input[@name="attempt"]/@value)') === (string) $attempt);
     deliveryUiCheck('attempt ' . $attempt . ' requires failure evidence', $xpath->query('//textarea[@name="reason"][@required]')->length === 1);
 }
@@ -312,6 +313,18 @@ deliveryUiCheck('read failures never enable actions', deliveryUiActions(delivery
 $fixture = deliveryUiFixture('DELIVERED');
 $html = deliveryUiRender($fixture);
 deliveryUiCheck('delivered awaits customer receipt, not automatic collection', deliveryUiActions($html) === [] && str_contains($html, 'Delivered - Awaiting Customer Order Received.') && str_contains($html, 'href="#payment-heading"'));
+$fixture['order']['received_at'] = '2026-10-24 15:00:00';
+$fixture['courierView']['events'] = [['id' => 1, 'delivery_cycle' => 1, 'delivery_revision' => 7,
+    'event_type' => 'OUT_FOR_DELIVERY', 'attempt_number' => null, 'previous_state' => 'SHIPPED',
+    'resulting_state' => 'OUT_FOR_DELIVERY', 'reason' => null, 'created_at' => '2026-10-24 14:00:00',
+    'admin_id' => 7, 'admin_name' => 'Offline reviewer']];
+$receiptHtml = deliveryUiRender($fixture);
+deliveryUiCheck('customer receipt appears once in admin history with its authoritative timestamp',
+    deliveryUiDocument($receiptHtml)->query('//*[@data-customer-receipt-event]')->length === 1
+    && str_contains($receiptHtml, '2026-10-24 15:00:00 (Philippine time), confirmed by the customer.'));
+deliveryUiCheck('customer receipt enables no additional admin delivery path or inferred payment collection',
+    deliveryUiActions($receiptHtml) === [] && str_contains($receiptHtml, 'Customer Order Received Confirmed.')
+    && str_contains($receiptHtml, 'Payment collection and sale finalization are separate.'));
 $fixture['order']['received_at'] = '2026-10-22 16:00:00';
 deliveryUiCheck('recorded receipt directs to unchanged payment section', str_contains(deliveryUiRender($fixture), 'existing payment collection or sale finalization controls separately'));
 
@@ -432,6 +445,8 @@ $apiCases = [
     ['release array evidence', $validSession, 'POST', array_replace($validPost, ['action' => 'make_available', 'order_item_id' => 901, 'reason' => []]), 422, 'bad_request'],
     ['return decision array evidence', $validSession, 'POST', array_replace($validPost, ['action' => 'return_to_seller', 'reason' => []]), 422, 'bad_request'],
     ['removed cycle authorization', $validSession, 'POST', array_replace($validPost, ['action' => 'authorize_cycle', 'stage' => 'RETURNED_TO_SHOP', 'reason' => 'Old saved request']), 422, 'bad_request'],
+    ['manual Delivered removed', $validSession, 'POST', array_replace($validPost, ['action' => 'delivered', 'stage' => 'OUT_FOR_DELIVERY']), 422, 'bad_request'],
+    ['customer receipt cannot use admin API', $validSession, 'POST', array_replace($validPost, ['action' => 'confirm_receipt', 'stage' => 'OUT_FOR_DELIVERY']), 422, 'bad_request'],
     ['removed inspection approval', $validSession, 'POST', array_replace($validPost, ['action' => 'inspect_return', 'stage' => 'RETURNED_TO_SHOP', 'order_item_id' => 901, 'outcome' => 'RETRY_APPROVED', 'reason' => 'Old saved approval']), 422, 'bad_request'],
 ];
 $memorySession = <<<'PHP'
@@ -469,6 +484,30 @@ foreach ($apiCases as [$name, $session, $method, $post, $status, $reason]) {
         && ($result['ok'] ?? null) === false && ($result['reason'] ?? '') === $reason;
     deliveryUiCheck('executed API rejection: ' . $name, $passed);
     if (!$passed) echo '  subprocess exit=' . $exit . ' stdout=' . $output . ' stderr=' . $stderr . PHP_EOL;
+}
+
+foreach ([
+    ['anonymous customer', [], 'POST', []],
+    ['receipt GET never confirms', ['customer_id' => 8, 'csrf_token' => 'receipt-token'], 'GET', []],
+    ['missing customer CSRF', ['customer_id' => 8, 'csrf_token' => 'receipt-token'], 'POST', ['order_id' => 801]],
+    ['forged customer CSRF', ['customer_id' => 8, 'csrf_token' => 'receipt-token'], 'POST', ['order_id' => 801, 'csrf_token' => 'forged']],
+    ['array customer CSRF', ['customer_id' => 8, 'csrf_token' => 'receipt-token'], 'POST', ['order_id' => 801, 'csrf_token' => ['bad']]],
+] as [$name, $session, $method, $post]) {
+    $script = 'ini_set("open_basedir", ' . var_export($root . '/includes' . PATH_SEPARATOR . $root . '/customer', true) . ');'
+        . $memorySession . '$_SESSION=' . var_export($session, true) . ';session_write_close();'
+        . '$_SERVER["REQUEST_METHOD"]=' . var_export($method, true) . ';$_POST=' . var_export($post, true) . ';'
+        . 'register_shutdown_function(static function(){echo "DB_INITIALIZED=".(isset($GLOBALS["pdo"]) ? "1" : "0");});'
+        . 'require ' . var_export($root . '/customer/order-received.php', true) . ';';
+    $process = proc_open([PHP_BINARY, '-d', 'display_errors=1', '-r', $script],
+        [['pipe', 'r'], ['pipe', 'w'], ['pipe', 'w']], $pipes);
+    if (!is_resource($process)) throw new RuntimeException('Cannot start isolated receipt rejection test');
+    fclose($pipes[0]);
+    $output = stream_get_contents($pipes[1]);
+    $stderr = stream_get_contents($pipes[2]);
+    fclose($pipes[1]); fclose($pipes[2]);
+    $exit = proc_close($process);
+    deliveryUiCheck('executed customer receipt rejection before database bootstrap: ' . $name,
+        $exit === 0 && $stderr === '' && $output === 'DB_INITIALIZED=0');
 }
 
 $js = file_get_contents($root . '/js/admin-delivery.js');
@@ -518,7 +557,7 @@ if ($argc === 2) {
     $header = preg_replace('~<script[^>]+admin-notifications\.js[^>]*></script>~', '', $header);
     $footer = preg_replace('~<script[^>]+admin-notifications\.js[^>]*></script>~', '', $footer);
     $driver = file_get_contents(__DIR__ . '/admin_delivery_browser_test.js');
-    foreach (['success', 'conflict', 'network', 'storage-denied', 'return', 'render-dark', 'render-light', 'legacy', 'blocked'] as $mode) {
+    foreach (['success', 'conflict', 'network', 'storage-denied', 'return', 'render-dark', 'render-light', 'legacy', 'blocked', 'live'] as $mode) {
         $fixture = deliveryUiFixture(str_starts_with($mode, 'render') || $mode === 'return' ? 'RETURNED_TO_SHOP' : 'OUT_FOR_DELIVERY',
             str_starts_with($mode, 'render') || $mode === 'return' ? 3 : 0);
         if ($mode === 'return' || str_starts_with($mode, 'render')) {
@@ -531,8 +570,32 @@ if ($argc === 2) {
         if (in_array($mode, ['legacy', 'blocked'], true)) $fixture['courierSchema'] = ['state' => $mode, 'message' => 'Coordinated migration review required.'];
         $html = $head . $header . '<div class="admin-order-detail"><header class="admin-order-detail__header"><div><a class="admin-page-header__back" href="#">Back to Orders</a><p class="admin-page-header__eyebrow">Order management / offline fixture</p><h1>ORDER #801</h1></div></header><div class="admin-order-detail__layout"><div class="admin-order-detail__main">'
             . deliveryUiRender($fixture) . '</div><aside class="admin-order-detail__aside"><section class="admin-order-detail__card"><h2>Order summary</h2><p>Synthetic records only</p></section></aside></div></div>';
+        $liveScripts = '';
+        if ($mode === 'live') {
+            $event = ['id' => 1, 'delivery_cycle' => 1, 'delivery_revision' => 8, 'event_type' => 'OUT_FOR_DELIVERY',
+                'attempt_number' => null, 'previous_state' => 'SHIPPED', 'resulting_state' => 'OUT_FOR_DELIVERY',
+                'reason' => null, 'created_at' => '2026-10-24 14:00:00', 'admin_id' => 7, 'admin_name' => 'Offline reviewer'];
+            $fixture['courierView']['events'] = [$event];
+            $fixture['orderStatusLabel'] = 'In Transit';
+            $liveDocument = static function (array $state, string $version): string {
+                return '<div class="admin-order-detail" data-order-live data-version="' . $version . '">'
+                    . '<header class="admin-order-detail__header" data-order-live-region="header"><h1>ORDER #801</h1><span class="badge">' . hopia_e($state['orderStatusLabel']) . '</span></header>'
+                    . '<section class="admin-order-detail__card" data-order-live-region="status"><h2>Order status</h2><span class="badge">' . hopia_e($state['orderStatusLabel']) . '</span>'
+                    . deliveryUiTimelineRender($state) . '</section>' . deliveryUiRender($state) . '</div>';
+            };
+            $fresh = deliveryUiFixture('DELIVERED');
+            $fresh['order']['received_at'] = '2026-10-24 15:00:00';
+            $fresh['orderStatusLabel'] = 'Delivered';
+            $fresh['shipment']['delivery_revision'] = 9;
+            $fresh['courierView']['events'] = [$event];
+            $html = $head . $header . $liveDocument($fixture, str_repeat('a', 64));
+            $liveScripts = '<script type="text/plain" id="order-live-production-source">' . file_get_contents($root . '/js/order-live.js') . '</script>'
+                . '<script type="text/plain" id="admin-notifications-production-source">' . file_get_contents($root . '/js/admin-notifications.js') . '</script>'
+                . '<script type="text/plain" id="order-live-fresh-source">' . $liveDocument($fresh, str_repeat('b', 64)) . '</script>';
+        }
         $scripts = '<output id="browser-test-results" style="display:block;white-space:pre-wrap;overflow-wrap:anywhere"></output>'
             . '<script type="text/plain" id="delivery-production-source">' . $js . '</script>'
+            . $liveScripts
             . '<script>window.deliveryFixtureMode=' . json_encode($mode) . ';' . $driver . '</script>';
         $html .= str_replace('</body>', $scripts . '</body>', $footer);
         file_put_contents($directory . '/' . $mode . '.html', $html);
@@ -542,9 +605,9 @@ if ($argc === 2) {
         $browser = (getenv('ProgramFiles(x86)') ?: 'C:/Program Files (x86)') . '/Microsoft/Edge/Application/msedge.exe';
         if (!is_file($browser)) throw new RuntimeException('Installed Edge is unavailable. Run the generated fixtures with an approved browser.');
         $browserChecks = $browserFailures = 0;
-        foreach (['success', 'conflict', 'network', 'storage-denied', 'return', 'render-dark', 'render-light', 'render-dark-mobile', 'legacy', 'blocked'] as $case) {
-            $mobile = in_array($case, ['return', 'render-dark-mobile', 'blocked'], true);
-            $source = $case === 'render-dark-mobile' ? 'render-dark' : $case;
+        foreach (['success', 'conflict', 'network', 'storage-denied', 'return', 'render-dark', 'render-light', 'render-dark-mobile', 'legacy', 'blocked', 'live', 'live-mobile'] as $case) {
+            $mobile = in_array($case, ['return', 'render-dark-mobile', 'blocked', 'live-mobile'], true);
+            $source = $case === 'render-dark-mobile' ? 'render-dark' : ($case === 'live-mobile' ? 'live' : $case);
             $file = $directory . '/' . $source . '.html';
             if ($mobile) {
                 // A real 390px browsing context avoids Edge's minimum outer-window width.

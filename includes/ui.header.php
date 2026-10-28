@@ -202,26 +202,28 @@ if ($ui_section === 'admin') {
             ['url' => 'index.php', 'label' => 'Dashboard', 'icon' => 'dashboard'],
         ],
         'INVENTORY' => [
-            ['url' => 'products.php', 'label' => 'Products', 'icon' => 'products'],
-            ['url' => 'bundles.php', 'label' => 'Bundles & Profitability', 'icon' => 'bundles'],
-            ['url' => 'legacy-assign.php', 'label' => 'Legacy Inventory Assignment', 'icon' => 'legacy'],
-            ['url' => 'labels.php', 'label' => 'Barcode Labels', 'icon' => 'barcode'],
+            ['url' => 'products.php', 'label' => 'Manage Products', 'icon' => 'products'],
+            ['url' => 'bundles.php', 'label' => 'Bundle & Profit Management', 'icon' => 'bundles'],
+            ['url' => 'legacy-assign.php', 'label' => 'Assign Products to Bundles', 'icon' => 'legacy'],
+            ['url' => 'labels.php', 'label' => 'Print Barcode Labels', 'icon' => 'barcode'],
         ],
         'SALES' => [
             ['url' => 'scan.php', 'label' => 'Walk-in Sale', 'icon' => 'register'],
-            ['url' => 'sales.php', 'label' => 'Sales Monitoring', 'icon' => 'chart'],
+            ['url' => 'sales.php', 'label' => 'Sales & Profit Reports', 'icon' => 'chart'],
         ],
-        'ONLINE ORDERS' => [
-            ['url' => 'orders.php', 'label' => 'Orders', 'icon' => 'orders'],
-            ['url' => 'notifications.php', 'label' => 'Notifications', 'icon' => 'bell'],
-            ['url' => 'order-verify.php', 'label' => 'Scan Online Orders', 'icon' => 'verify'],
-        ],
-        'PICK-UP ORDERS' => [
+        'ORDER MANAGEMENT' => [
+            ['url' => 'orders.php', 'label' => 'Online Orders', 'icon' => 'orders'],
             ['url' => 'pickups.php', 'label' => 'Store Pickup', 'icon' => 'pickup'],
+        ],
+        'ORDER FULFILLMENT' => [
+            ['url' => 'order-verify.php', 'label' => 'Scan Online Orders', 'icon' => 'verify'],
             // Dedicated Store Pickup barcode-verification destination. It is
             // separate from the courier scanner (admin/order-verify.php) and
             // gates ORDER_RECEIVED -> PREPARING on every item being verified.
             ['url' => 'pickup-verify.php', 'label' => 'Scan Pickup Orders', 'icon' => 'verify'],
+        ],
+        'NOTIFICATIONS' => [
+            ['url' => 'notifications.php', 'label' => 'Notifications', 'icon' => 'bell'],
         ],
     ];
 
@@ -354,7 +356,7 @@ if ($ui_section === 'admin') {
                         <span class="sr-only">Search products</span>
                     </a>
                     <?php $ui_mobile_cart_current = ($ui_active !== '' ? $ui_active : $ui_script) === 'cart.php'; ?>
-                    <a class="header-icon header-cart header-cart--mobile" href="<?= hopia_e($ui_path_prefix . ($ui_logged_in ? 'cart.php' : 'login.php')) ?>"<?= $ui_mobile_cart_current ? ' aria-current="page"' : '' ?> aria-label="Cart">
+                    <a class="header-icon header-cart header-cart--mobile" href="<?= hopia_e($ui_path_prefix . 'cart.php') ?>"<?= $ui_mobile_cart_current ? ' aria-current="page"' : '' ?> aria-label="Cart">
                         <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                             <path d="M4 5h2l1.6 10.2a1.5 1.5 0 0 0 1.5 1.3h7.8a1.5 1.5 0 0 0 1.5-1.2L20 8H7"></path>
                             <circle cx="10" cy="20" r="1"></circle>
@@ -428,7 +430,7 @@ if ($ui_section === 'admin') {
                         </li>
                         <?php $ui_account_current = ($ui_active !== '' ? $ui_active : $ui_script) === 'account.php'; ?>
                         <li class="mobile-nav-account">
-                            <a href="<?= hopia_e($ui_path_prefix . ($ui_logged_in ? 'account.php' : 'login.php')) ?>"<?= $ui_account_current ? ' aria-current="page"' : '' ?>>
+                            <a href="<?= hopia_e($ui_path_prefix . 'account.php') ?>"<?= $ui_account_current ? ' aria-current="page"' : '' ?>>
                                 <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                                     <circle cx="12" cy="8" r="3.2"></circle>
                                     <path d="M5.5 20c.7-3.5 3-5.2 6.5-5.2s5.8 1.7 6.5 5.2"></path>
@@ -457,7 +459,7 @@ if ($ui_section === 'admin') {
                         </button>
                         <div class="header-account__menu" id="header-account-menu">
                             <p class="header-account__label">ACCOUNT</p>
-                            <a href="<?= hopia_e($ui_path_prefix . ($ui_logged_in ? 'account.php' : 'login.php')) ?>"<?= $ui_account_current ? ' aria-current="page"' : '' ?>><svg class="nav-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="3.2"></circle><path d="M5.5 20c.7-3.5 3-5.2 6.5-5.2s5.8 1.7 6.5 5.2"></path></svg>My Account</a>
+                            <a href="<?= hopia_e($ui_path_prefix . 'account.php') ?>"<?= $ui_account_current ? ' aria-current="page"' : '' ?>><svg class="nav-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="3.2"></circle><path d="M5.5 20c.7-3.5 3-5.2 6.5-5.2s5.8 1.7 6.5 5.2"></path></svg>My Account</a>
                             <?php if ($ui_logged_in): ?>
                                 <a href="<?= hopia_e($ui_path_prefix) ?>orders.php"><svg class="nav-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="4" width="14" height="17" rx="1"></rect><path d="M9 4V3.2A1.2 1.2 0 0 1 10.2 2h3.6A1.2 1.2 0 0 1 15 3.2V4"></path><path d="M8.5 10h7M8.5 14h7M8.5 18h4"></path></svg>My Orders</a>
                                 <div class="header-account__divider" aria-hidden="true"></div>
@@ -468,7 +470,7 @@ if ($ui_section === 'admin') {
                         </div>
                     </div>
                     <?php $ui_cart_current = ($ui_active !== '' ? $ui_active : $ui_script) === 'cart.php'; ?>
-                    <a class="header-icon header-cart header-cart--desktop" href="<?= hopia_e($ui_path_prefix . ($ui_logged_in ? 'cart.php' : 'login.php')) ?>"<?= $ui_cart_current ? ' aria-current="page"' : '' ?> aria-label="Cart">
+                    <a class="header-icon header-cart header-cart--desktop" href="<?= hopia_e($ui_path_prefix . 'cart.php') ?>"<?= $ui_cart_current ? ' aria-current="page"' : '' ?> aria-label="Cart">
                         <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                             <path d="M4 5h2l1.6 10.2a1.5 1.5 0 0 0 1.5 1.3h7.8a1.5 1.5 0 0 0 1.5-1.2L20 8H7"></path>
                             <circle cx="10" cy="20" r="1"></circle>

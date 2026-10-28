@@ -117,18 +117,21 @@ usort($colorOptions, static function (array $left, array $right) use ($sortFilte
 $filterGroups = [
     'category' => [
         'label' => 'Category',
+        'icon' => '<path d="m12 3 9 5-9 5-9-5 9-5Z"/><path d="m3 12 9 5 9-5"/><path d="m3 16.5 9 5 9-5"/>',
         'options' => array_map(static function (string $value): array {
             return ['value' => $value, 'label' => $value];
         }, $categoryOptions),
     ],
     'size' => [
-        'label' => 'Sizes',
+        'label' => 'Size',
+        'icon' => '<path d="M21.3 15.3a2.4 2.4 0 0 1 0 3.4l-2.6 2.6a2.4 2.4 0 0 1-3.4 0L2.7 8.7a2.4 2.4 0 0 1 0-3.4l2.6-2.6a2.4 2.4 0 0 1 3.4 0Z"/><path d="m8.5 6.5 2-2M11.5 9.5l2-2M14.5 12.5l2-2M17.5 15.5l2-2"/>',
         'options' => array_map(static function (string $value): array {
             return ['value' => $value, 'label' => $value];
         }, $sizeOptions),
     ],
     'color' => [
         'label' => 'Color',
+        'icon' => '<path d="M12 3a9 9 0 1 0 0 18h1.3a1.7 1.7 0 0 0 0-3.4h-.8a1.8 1.8 0 0 1 0-3.6H16a5 5 0 0 0 5-5c0-3.3-4-6-9-6Z"/><circle cx="7.5" cy="9" r=".8"/><circle cx="11" cy="6.5" r=".8"/><circle cx="16" cy="8" r=".8"/>',
         'options' => $colorOptions,
     ],
 ];
@@ -160,8 +163,14 @@ $page_title = 'Shop - ' . hopia_site_name();
 $page_description = 'Preloved shirts, pants, and shorts at ' . hopia_site_name() . '.';
 $ui_active = 'products.php';
 $body_class = 'catalog-page';
+$ui_editorial_fonts = true;
 
 $catalog_logged_in = !empty($_SESSION['customer_id']);
+
+$_SESSION['csrf_token_buy_now'] = $_SESSION['csrf_token_buy_now'] ?? bin2hex(random_bytes(32));
+$csrfTokenBuyNow = $_SESSION['csrf_token_buy_now'];
+$buyNowError = $_SESSION['buy_now_error'] ?? '';
+unset($_SESSION['buy_now_error']);
 
 $csrfTokenCart = '';
 
@@ -192,6 +201,10 @@ require __DIR__ . '/../includes/ui.head.php';
 ?>
 
 <?php require __DIR__ . '/../includes/ui.header.php'; ?>
+
+            <?php if ($buyNowError !== ''): ?>
+                <p class="alert alert-error" role="alert"><?= hopia_e($buyNowError) ?></p>
+            <?php endif; ?>
 
             <?php if ($pageHeading !== ''): ?>
                 <h1 class="catalog-heading"><?= hopia_e($pageHeading) ?></h1>
@@ -239,14 +252,16 @@ require __DIR__ . '/../includes/ui.head.php';
                 >
                     <svg class="catalog-filter-trigger__icon" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                         <defs>
-                            <linearGradient id="catalog-filter-gradient" x1="3" y1="3" x2="21" y2="21" gradientUnits="userSpaceOnUse">
-                                <stop stop-color="#d7875d"/>
-                                <stop offset="1" stop-color="#7a3828"/>
+                            <linearGradient id="catalog-filter-gradient" x1="2" y1="12" x2="22" y2="12" gradientUnits="userSpaceOnUse">
+                                <stop class="catalog-filter-gradient__stop catalog-filter-gradient__stop--one" offset="0" stop-color="#111111"/>
+                                <stop class="catalog-filter-gradient__stop catalog-filter-gradient__stop--two" offset="0.36" stop-color="#70685e"/>
+                                <stop class="catalog-filter-gradient__stop catalog-filter-gradient__stop--three" offset="0.7" stop-color="#76583f"/>
+                                <stop class="catalog-filter-gradient__stop catalog-filter-gradient__stop--four" offset="1" stop-color="#111111"/>
                             </linearGradient>
                         </defs>
                         <path d="M4 6h16M7 12h10M10 18h4" stroke="url(#catalog-filter-gradient)"/>
                     </svg>
-                    <span>Filter</span>
+                    <span class="catalog-filter-trigger__label">Filter</span>
                     <span class="catalog-filter-trigger__count" id="catalog-filter-count" hidden></span>
                 </button>
             </div>
@@ -264,7 +279,7 @@ require __DIR__ . '/../includes/ui.head.php';
                     <div class="catalog-filter-modal__head">
                         <div>
                             <p class="catalog-filter-modal__eyebrow">Refine your fit</p>
-                            <h2 class="catalog-filter-modal__title" id="catalog-filter-title">Filter Products</h2>
+                            <h2 class="catalog-filter-modal__title" id="catalog-filter-title">FILTER PRODUCTS</h2>
                         </div>
                         <button type="button" class="catalog-filter-modal__close" data-filter-close aria-label="Close filters">
                             <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true">
@@ -278,7 +293,12 @@ require __DIR__ . '/../includes/ui.head.php';
                             <?php foreach ($filterGroups as $groupKey => $group): ?>
                                 <?php $groupOptions = $group['options']; ?>
                                 <fieldset class="catalog-filter-group" data-filter-options-group>
-                                    <legend><?= hopia_e($group['label']) ?></legend>
+                                    <legend>
+                                        <span class="catalog-filter-group__heading">
+                                            <svg class="catalog-filter-group__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><?= $group['icon'] ?></svg>
+                                            <span><?= hopia_e($group['label']) ?></span>
+                                        </span>
+                                    </legend>
                                     <div class="catalog-filter-group__options" id="catalog-filter-options-<?= hopia_e($groupKey) ?>">
                                         <?php if (count($groupOptions) === 0): ?>
                                             <p class="catalog-filter-group__empty">No options available</p>
@@ -404,41 +424,6 @@ require __DIR__ . '/../includes/ui.head.php';
                                     <span class="catalog-card__placeholder">No image</span>
                                 <?php endif; ?>
 
-                                <?php if (!$isSold): ?>
-                                    <?php if ($catalog_logged_in): ?>
-                                        <form class="catalog-quickadd" method="POST" action="cart-add.php">
-                                            <input type="hidden" name="csrf_token" value="<?= hopia_e($csrfTokenCart) ?>">
-                                            <input type="hidden" name="product_id" value="<?= $productId ?>">
-                                            <button type="submit" class="catalog-card__cart" aria-label="Add <?= hopia_e($product['name']) ?> to cart">
-                                                <span class="catalog-card__cart-drop">
-                                                    <svg class="catalog-card__cart-arrow" width="14" height="12.25" viewBox="0 0 24 21" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                                                        <path d="M12 5v14"></path>
-                                                        <path d="M5 12l7 7 7-7"></path>
-                                                    </svg>
-                                                </span>
-                                                <svg class="catalog-card__cart-bag" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                                                    <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"></path>
-                                                    <path d="M3 6h18"></path>
-                                                    <path d="M16 10a4 4 0 0 1-8 0"></path>
-                                                </svg>
-                                            </button>
-                                        </form>
-                                    <?php else: ?>
-                                        <a class="catalog-card__cart" href="login.php" aria-label="Log in to add <?= hopia_e($product['name']) ?> to cart">
-                                            <span class="catalog-card__cart-drop">
-                                                <svg class="catalog-card__cart-arrow" width="14" height="12.25" viewBox="0 0 24 21" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                                                    <path d="M12 5v14"></path>
-                                                    <path d="M5 12l7 7 7-7"></path>
-                                                </svg>
-                                            </span>
-                                            <svg class="catalog-card__cart-bag" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                                                <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"></path>
-                                                <path d="M3 6h18"></path>
-                                                <path d="M16 10a4 4 0 0 1-8 0"></path>
-                                            </svg>
-                                        </a>
-                                    <?php endif; ?>
-                                <?php endif; ?>
                             </div>
 
                             <div class="catalog-card__body">
@@ -458,6 +443,45 @@ require __DIR__ . '/../includes/ui.head.php';
                                         <span class="catalog-card__sold">Sold</span>
                                     <?php endif; ?>
                                 </p>
+                                <?php if (!$isSold): ?>
+                                    <div class="catalog-card__actions">
+                                        <?php if ($catalog_logged_in): ?>
+                                            <form class="catalog-card__action catalog-quickadd" method="POST" action="cart-add.php">
+                                                <input type="hidden" name="csrf_token" value="<?= hopia_e($csrfTokenCart) ?>">
+                                                <input type="hidden" name="product_id" value="<?= $productId ?>">
+                                                <button type="submit" class="btn catalog-card__action-btn catalog-card__action-btn--cart" aria-label="Add <?= hopia_e($product['name']) ?> to cart">
+                                                    <svg class="catalog-card__action-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true" focusable="false">
+                                                        <path d="M5 8h14l-1.4 11.2a2 2 0 0 1-2 1.8H8.4a2 2 0 0 1-2-1.8L5 8z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+                                                        <path d="M9 8V6a3 3 0 0 1 6 0v2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                                                    </svg>
+                                                    <span>Add to Cart</span>
+                                                </button>
+                                            </form>
+                                        <?php else: ?>
+                                            <form class="catalog-card__action catalog-login" method="GET" action="login.php">
+                                                <button type="submit" class="btn catalog-card__action-btn catalog-card__action-btn--cart" aria-label="Log in to add <?= hopia_e($product['name']) ?> to cart">
+                                                    <svg class="catalog-card__action-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true" focusable="false">
+                                                        <path d="M5 8h14l-1.4 11.2a2 2 0 0 1-2 1.8H8.4a2 2 0 0 1-2-1.8L5 8z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+                                                        <path d="M9 8V6a3 3 0 0 1 6 0v2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                                                    </svg>
+                                                    <span>Add to Cart</span>
+                                                </button>
+                                            </form>
+                                        <?php endif; ?>
+                                        <form class="catalog-card__action product-buy-now" method="POST" action="checkout.php">
+                                            <input type="hidden" name="checkout_action" value="buy_now">
+                                            <input type="hidden" name="csrf_token" value="<?= hopia_e($csrfTokenBuyNow) ?>">
+                                            <input type="hidden" name="product_id" value="<?= $productId ?>">
+                                            <button type="submit" class="btn catalog-card__action-btn catalog-card__action-btn--buy product-buy-now__btn" aria-label="Buy <?= hopia_e($product['name']) ?> now">
+                                                <svg class="catalog-card__action-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+                                                    <path d="M4.5 12h13"/>
+                                                    <path d="m12.5 7 5 5-5 5"/>
+                                                </svg>
+                                                <span>Buy Now</span>
+                                            </button>
+                                        </form>
+                                    </div>
+                                <?php endif; ?>
                             </div>
 
                         </article>
@@ -570,12 +594,13 @@ require __DIR__ . '/../includes/ui.head.php';
     document.querySelectorAll('.catalog-quickadd').forEach(function(form) {
         form.addEventListener('submit', function(e) {
             e.preventDefault();
-            var button = form.querySelector('.catalog-card__cart');
+            var button = form.querySelector('button[type="submit"]');
             if (!button || button.disabled) {
                 return;
             }
             button.disabled = true;
             button.classList.add('is-busy');
+            button.setAttribute('aria-busy', 'true');
 
             fetch('cart-add.php', {
                 method: 'POST',
@@ -611,7 +636,27 @@ require __DIR__ . '/../includes/ui.head.php';
             .finally(function() {
                 button.disabled = false;
                 button.classList.remove('is-busy');
+                button.removeAttribute('aria-busy');
             });
+        });
+    });
+
+    document.querySelectorAll('.product-buy-now').forEach(function(form) {
+        form.addEventListener('submit', function(e) {
+            var button = form.querySelector('button[type="submit"]');
+            if (button.disabled) {
+                e.preventDefault();
+                return;
+            }
+            button.disabled = true;
+            button.setAttribute('aria-busy', 'true');
+        });
+    });
+
+    window.addEventListener('pageshow', function() {
+        document.querySelectorAll('.product-buy-now button').forEach(function(button) {
+            button.disabled = false;
+            button.removeAttribute('aria-busy');
         });
     });
 })();

@@ -122,7 +122,10 @@ try {
         assertEq('order-view advance/cancel wiring contains ' . $needle, strpos($orderView, $needle) !== false, true);
     }
     assertEq('order-view notifications are created inside the action transaction before the single commit', strpos($orderView, 'customer_notifications_create(') < strpos($orderView, '$pdo->commit();'), true);
-    assertEq('order-view has only one commit in the status/approve path', substr_count($orderView, '$pdo->commit();'), 1);
+    $readBoundary = strpos($orderView, '$order = false;');
+    assertEq('order-view read-only refresh is outside the status/approve path', $readBoundary !== false, true);
+    $actionSource = substr($orderView, 0, $readBoundary !== false ? $readBoundary : strlen($orderView));
+    assertEq('order-view has only one commit in the status/approve path', substr_count($actionSource, '$pdo->commit();'), 1);
 
     // Store Pickup READY and HANDED_OVER are integrated in pickup_advance_status
     // before commit; barcode scans never notify.

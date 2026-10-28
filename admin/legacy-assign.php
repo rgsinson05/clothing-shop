@@ -486,7 +486,7 @@ function leg_step_icon(string $name): string
             </div>
 
             <div class="leg-card">
-                <div class="table-wrap table-wrap--flush">
+                <div class="table-wrap table-wrap--flush leg-table-wrap" tabindex="0" role="region" aria-label="Unassigned legacy products">
                     <table class="leg-table">
                         <thead>
                             <tr>
@@ -574,7 +574,7 @@ function leg_step_icon(string $name): string
         <div class="leg-layout">
 
             <!-- Step 1: the garment being assigned -->
-            <section class="leg-card" aria-labelledby="leg-product-title">
+            <section class="leg-card leg-card--sticky" aria-labelledby="leg-product-title">
                 <div class="leg-card__head">
                     <div>
                         <p class="leg-card__eyebrow">Step 1 of 3</p>
@@ -796,7 +796,7 @@ function leg_step_icon(string $name): string
             <div class="leg-layout">
 
                 <!-- Review: the garment -->
-                <section class="leg-card" aria-labelledby="leg-review-title">
+                <section class="leg-card leg-card--sticky" aria-labelledby="leg-review-title">
                     <div class="leg-card__head">
                         <div>
                             <p class="leg-card__eyebrow">Step 3 of 3</p>

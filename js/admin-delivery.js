@@ -1,8 +1,10 @@
 (function () {
     'use strict';
 
-    var root = document.querySelector('[data-admin-delivery]');
-    if (!root) return;
+    function initialize(root) {
+    if (!root || root.deliveryController) return;
+    root.deliveryController = true;
+    var listeners = new AbortController();
     var forms = Array.from(root.querySelectorAll('[data-delivery-form]'));
     var modal = root.querySelector('[data-delivery-modal]');
     var panel = modal.querySelector('[role="dialog"]');
@@ -164,7 +166,13 @@
     });
     document.addEventListener('focusin', function (event) {
         if (!modal.hidden && !panel.contains(event.target)) panel.focus();
-    });
+    }, { signal: listeners.signal });
+    document.addEventListener('hopia:order-before-update', function (event) {
+        if (inFlight) { event.preventDefault(); return; }
+        saveDrafts();
+        closeModal();
+        listeners.abort();
+    }, { signal: listeners.signal });
 
     confirmForm.addEventListener('submit', async function (event) {
         event.preventDefault();
@@ -219,9 +227,14 @@
         }
     });
 
-    window.addEventListener('pagehide', saveDrafts);
+    window.addEventListener('pagehide', saveDrafts, { signal: listeners.signal });
     window.addEventListener('pageshow', function (event) {
         if (event.persisted) freshOrderGet();
-    });
+    }, { signal: listeners.signal });
     setBusy(false);
+    }
+    document.addEventListener('hopia:order-updated', function () {
+        initialize(document.querySelector('[data-admin-delivery]'));
+    });
+    initialize(document.querySelector('[data-admin-delivery]'));
 })();

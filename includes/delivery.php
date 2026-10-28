@@ -9,7 +9,7 @@ require_once __DIR__ . '/inventory_guard.php';
 
 function delivery_action_names(): array
 {
-    return ['out_for_delivery', 'fail_attempt', 'return_to_seller', 'confirm_return', 'inspect_return', 'delivered', 'make_available'];
+    return ['out_for_delivery', 'fail_attempt', 'return_to_seller', 'confirm_return', 'inspect_return', 'make_available'];
 }
 
 /** Read-only courier classification; these are not additional order stages. */
@@ -58,7 +58,7 @@ function delivery_failure(string $reason, int $status = 409): array
 function delivery_transition(array $order, array $payment, array $shipment, string $action,
     int $cycle, int $revision, string $stage, ?int $attempt, string $reason): array
 {
-    if (!in_array($action, delivery_action_names(), true)) return delivery_failure('bad_request', 422);
+    if ($action !== 'confirm_receipt' && !in_array($action, delivery_action_names(), true)) return delivery_failure('bad_request', 422);
     foreach (['received_at', 'picked_up_at', 'pickup_status'] as $field) {
         if (!array_key_exists($field, $order) || $order[$field] !== null) {
             return delivery_failure('manual_review');
@@ -141,7 +141,7 @@ function delivery_transition(array $order, array $payment, array $shipment, stri
         case 'inspect_return':
             if ($stage === 'RETURNED_TO_SHOP' && $failures === 3) $next = $stage;
             break;
-        case 'delivered':
+        case 'confirm_receipt':
             if ($stage === 'OUT_FOR_DELIVERY' && $failures < 3) $next = 'DELIVERED';
             break;
     }
@@ -162,7 +162,8 @@ function delivery_valid_timestamp($value): bool
  * -> products ascending -> item evidence/verification/sale membership.
  * READ COMMITTED makes non-locking other-order membership checks fresh without
  * taking inverse product -> order locks. Product reservations lock products.
- * No financial or inventory writer is called. Tokens are mandatory.
+ * No financial or inventory writer is called. Tokens are mandatory. The internal
+ * confirm_receipt action requires a customer identity and is not an admin API action.
  * validateOnly is an internal, read-only admin eligibility check. It executes
  * the same locked guards and rolls back BEFORE every write. The HTTP endpoint
  * never accepts or forwards this flag; presentation cannot authorize a write.
@@ -170,12 +171,14 @@ function delivery_valid_timestamp($value): bool
 function delivery_action(PDO $pdo, int $adminId, int $orderId, string $action, int $expectedCycle,
     int $expectedRevision, string $expectedStage, string $actionKey, ?int $attempt = null,
     string $reason = '', ?int $orderItemId = null, ?string $inspectionOutcome = null,
-    bool $validateOnly = false): array
+    bool $validateOnly = false, ?int $customerId = null): array
 {
     if ($pdo->inTransaction()) throw new LogicException('Delivery actions must own their transaction.');
-    if ($adminId < 1) return delivery_failure('admin_required', 403);
+    $customerReceipt = $action === 'confirm_receipt' && $customerId !== null && $customerId > 0 && $adminId === 0;
+    if ($customerId !== null && !$customerReceipt) return delivery_failure('bad_request', 422);
+    if (!$customerReceipt && $adminId < 1) return delivery_failure('admin_required', 403);
     $reason = preg_replace('/^\s+|\s+$/u', '', $reason);
-    if ($orderId < 1 || $expectedCycle < 1 || $expectedRevision < 0 || !in_array($action, delivery_action_names(), true)
+    if ($orderId < 1 || $expectedCycle < 1 || $expectedRevision < 0 || (!$customerReceipt && !in_array($action, delivery_action_names(), true))
         || !in_array($expectedStage, ['SHIPPED', 'IN_TRANSIT', 'OUT_FOR_DELIVERY', 'DELIVERY_ATTEMPT_FAILED',
             'RETURN_TO_SELLER', 'RETURNED_TO_SHOP', 'DELIVERED'], true)
         || !sales_is_valid_request_key($actionKey) || $reason === null || strlen($reason) > 255
@@ -203,10 +206,12 @@ function delivery_action(PDO $pdo, int $adminId, int $orderId, string $action, i
     try {
         $pdo->exec('SET TRANSACTION ISOLATION LEVEL READ COMMITTED');
         $pdo->beginTransaction();
-        $stmt = $pdo->prepare('SELECT id FROM admins WHERE id = ? LOCK IN SHARE MODE');
-        $stmt->execute([$adminId]);
-        if ($stmt->fetchColumn() === false) return $fail(delivery_failure('admin_required', 403));
-        $order = payment_gcash_lock_order($pdo, $orderId, null);
+        if (!$customerReceipt) {
+            $stmt = $pdo->prepare('SELECT id FROM admins WHERE id = ? LOCK IN SHARE MODE');
+            $stmt->execute([$adminId]);
+            if ($stmt->fetchColumn() === false) return $fail(delivery_failure('admin_required', 403));
+        }
+        $order = payment_gcash_lock_order($pdo, $orderId, $customerReceipt ? $customerId : null);
         if ($order === false) return $fail(delivery_failure('not_found', 404));
         $payment = payment_gcash_lock_payment($pdo, $orderId);
         $stmt = $pdo->prepare('SELECT * FROM shipments WHERE order_id = ? FOR UPDATE');
@@ -216,6 +221,16 @@ function delivery_action(PDO $pdo, int $adminId, int $orderId, string $action, i
         $stmt = $pdo->prepare('SELECT id FROM sales_transactions WHERE order_id = ? FOR UPDATE');
         $stmt->execute([$orderId]);
         $hasSale = $stmt->fetchColumn() !== false;
+        if ($customerReceipt && $order['status'] === 'DELIVERED' && $order['received_at'] !== null
+            && $order['pickup_status'] === null && $order['picked_up_at'] === null
+            && in_array($order['cancellation_status'], ['NONE', 'REJECTED'], true)
+            && $shipment['delivery_method'] === 'LOCAL_COURIER' && $shipment['shipment_status'] === 'DELIVERED'
+            && $payment !== false && in_array($payment['payment_method'], ['COD', 'GCASH'], true)
+            && payment_gcash_fulfillment_reason($payment) === null) {
+            $pdo->commit();
+            return ['ok' => true, 'idempotent' => true, 'state' => 'DELIVERED',
+                'received_at' => $order['received_at'], 'sale' => null, 'status' => 200];
+        }
         // Read committed action evidence before checking old tokens. Same payload
         // returns the original result, even after later actions; never re-applies it.
         $stmt = $pdo->prepare('SELECT * FROM delivery_events WHERE action_key = ? ORDER BY event_index DESC FOR UPDATE');
@@ -380,21 +395,27 @@ function delivery_action(PDO $pdo, int $adminId, int $orderId, string $action, i
             $pdo->rollBack();
             return $decision + ['status' => 200];
         }
+        $receivedAt = $customerReceipt ? (string) $pdo->query('SELECT NOW()')->fetchColumn() : null;
         $stmt = $pdo->prepare('UPDATE shipments SET shipment_status = ?, delivery_revision = ?, failed_attempts = ?,
-            delivered_at = CASE WHEN ? = \'DELIVERED\' THEN COALESCE(delivered_at, NOW()) ELSE delivered_at END
+            delivered_at = CASE WHEN ? = \'DELIVERED\' THEN COALESCE(delivered_at, ?) ELSE delivered_at END
             WHERE order_id = ? AND delivery_cycle = ? AND delivery_revision = ? AND shipment_status = ?');
         $stmt->execute([$decision['state'], $decision['revision'], $decision['failed_attempts'],
-            $decision['state'], $orderId, $expectedCycle, $expectedRevision, $expectedStage]);
+            $decision['state'], $receivedAt, $orderId, $expectedCycle, $expectedRevision, $expectedStage]);
         if ($stmt->rowCount() !== 1) return $fail(delivery_failure('conflict'));
-        if ($action === 'delivered') {
-            $stmt = $pdo->prepare("UPDATE orders SET status = 'DELIVERED' WHERE id = ? AND status = 'SHIPPED'");
-            $stmt->execute([$orderId]);
+        if ($customerReceipt) {
+            $stmt = $pdo->prepare("UPDATE orders SET status = 'DELIVERED', received_at = ?
+                WHERE id = ? AND customer_id = ? AND status = 'SHIPPED' AND received_at IS NULL");
+            $stmt->execute([$receivedAt, $orderId, $customerId]);
             if ($stmt->rowCount() !== 1) return $fail(delivery_failure('conflict'));
+            // The courier ledger requires an administrator. received_at is the
+            // existing customer-owned receipt event; never fabricate admin attribution.
+            customer_notifications_create($pdo, $orderId, 'ORDER_DELIVERED');
+            $pdo->commit();
+            return $decision + ['idempotent' => false, 'received_at' => $receivedAt, 'sale' => null, 'status' => 200];
         }
         $types = ['out_for_delivery' => 'OUT_FOR_DELIVERY', 'fail_attempt' => 'DELIVERY_ATTEMPT_FAILED',
             'return_to_seller' => 'RETURN_TO_SELLER',
-            'confirm_return' => 'RETURNED_TO_SHOP', 'inspect_return' => 'RETURN_INSPECTED',
-            'delivered' => 'DELIVERED'];
+            'confirm_return' => 'RETURNED_TO_SHOP', 'inspect_return' => 'RETURN_INSPECTED'];
         $events = [[$types[$action], $expectedStage, $decision['state']]];
         foreach ($events as $index => [$type, $previous, $resulting]) {
             $stmt = $pdo->prepare('INSERT INTO delivery_events (order_id, delivery_cycle, delivery_revision,

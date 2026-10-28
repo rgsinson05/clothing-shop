@@ -243,7 +243,7 @@ customerDeliveryCheck('query failure produces safe message, never raw SQL error'
 // Render the actual page body, isolating only its DB/bootstrap boundary. Its
 // real conditional markup, includes, receipt form and pickup branch are executed.
 $pageSource = file_get_contents(__DIR__ . '/../../customer/order-detail.php');
-$bodyStart = strpos($pageSource, '<section class="order-detail-page">');
+$bodyStart = strpos($pageSource, '<section class="order-detail-page"');
 $bodyEnd = strpos($pageSource, '<?php require __DIR__ . \'/../includes/ui.footer.php\'; ?>');
 if ($bodyStart === false || $bodyEnd === false) throw new RuntimeException('Order-detail template boundary changed');
 $pageBody = substr($pageSource, $bodyStart, $bodyEnd - $bodyStart);
@@ -264,7 +264,8 @@ function customerDeliveryPage(string $body, array $view, array $overrides = [], 
         'subtotal' => '500.00', 'shipping_fee' => '80.00', 'total_amount' => '580.00', 'created_at' => '2026-10-22 09:00:00',
         'shipping_name' => 'Customer <name>', 'shipping_phone' => '09123456789', 'shipping_address' => 'Test address',
         'pickup_status' => null, 'ready_for_pickup_at' => null, 'pickup_deadline_at' => null, 'picked_up_at' => null], $overrides);
-    $shipment = array_replace(['shipment_status' => $view['stage'] ?? 'DELIVERED', 'delivery_method' => $method], $shipmentOverrides);
+    $shipment = array_replace(['shipment_status' => $view['stage'] ?? 'DELIVERED', 'delivery_method' => $method,
+        'delivered_at' => null, 'delivery_cycle' => 1, 'delivery_revision' => 1, 'failed_attempts' => 0], $shipmentOverrides);
     $courierHistory = $method === 'LOCAL_COURIER' ? $view : null;
     $pickupProgress = pickup_progress($order, $shipment);
     $pickupPickupDetails = shipping_pickup_details();
@@ -296,6 +297,9 @@ function customerDeliveryPage(string $body, array $view, array $overrides = [], 
     $receivedErrorFlag = $cancelRequestedFlag = $cancelErrorFlag = false;
     $showFeedbackAction = $showCancelForm = $showCancelInfo = false;
     $csrfToken = 'TEST-CSRF-<&';
+    $orderLiveRequest = false;
+    $ui_order_live = $pickupProgress === null;
+    $orderLiveVersion = str_repeat('a', 64);
     ob_start();
     eval('?>' . $body);
     return (string) ob_get_clean();
@@ -323,6 +327,39 @@ foreach (['ready' => $delivered, 'legacy' => customer_delivery_history(new Custo
         && $pageXPath->query('//section[contains(@class,"order-detail-card--closure")]')->length === 0);
 }
 $pickupHtml = customerDeliveryPage($pageBody, $delivered, ['status' => 'CONFIRMED', 'pickup_status' => 'PREPARING'], 'STORE_PICKUP');
+$outRow = customerDeliveryRow(1, 'OUT_FOR_DELIVERY');
+$outRow['shipment_status'] = 'OUT_FOR_DELIVERY';
+$outRow['current_revision'] = 1;
+$outView = customer_delivery_history(new CustomerDeliveryPDO([$outRow]), 801, 7, $ready);
+$outHtml = customerDeliveryPage($pageBody, $outView, ['status' => 'SHIPPED']);
+$outXPath = customerDeliveryXPath($outHtml);
+customerDeliveryCheck('Out for Delivery exposes one explicit courier receipt POST without pretending delivery is complete',
+    $outXPath->query('//form[@action="order-received.php"][@method="POST"]')->length === 1
+    && str_contains($outHtml, 'physically received your parcel')
+    && $outXPath->query('//section[contains(@class,"order-detail-card--closure")]')->length === 0);
+customerDeliveryCheck('open courier detail has live status, history, shipment and action regions',
+    $outXPath->query('//*[@data-order-live]')->length === 1
+    && $outXPath->query('//*[@data-order-live-region="status"]//*[@id="courier-history-heading"]')->length === 1
+    && $outXPath->query('//*[@data-order-live-region="shipment"]')->length === 1
+    && $outXPath->query('//*[@data-order-live-region="actions"]//form[@action="order-received.php"]')->length === 1);
+foreach (['NOT_SHIPPED', 'SHIPPED', 'IN_TRANSIT', 'DELIVERY_ATTEMPT_FAILED', 'RETURN_TO_SELLER', 'RETURNED_TO_SHOP'] as $stage) {
+    customerDeliveryCheck($stage . ' does not expose courier receipt even with primary SHIPPED status',
+        customerDeliveryXPath(customerDeliveryPage($pageBody, $outView, ['status' => 'SHIPPED'],
+            shipmentOverrides: ['shipment_status' => $stage]))->query('//form[@action="order-received.php"]')->length === 0);
+}
+foreach (['REQUESTED', 'APPROVED'] as $cancellation) {
+    customerDeliveryCheck('active cancellation ' . $cancellation . ' blocks Out for Delivery receipt',
+        customerDeliveryXPath(customerDeliveryPage($pageBody, $outView,
+            ['status' => 'SHIPPED', 'cancellation_status' => $cancellation]))->query('//form[@action="order-received.php"]')->length === 0);
+}
+customerDeliveryCheck('third failed attempt and Store Pickup never acquire courier receipt',
+    customerDeliveryXPath(customerDeliveryPage($pageBody, $outView, ['status' => 'SHIPPED'],
+        shipmentOverrides: ['failed_attempts' => 3]))->query('//form[@action="order-received.php"]')->length === 0
+    && customerDeliveryXPath(customerDeliveryPage($pageBody, $outView, ['status' => 'SHIPPED'],
+        'STORE_PICKUP'))->query('//form[@action="order-received.php"]')->length === 0);
+customerDeliveryCheck('unverified GCash remains blocked from Out for Delivery receipt',
+    customerDeliveryXPath(customerDeliveryPage($pageBody, $outView, ['status' => 'SHIPPED'],
+        paymentOverrides: ['payment_method' => 'GCASH', 'payment_status' => 'PENDING']))->query('//form[@action="order-received.php"]')->length === 0);
 customerDeliveryCheck('real Store Pickup page has no courier history, external tracking or receipt action',
     str_contains($pickupHtml, 'od-progress--pickup') && str_contains($pickupHtml, 'Where to pick up')
     && !str_contains($pickupHtml, 'courier-history-heading') && !str_contains($pickupHtml, 'Track with J&amp;T')

@@ -344,8 +344,9 @@ if (!function_exists('sales_create_online_locked')) {
 
 if (!function_exists('sales_confirm_receipt_online')) {
     /**
-     * Persist customer receipt confirmation for a delivered Local Courier
-     * order. COD and GCash record receipt ONLY; collection / payment
+     * Persist customer receipt confirmation for an Out for Delivery or legacy
+     * delivered Local Courier order. Receipt also completes courier delivery.
+     * COD and GCash do not collect payment or create a sale here; collection / payment
      * reconciliation and the completed sale are a later admin transaction.
      * Other payments retain their existing sale behavior and GCash
      * verification guard.
@@ -357,6 +358,7 @@ if (!function_exists('sales_confirm_receipt_online')) {
      */
     function sales_confirm_receipt_online(PDO $pdo, int $customerId, int $orderId): array
     {
+        if ($pdo->inTransaction()) throw new LogicException('Receipt confirmation must own its transaction.');
         $abort = static function (array $payload) use ($pdo): array {
             if ($pdo->inTransaction()) {
                 $pdo->rollBack();
@@ -370,7 +372,7 @@ if (!function_exists('sales_confirm_receipt_online')) {
         try {
             $pdo->beginTransaction();
 
-            /* STEP 1 — lock the order row and verify ownership + DELIVERED status.
+            /* Lock the order row and verify ownership before choosing the receipt path.
                One query handles both; unknown/foreign order returns the same
                generic error so order existence and ownership are never leaked. */
             $orderStmt = $pdo->prepare(
@@ -392,11 +394,11 @@ if (!function_exists('sales_confirm_receipt_online')) {
                 ]);
             }
 
-            if ((string) $order['status'] !== 'DELIVERED') {
+            if (!in_array((string) $order['status'], ['SHIPPED', 'DELIVERED'], true)) {
                 return $abort([
                     'ok' => false,
                     'reason' => 'not_delivered',
-                    'message' => 'Receipt can only be confirmed for delivered orders.',
+                    'message' => 'Receipt can only be confirmed when a courier order is Out for Delivery or already Delivered.',
                     'status' => 409,
                 ]);
             }
@@ -430,6 +432,26 @@ if (!function_exists('sales_confirm_receipt_online')) {
                     'message' => 'Receipt confirmation is only available for Local Courier orders with a shipment record.',
                     'status' => 409,
                 ]);
+            }
+            if ($order['status'] === 'SHIPPED') {
+                if ($shipment['delivery_method'] !== 'LOCAL_COURIER' || $shipment['shipment_status'] !== 'OUT_FOR_DELIVERY') {
+                    return $abort(['ok' => false, 'reason' => 'not_delivered',
+                        'message' => 'Receipt confirmation is not available in this delivery state.', 'status' => 409]);
+                }
+                $stmt = $pdo->prepare('SELECT * FROM shipments WHERE order_id = ? FOR UPDATE');
+                $stmt->execute([$orderId]);
+                $courier = $stmt->fetch();
+                if (!isset($courier['delivery_cycle'], $courier['delivery_revision'])) {
+                    return $abort(['ok' => false, 'reason' => 'order_incompatible',
+                        'message' => 'The courier workflow is unavailable. Please contact the shop.', 'status' => 409]);
+                }
+                // The existing delivery writer owns the atomic completion and rechecks
+                // ownership, current tokens, attempts, verification and all item holds.
+                $pdo->rollBack();
+                require_once __DIR__ . '/delivery.php';
+                return delivery_action($pdo, 0, $orderId, 'confirm_receipt', (int) $courier['delivery_cycle'],
+                    (int) $courier['delivery_revision'], 'OUT_FOR_DELIVERY', bin2hex(random_bytes(16)),
+                    customerId: $customerId);
             }
             if ($shipment['shipment_status'] !== 'DELIVERED'
                 || in_array($order['cancellation_status'], ['REQUESTED', 'APPROVED'], true)) {

@@ -28,7 +28,8 @@ CREATE TABLE customers (
     last_name VARCHAR(100) NOT NULL,
 
     email VARCHAR(255) NOT NULL UNIQUE,
-    password_hash VARCHAR(255) NOT NULL,
+    -- NULL identifies a provider-only account until the customer adds a password.
+    password_hash VARCHAR(255) NULL,
 
     phone VARCHAR(30),
 
@@ -36,6 +37,34 @@ CREATE TABLE customers (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         ON UPDATE CURRENT_TIMESTAMP
 );
+
+CREATE TABLE customer_identities (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    customer_id INT UNSIGNED NOT NULL,
+    provider VARCHAR(32) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+    provider_subject VARCHAR(255) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_customer_identity_subject (provider, provider_subject),
+    UNIQUE KEY uq_customer_identity_customer_provider (customer_id, provider),
+    CONSTRAINT fk_customer_identity_customer
+        FOREIGN KEY (customer_id) REFERENCES customers (id) ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+CREATE TABLE customer_password_resets (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    customer_id INT UNSIGNED NOT NULL,
+    token_hash CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+    expires_at DATETIME NOT NULL,
+    sent_at DATETIME NULL,
+    used_at DATETIME NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_customer_password_reset_token (token_hash),
+    KEY idx_customer_password_reset_customer_created (customer_id, created_at),
+    KEY idx_customer_password_reset_expiry (expires_at),
+    CONSTRAINT fk_customer_password_reset_customer
+        FOREIGN KEY (customer_id) REFERENCES customers (id) ON DELETE CASCADE
+) ENGINE=InnoDB;
 
 
 -- ============================================================
