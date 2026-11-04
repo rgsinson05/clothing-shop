@@ -65,9 +65,8 @@ try {
     $legacySummary = ['total' => 0, 'available' => 0, 'online_held' => 0, 'recorded_sold_count' => 0, 'retired' => 0];
 }
 
-$adminName = $_SESSION['admin_name'] ?? 'Admin';
 $page_title = "Bundles & Profitability - Hopia Fits Admin";
-$page_description = "Bundle profitability overview — capital, inventory, completed sales, gross profit, and remaining projections.";
+$page_description = "Manage purchase bundles, registered garments, completed sales, and profit.";
 $ui_section = 'admin';
 $ui_active = 'bundles.php';
 $body_class = 'admin-bundles-page';
@@ -181,13 +180,8 @@ function fmt_date(string $date): string
     <!-- PAGE HEADER -->
     <header class="bp__header">
         <div class="bp__header-intro">
-            <p class="bp__eyebrow">Bundle profitability</p>
-            <h1 class="bp__title">BUNDLES &amp; PROFITABILITY</h1>
-            <p class="bp__lead">
-                Welcome, <?= htmlspecialchars($adminName) ?>.
-                Track each bundle&rsquo;s <strong>Total Puhunan</strong>, recorded sold items, eligible completed sales, <strong>Profit So Far</strong>, and clear projections for items still available to sell.
-                Profit here compares selling prices against item cost &mdash; other operating expenses are not included.
-            </p>
+            <h1 class="bp__title">Bundles &amp; Profitability</h1>
+            <p class="bp__lead">Manage purchase bundles, track registered garments, monitor completed sales, and review profit from each bundle.</p>
         </div>
         <a class="btn btn-primary bp__add-btn" href="bundle-create.php">
             <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
@@ -201,7 +195,8 @@ function fmt_date(string $date): string
             <div class="bp-toolbar__head">
                 <div>
                     <p class="bp-toolbar__eyebrow">Refine view</p>
-                    <h2 class="bp-toolbar__title" id="bp-toolbar-title">Find a bundle</h2>
+                    <h2 class="bp-toolbar__title" id="bp-toolbar-title">Find a Bundle</h2>
+                    <p class="bp-toolbar__description">Search bundles by bundle code or category.</p>
                     <?php if ($filterLowStock): ?>
                         <p class="text-small muted">Showing low-stock bundles only.</p>
                     <?php endif; ?>
@@ -268,8 +263,9 @@ function fmt_date(string $date): string
             <div class="bp-identify__head">
                 <div>
                     <p class="bp-toolbar__eyebrow">Registered item lookup</p>
-                    <h2 class="bp-identify__title" id="bundle-identification-title">Identify an item and its bundle</h2>
-                    <p class="bp-identify__intro">Scan a garment barcode or enter it manually. This lookup is read-only and accepts sold, held, available, and retired registered items.</p>
+                    <h2 class="bp-identify__title" id="bundle-identification-title">Find a Registered Item</h2>
+                    <p class="bp-identify__intro">Scan or enter a garment barcode to view its item and purchase bundle.</p>
+                    <p class="bp-identify__readonly">Read-only lookup for available, reserved, sold, and removed registered items.</p>
                 </div>
             </div>
 
@@ -344,7 +340,7 @@ function fmt_date(string $date): string
                     <div data-result-row="item-number" hidden><dt>Bundle item no.</dt><dd data-result-field="item-number"></dd></div>
                     <div data-result-row="bundle-code" hidden><dt>Registered bundle</dt><dd data-result-field="bundle-code"></dd></div>
                     <div data-result-row="bundle-category" hidden><dt>Bundle category</dt><dd data-result-field="bundle-category"></dd></div>
-                    <div data-result-row="bundle-capital" hidden><dt>Total Puhunan</dt><dd data-result-field="bundle-capital"></dd></div>
+                    <div data-result-row="bundle-capital" hidden><dt>Bundle Capital</dt><dd data-result-field="bundle-capital"></dd></div>
                     <div data-result-row="bundle-quantity" hidden><dt>Original quantity</dt><dd data-result-field="bundle-quantity"></dd></div>
                     <div data-result-row="purchase-date" hidden><dt>Purchase date</dt><dd data-result-field="purchase-date"></dd></div>
                 </dl>
@@ -382,8 +378,7 @@ function fmt_date(string $date): string
         <!-- RESULT COUNT -->
         <div class="bp-results">
             <p class="bp-results__count">
-                Showing <?= count($bundles) ?> bundle<?= count($bundles) === 1 ? '' : 's' ?>
-                &mdash; <strong>Eligible Completed Sales</strong> figures follow Sales Monitoring eligibility. Recorded sold items are inventory history; active holds are shown separately and never counted as completed finances or available projections.
+                Showing <?= count($bundles) ?> bundle<?= count($bundles) === 1 ? '' : 's' ?>.
             </p>
         </div>
 
@@ -396,7 +391,8 @@ function fmt_date(string $date): string
                 <div class="bp-legacy__head">
                     <div>
                         <p class="bp-legacy__eyebrow">Legacy inventory</p>
-                        <h2 class="bp-legacy__title" id="bp-legacy-title">Unassigned products</h2>
+                        <h2 class="bp-legacy__title" id="bp-legacy-title">Products Not Linked to a Bundle</h2>
+                        <p class="bp-legacy__note">These are existing products that have not yet been assigned to a purchase bundle. Review them before including them in bundle cost and profit calculations.</p>
                     </div>
                     <span class="badge"><?= (int) $legacySummary['total'] ?> items</span>
                 </div>
@@ -406,17 +402,17 @@ function fmt_date(string $date): string
                         <p class="bp-inv-tile__value"><?= (int) ($legacySummary['available'] ?? 0) ?></p>
                     </div>
                     <div class="bp-inv-tile bp-inv-tile--held">
-                        <p class="bp-inv-tile__label">Online-held</p>
+                        <p class="bp-inv-tile__label">Reserved</p>
                         <p class="bp-inv-tile__value"><?= (int) ($legacySummary['online_held'] ?? 0) ?></p>
                         <p class="bp-inv-tile__sub">In active online order</p>
                     </div>
                     <div class="bp-inv-tile bp-inv-tile--sold">
-                        <p class="bp-inv-tile__label">Recorded Sold Items</p>
+                        <p class="bp-inv-tile__label">Sold (History)</p>
                         <p class="bp-inv-tile__value"><?= (int) ($legacySummary['recorded_sold_count'] ?? 0) ?></p>
                         <p class="bp-inv-tile__sub">Sale-item history, not financial eligibility</p>
                     </div>
                     <div class="bp-inv-tile bp-inv-tile--retired">
-                        <p class="bp-inv-tile__label">Retired</p>
+                        <p class="bp-inv-tile__label">Removed from Inventory</p>
                         <p class="bp-inv-tile__value"><?= (int) ($legacySummary['retired'] ?? 0) ?></p>
                     </div>
                 </div>
@@ -428,7 +424,7 @@ function fmt_date(string $date): string
                 </div>
                 <details class="bp-legacy__details">
                     <summary>Why these products are separate</summary>
-                    <p>Unassigned legacy products are excluded from per-bundle metrics until they are assigned through the existing Legacy Assignment workflow. Their inventory classifications above remain unchanged.</p>
+                    <p>Products not linked to a bundle are excluded from per-bundle metrics until they are assigned through the existing Legacy Assignment workflow. Their inventory classifications above remain unchanged.</p>
                 </details>
             </div>
         </section>
@@ -437,7 +433,7 @@ function fmt_date(string $date): string
         <!-- ========================================================
              BUNDLE CARDS GRID
              ======================================================== -->
-        <div class="bp-grid">
+        <div class="bp-grid<?= count($bundles) > 1 ? ' bp-grid--multi' : '' ?>">
             <?php foreach ($bundles as $bundle):
                 $bundleId        = (int) $bundle['bundle_id'];
                 $code            = bundle_code($bundleId);
@@ -598,8 +594,9 @@ function fmt_date(string $date): string
                                 </div>
                             </div>
                             <div class="bp-card__capital">
-                                <p class="bp-card__capital-label">Total Puhunan</p>
+                                <p class="bp-card__capital-label">Bundle Capital</p>
                                 <p class="bp-card__capital-value"><?= bpc($capitalTotal) ?></p>
+                                <p class="bp-card__capital-help">Total amount paid for this purchase bundle.</p>
                             </div>
                         </div>
 
@@ -607,13 +604,13 @@ function fmt_date(string $date): string
                         <div class="bp-card__reg">
                             <div class="bp-card__reg-head">
                                 <p class="bp-card__reg-label">
-                                    Registered
+                                    Registered Items:
                                     <span class="bp-card__reg-count">
-                                        <?= $registeredCount ?> of <?= $originalQty ?>
+                                        <?= $registeredCount ?> / <?= $originalQty ?>
                                     </span>
                                 </p>
                                 <?php if ($unregisteredQty > 0): ?>
-                                    <span class="bp-card__unreg-badge">Registration needed</span>
+                                    <span class="bp-card__unreg-message"><?= bpc_items($unregisteredQty) ?> <?= $unregisteredQty === 1 ? 'needs' : 'need' ?> registration.</span>
                                 <?php else: ?>
                                     <span class="badge badge-success">Complete</span>
                                 <?php endif; ?>
@@ -623,41 +620,41 @@ function fmt_date(string $date): string
                             </div>
                         </div>
 
-                        <!-- INVENTORY STATUS TILES -->
-                        <div class="bp-card__inv">
-                            <div class="bp-inv-tile bp-inv-tile--held">
-                                <p class="bp-inv-tile__label">Online-held</p>
-                                <p class="bp-inv-tile__value"><?= $onlineHeldCount ?></p>
-                            </div>
-                            <div class="bp-inv-tile bp-inv-tile--sold">
-                                <p class="bp-inv-tile__label">Recorded Sold Items</p>
-                                <p class="bp-inv-tile__value"><?= $recordedSoldCount ?></p>
-                            </div>
-                        </div>
-
                         <!-- COMPLETED FINANCIAL RESULTS -->
                         <div class="bp-card__results">
                             <div class="bp-results-grid">
                                 <div class="bp-result-item">
-                                    <p class="bp-result-item__label">Eligible Completed Sales</p>
+                                    <p class="bp-result-item__label">Completed Sales</p>
                                     <p class="bp-result-item__value"><?= bpc($totalCompletedRevenue) ?></p>
                                     <p class="bp-result-item__sub muted">
-                                        <?= $hasCompletedSales ? bpc_items($totalCompletedItems) . ' financially eligible' : 'No eligible sales yet' ?>
+                                        <?= $hasCompletedSales ? bpc_items($totalCompletedItems) . ' from finalized sales' : 'No finalized sales yet' ?>
                                     </p>
+                                </div>
+                                <div class="bp-result-item">
+                                    <p class="bp-result-item__label">Cost of Sold Items</p>
+                                    <p class="bp-result-item__value"><?= bpc($totalCompletedCogs) ?></p>
+                                    <p class="bp-result-item__sub muted">Bundle cost assigned to items in completed sales.</p>
                                 </div>
                                 <div class="bp-result-item">
                                     <p class="bp-result-item__label">Profit So Far</p>
                                     <p class="bp-result-item__value <?= $totalGrossProfit >= 0 ? 'is-profit' : 'is-loss' ?>">
                                         <?= bpc($totalGrossProfit) ?>
                                     </p>
-                                    <p class="bp-result-item__sub muted">
-                                        COGS (eligible items): <?= bpc($totalCompletedCogs) ?>
-                                    </p>
+                                    <p class="bp-result-item__sub muted">Completed Sales minus Cost of Sold Items.</p>
                                 </div>
                             </div>
-                            <p class="bp-profit-note muted">
-                                Eligible completed revenue minus allocated item cost. Not net business profit &mdash; operating expenses are not included.
-                            </p>
+                        </div>
+
+                        <!-- SECONDARY INVENTORY STATUS -->
+                        <div class="bp-card__inv">
+                            <div class="bp-inv-tile bp-inv-tile--held">
+                                <p class="bp-inv-tile__label">Items Reserved for Orders</p>
+                                <p class="bp-inv-tile__value"><?= $onlineHeldCount ?></p>
+                            </div>
+                            <div class="bp-inv-tile bp-inv-tile--sold">
+                                <p class="bp-inv-tile__label">Sold (History)</p>
+                                <p class="bp-inv-tile__value"><?= $recordedSoldCount ?></p>
+                            </div>
                         </div>
 
                         <!-- PRIMARY BUNDLE ACTIONS -->
@@ -692,15 +689,15 @@ function fmt_date(string $date): string
                             <div><span>Item cost</span><strong><?= bpc($unitCost) ?> / item</strong></div>
                             <div><span>Original quantity</span><strong><?= $originalQty ?></strong></div>
                             <div><span>Available</span><strong><?= $availableCount ?></strong></div>
-                            <div><span>Unregistered</span><strong><?= $unregisteredQty ?></strong></div>
-                            <div><span>Retired</span><strong><?= $retiredCount ?></strong></div>
+                            <div><span>Needs Registration</span><strong><?= $unregisteredQty ?></strong></div>
+                            <div><span>Removed from Inventory</span><strong><?= $retiredCount ?></strong></div>
                         </div>
 
                     <!-- ITEMS IN ACTIVE ORDERS (visibility strip) -->
                     <?php if ($onlineHeldCount > 0): ?>
                     <div class="bp-card__held" role="note">
                         <span class="bp-card__held-label">
-                            In active online orders:
+                            Items Reserved for Orders:
                             <strong><?= bpc_items($onlineHeldCount) ?></strong>
                             <?php if ($activeCourierCount > 0): ?>
                                 &middot; <?= $activeCourierCount ?> Local Courier
@@ -711,7 +708,7 @@ function fmt_date(string $date): string
                         </span>
                         <?php if ($activeOrdersTotalCents !== null): ?>
                         <span class="bp-card__held-amount">
-                            Sales in Active Orders: <strong class="is-projection"><?= bpc($activeOrdersTotalCents) ?></strong>
+                            Reserved Order Value: <strong class="is-projection"><?= bpc($activeOrdersTotalCents) ?></strong>
                         </span>
                         <?php else: ?>
                         <span class="bp-card__held-amount muted">Order amounts unavailable</span>
@@ -762,14 +759,14 @@ function fmt_date(string $date): string
                             </div>
                         </div>
                         <p class="bp-total-note muted">
-                            Projection: Eligible Completed Sales (<?= bpc($totalCompletedRevenue) ?>) + Potential Sales (<?= bpc($remainingRevenue) ?>). Not yet earned.
+                            Projection: Completed Sales (<?= bpc($totalCompletedRevenue) ?>) + Potential Sales (<?= bpc($remainingRevenue) ?>). Not yet earned.
                         </p>
                     </div>
                     <?php endif; ?>
 
                     <!-- EXPANDABLE FINANCIAL DETAILS -->
                     <div class="bp-card__details">
-                        <h3 class="bp-card__details-heading">Financial and diagnostic details</h3>
+                        <h3 class="bp-card__details-heading">Financial Details</h3>
                         <div class="bp-card__details-body">
 
                             <?php if (!$hasCompletedSales && $recordedSoldCount === 0 && !$hasRemaining && $onlineHeldCount === 0 && $retiredCount === 0 && $unregisteredQty === 0): ?>
@@ -778,14 +775,14 @@ function fmt_date(string $date): string
 
                             <details class="bp-sub">
                                 <summary class="bp-sub__toggle">
-                                    <span class="bp-sub__title">A. Eligible Completed Sales</span>
+                                    <span class="bp-sub__title">A. Completed Sales</span>
                                     <span class="bp-sub__hint"><?= bpc($totalCompletedRevenue) ?> &middot; <?= bpc_items($totalCompletedItems) ?></span>
                                 </summary>
                                 <div class="bp-sub__body">
                                     <div class="bp-detail-row">
-                                        <span class="bp-detail-row__label">Eligible completed revenue (merchandise)</span>
+                                        <span class="bp-detail-row__label">Completed Sales</span>
                                         <span class="bp-detail-row__value"><?= bpc($totalCompletedRevenue) ?></span>
-                                        <span class="bp-detail-row__sub muted"><?= bpc_items($totalCompletedItems) ?> passing Sales Monitoring eligibility</span>
+                                        <span class="bp-detail-row__sub muted"><?= bpc_items($totalCompletedItems) ?> from finalized sales that meet Sales Monitoring eligibility</span>
                                     </div>
                                     <?php foreach ($completedItems as $ci): ?>
                                     <div class="bp-detail-row bp-detail-row--item">
@@ -804,153 +801,10 @@ function fmt_date(string $date): string
                                     <div class="bp-detail-row bp-detail-row--divider">
                                         <span class="bp-detail-row__label">Profit So Far</span>
                                         <span class="bp-detail-row__value <?= $totalGrossProfit >= 0 ? 'is-profit' : 'is-loss' ?>"><?= bpc($totalGrossProfit) ?></span>
-                                        <span class="bp-detail-row__sub muted">Eligible completed revenue &minus; COGS (<?= bpc($totalCompletedCogs) ?>)</span>
+                                        <span class="bp-detail-row__sub muted">Completed Sales &minus; Cost of Sold Items (<?= bpc($totalCompletedCogs) ?>)</span>
                                     </div>
-                                </div>
-                            </details>
-
-                            <details class="bp-sub">
-                                <summary class="bp-sub__toggle">
-                                    <span class="bp-sub__title">B. Items in Active Orders</span>
-                                    <span class="bp-sub__hint">
-                                        <?php if ($onlineHeldCount > 0 && $activeOrdersTotalCents !== null): ?>
-                                            <?= bpc_items($onlineHeldCount) ?> &middot; <?= bpc($activeOrdersTotalCents) ?>
-                                        <?php elseif ($onlineHeldCount > 0): ?>
-                                            <?= bpc_items($onlineHeldCount) ?>
-                                        <?php else: ?>
-                                            None
-                                        <?php endif; ?>
-                                    </span>
-                                </summary>
-                                <div class="bp-sub__body">
-                                    <?php if ($onlineHeldCount === 0): ?>
-                                    <p class="muted text-small">No garments are held by active online orders right now.</p>
-                                    <?php else: ?>
-                                        <?php if ($activeOrdersTotalCents !== null): ?>
-                                        <div class="bp-detail-row">
-                                            <span class="bp-detail-row__label">Sales in Active Orders</span>
-                                            <span class="bp-detail-row__value is-projection"><?= bpc($activeOrdersTotalCents) ?></span>
-                                            <span class="bp-detail-row__sub muted">Order prices; not yet completed sales</span>
-                                        </div>
-                                        <?php else: ?>
-                                        <p class="muted text-small">Order amounts cannot be shown reliably for these held items.</p>
-                                        <?php endif; ?>
-                                        <?php if ($activePickupCount > 0 || $activeCourierCount > 0): ?>
-                                        <div class="bp-detail-row">
-                                            <span class="bp-detail-row__label">Holds by fulfillment</span>
-                                            <span class="bp-detail-row__value"><?= (int) $activePickupCount ?> SP &middot; <?= (int) $activeCourierCount ?> LC</span>
-                                            <span class="bp-detail-row__sub muted">SP = Store Pickup, LC = Local Courier</span>
-                                        </div>
-                                        <?php endif; ?>
-                                        <?php foreach ($activeOrderItems as $ai): ?>
-                                        <div class="bp-detail-row bp-detail-row--item">
-                                            <span class="bp-detail-row__label">
-                                                <?= htmlspecialchars($ai['name']) ?>
-                                                <span class="badge badge-warning"><?= htmlspecialchars(bpc_fulfillment_label($ai['delivery_method'], $ai['pickup_status'])) ?></span>
-                                            </span>
-                                            <?php if ($ai['price_cents'] > 0): ?>
-                                            <span class="bp-detail-row__value"><?= bpc($ai['price_cents']) ?></span>
-                                            <?php else: ?>
-                                            <span class="bp-detail-row__value muted">&mdash;</span>
-                                            <?php endif; ?>
-                                            <span class="bp-detail-row__sub muted">
-                                                Order #<?= (int) $ai['order_id'] ?>
-                                                &middot; <span class="badge <?= bpc_order_status_badge($ai['order_status']) ?>"><?= htmlspecialchars(bpc_order_status_label($ai['order_status'])) ?></span>
-                                                <?php if ($ai['pickup_status'] !== null && $ai['pickup_status'] !== 'PICKED_UP'): ?>
-                                                    &middot; <?= htmlspecialchars(pickup_stage_label($ai['pickup_status'])) ?>
-                                                <?php endif; ?>
-                                                <?php if ($ai['price_cents'] === 0): ?> &middot; price not recorded<?php endif; ?>
-                                            </span>
-                                        </div>
-                                        <?php endforeach; ?>
-                                        <?php if ($activeOrphanedCount > 0): ?>
-                                        <div class="bp-detail-row bp-detail-row--item">
-                                            <span class="bp-detail-row__label muted">Held but not linked to an active order</span>
-                                            <span class="bp-detail-row__value muted"><?= (int) $activeOrphanedCount ?></span>
-                                            <span class="bp-detail-row__sub muted">Marked sold but no active order holds them; amount cannot be determined</span>
-                                        </div>
-                                        <?php endif; ?>
-                                        <p class="bp-sub-note muted">
-                                            These garments are not yet completed sales and are not part of Potential Sales. Amounts may change if an order is cancelled or becomes inactive.
-                                        </p>
-                                    <?php endif; ?>
-                                </div>
-                            </details>
-
-                            <?php if ($hasRemaining): ?>
-                            <details class="bp-sub">
-                                <summary class="bp-sub__toggle">
-                                    <span class="bp-sub__title">C. Available Items &mdash; Potential Sales</span>
-                                    <span class="bp-sub__hint"><?= bpc($remainingRevenue) ?> &middot; <?= bpc_items($remainingItems) ?></span>
-                                </summary>
-                                <div class="bp-sub__body">
-                                    <div class="bp-detail-row">
-                                        <span class="bp-detail-row__label">Potential Sales total</span>
-                                        <span class="bp-detail-row__value is-projection"><?= bpc($remainingRevenue) ?></span>
-                                        <span class="bp-detail-row__sub muted"><?= bpc_items($remainingItems) ?> available at current prices</span>
-                                    </div>
-                                    <?php foreach ($availableItems as $avail): ?>
-                                    <div class="bp-detail-row bp-detail-row--item">
-                                        <span class="bp-detail-row__label"><?= htmlspecialchars($avail['name']) ?></span>
-                                        <span class="bp-detail-row__value is-projection"><?= bpc($avail['price_cents']) ?></span>
-                                        <span class="bp-detail-row__sub muted">
-                                            <?php if ($avail['barcode'] !== null): ?><?= htmlspecialchars($avail['barcode']) ?> &middot; <?php endif; ?>
-                                            Item cost <?= bpc($unitCost) ?> &middot; Potential Profit contribution <?= bpc($avail['price_cents'] - $unitCost) ?>
-                                        </span>
-                                    </div>
-                                    <?php endforeach; ?>
-                                    <div class="bp-detail-row bp-detail-row--divider">
-                                        <span class="bp-detail-row__label">Potential Profit</span>
-                                        <span class="bp-detail-row__value <?= $remainingGrossProfit >= 0 ? 'is-profit' : 'is-loss' ?>"><?= bpc($remainingGrossProfit) ?></span>
-                                        <span class="bp-detail-row__sub muted">Potential Sales &minus; item cost of these <?= bpc_items($remainingItems) ?> (<?= bpc($remainingCogs) ?>)</span>
-                                    </div>
-                                </div>
-                            </details>
-                            <?php endif; ?>
-
-                            <details class="bp-sub">
-                                <summary class="bp-sub__toggle">
-                                    <span class="bp-sub__title">D. Item Costs and Profit</span>
-                                    <span class="bp-sub__hint">Profit So Far <?= bpc($totalGrossProfit) ?></span>
-                                </summary>
-                                <div class="bp-sub__body">
-                                    <div class="bp-detail-row">
-                                        <span class="bp-detail-row__label">Total Puhunan</span>
-                                        <span class="bp-detail-row__value"><?= bpc($capitalTotal) ?></span>
-                                        <span class="bp-detail-row__sub muted">Bundle total puhunan</span>
-                                    </div>
-                                    <div class="bp-detail-row">
-                                        <span class="bp-detail-row__label">Item cost</span>
-                                        <span class="bp-detail-row__value"><?= bpc($unitCost) ?></span>
-                                        <span class="bp-detail-row__sub muted">Total Puhunan &divide; original qty (<?= $originalQty ?>), fixed at purchase</span>
-                                    </div>
-                                    <div class="bp-detail-row">
-                                        <span class="bp-detail-row__label">COGS (eligible items)</span>
-                                        <span class="bp-detail-row__value"><?= bpc($totalCompletedCogs) ?></span>
-                                        <span class="bp-detail-row__sub muted"><?= bpc($unitCost) ?> &times; <?= bpc_items($totalCompletedItems) ?> in eligible completed sales</span>
-                                    </div>
-                                    <div class="bp-detail-row">
-                                        <span class="bp-detail-row__label">Profit So Far</span>
-                                        <span class="bp-detail-row__value <?= $totalGrossProfit >= 0 ? 'is-profit' : 'is-loss' ?>"><?= bpc($totalGrossProfit) ?></span>
-                                        <span class="bp-detail-row__sub muted">Eligible completed revenue (<?= bpc($totalCompletedRevenue) ?>) &minus; COGS (<?= bpc($totalCompletedCogs) ?>)</span>
-                                    </div>
-                                    <div class="bp-detail-row">
-                                        <span class="bp-detail-row__label">Potential Profit</span>
-                                        <span class="bp-detail-row__value <?= $remainingGrossProfit >= 0 ? 'is-profit' : 'is-loss' ?>"><?= bpc($remainingGrossProfit) ?></span>
-                                        <span class="bp-detail-row__sub muted">Potential Sales (<?= bpc($remainingRevenue) ?>) &minus; item cost of <?= $remainingItems ?> available item<?= $remainingItems === 1 ? '' : 's' ?> (<?= bpc($remainingCogs) ?>)</span>
-                                    </div>
-                                    <p class="bp-sub-note muted">
-                                        Profit figures are not net business profit; other operating expenses are not included.
-                                    </p>
-                                </div>
-                            </details>
-
-                            <details class="bp-sub">
-                                <summary class="bp-sub__toggle">
-                                    <span class="bp-sub__title">E. Payment Collection Diagnostics</span>
-                                    <span class="bp-sub__hint"><?= bpc_items($onlinePaidItems) ?> recorded as paid online</span>
-                                </summary>
-                                <div class="bp-sub__body">
+                                    <h4 class="bp-sub__section-title">Payment and Collection Details</h4>
+                                    <p class="bp-sub-note muted"><?= bpc_items($onlinePaidItems) ?> recorded as paid online.</p>
                                     <?php if ($hasCompletedSales && $walkinItems > 0): ?>
                                     <div class="bp-detail-row">
                                         <span class="bp-detail-row__label">Walk-in cash</span>
@@ -1018,41 +872,171 @@ function fmt_date(string $date): string
                                     <p class="muted text-small">No payment collection records to show for this diagnostic population.</p>
                                     <?php endif; ?>
                                     <p class="bp-sub-note muted">
-                                        Diagnostics cover receipt-confirmed recorded online sale items, including unresolved payments excluded from Eligible Completed Sales. Amounts use merchandise snapshots grouped by stored payment state; recorded as PAID does not by itself establish full financial eligibility.
+                                        Diagnostics include unresolved payments that are excluded from Completed Sales. Amounts use merchandise snapshots grouped by stored payment state; recorded as PAID does not by itself establish full financial eligibility.
                                     </p>
                                 </div>
                             </details>
 
                             <details class="bp-sub">
                                 <summary class="bp-sub__toggle">
-                                    <span class="bp-sub__title">F. Retired Items and Data Quality</span>
-                                    <span class="bp-sub__hint"><?= ($retiredCount + $unregisteredQty) > 0 ? ((int) $retiredCount . ' retired' . ($unregisteredQty > 0 ? ' &middot; ' . (int) $unregisteredQty . ' unregistered' : '')) : 'None' ?></span>
+                                    <span class="bp-sub__title">B. Items Reserved for Orders</span>
+                                    <span class="bp-sub__hint">
+                                        <?php if ($onlineHeldCount > 0 && $activeOrdersTotalCents !== null): ?>
+                                            <?= bpc_items($onlineHeldCount) ?> &middot; <?= bpc($activeOrdersTotalCents) ?>
+                                        <?php elseif ($onlineHeldCount > 0): ?>
+                                            <?= bpc_items($onlineHeldCount) ?>
+                                        <?php else: ?>
+                                            None
+                                        <?php endif; ?>
+                                    </span>
                                 </summary>
                                 <div class="bp-sub__body">
+                                    <?php if ($onlineHeldCount === 0): ?>
+                                    <p class="muted text-small">No garments are held by active online orders right now.</p>
+                                    <?php else: ?>
+                                        <?php if ($activeOrdersTotalCents !== null): ?>
+                                        <div class="bp-detail-row">
+                                            <span class="bp-detail-row__label">Reserved Order Value</span>
+                                            <span class="bp-detail-row__value is-projection"><?= bpc($activeOrdersTotalCents) ?></span>
+                                            <span class="bp-detail-row__sub muted">Order prices; not yet completed sales</span>
+                                        </div>
+                                        <?php else: ?>
+                                        <p class="muted text-small">Order amounts cannot be shown reliably for these held items.</p>
+                                        <?php endif; ?>
+                                        <?php if ($activePickupCount > 0 || $activeCourierCount > 0): ?>
+                                        <div class="bp-detail-row">
+                                            <span class="bp-detail-row__label">Holds by fulfillment</span>
+                                            <span class="bp-detail-row__value"><?= (int) $activePickupCount ?> SP &middot; <?= (int) $activeCourierCount ?> LC</span>
+                                            <span class="bp-detail-row__sub muted">SP = Store Pickup, LC = Local Courier</span>
+                                        </div>
+                                        <?php endif; ?>
+                                        <?php foreach ($activeOrderItems as $ai): ?>
+                                        <div class="bp-detail-row bp-detail-row--item">
+                                            <span class="bp-detail-row__label">
+                                                <?= htmlspecialchars($ai['name']) ?>
+                                                <span class="badge badge-warning"><?= htmlspecialchars(bpc_fulfillment_label($ai['delivery_method'], $ai['pickup_status'])) ?></span>
+                                            </span>
+                                            <?php if ($ai['price_cents'] > 0): ?>
+                                            <span class="bp-detail-row__value"><?= bpc($ai['price_cents']) ?></span>
+                                            <?php else: ?>
+                                            <span class="bp-detail-row__value muted">&mdash;</span>
+                                            <?php endif; ?>
+                                            <span class="bp-detail-row__sub muted">
+                                                Order #<?= (int) $ai['order_id'] ?>
+                                                &middot; <span class="badge <?= bpc_order_status_badge($ai['order_status']) ?>"><?= htmlspecialchars(bpc_order_status_label($ai['order_status'])) ?></span>
+                                                <?php if ($ai['pickup_status'] !== null && $ai['pickup_status'] !== 'PICKED_UP'): ?>
+                                                    &middot; <?= htmlspecialchars(pickup_stage_label($ai['pickup_status'])) ?>
+                                                <?php endif; ?>
+                                                <?php if ($ai['price_cents'] === 0): ?> &middot; price not recorded<?php endif; ?>
+                                            </span>
+                                        </div>
+                                        <?php endforeach; ?>
+                                        <?php if ($activeOrphanedCount > 0): ?>
+                                        <div class="bp-detail-row bp-detail-row--item">
+                                            <span class="bp-detail-row__label muted">Held but not linked to an active order</span>
+                                            <span class="bp-detail-row__value muted"><?= (int) $activeOrphanedCount ?></span>
+                                            <span class="bp-detail-row__sub muted">Marked sold but no active order holds them; amount cannot be determined</span>
+                                        </div>
+                                        <?php endif; ?>
+                                        <p class="bp-sub-note muted">
+                                            These garments are not yet completed sales and are not part of Potential Sales. Amounts may change if an order is cancelled or becomes inactive.
+                                        </p>
+                                    <?php endif; ?>
+                                </div>
+                            </details>
+
+                            <details class="bp-sub">
+                                <summary class="bp-sub__toggle">
+                                    <span class="bp-sub__title">C. Inventory Details</span>
+                                    <span class="bp-sub__hint"><?= bpc_items($availableCount) ?> available</span>
+                                </summary>
+                                <div class="bp-sub__body">
+                                    <?php if ($hasRemaining): ?>
+                                    <div class="bp-detail-row">
+                                        <span class="bp-detail-row__label">Potential Sales total</span>
+                                        <span class="bp-detail-row__value is-projection"><?= bpc($remainingRevenue) ?></span>
+                                        <span class="bp-detail-row__sub muted"><?= bpc_items($remainingItems) ?> available at current prices</span>
+                                    </div>
+                                    <?php foreach ($availableItems as $avail): ?>
+                                    <div class="bp-detail-row bp-detail-row--item">
+                                        <span class="bp-detail-row__label"><?= htmlspecialchars($avail['name']) ?></span>
+                                        <span class="bp-detail-row__value is-projection"><?= bpc($avail['price_cents']) ?></span>
+                                        <span class="bp-detail-row__sub muted">
+                                            <?php if ($avail['barcode'] !== null): ?><?= htmlspecialchars($avail['barcode']) ?> &middot; <?php endif; ?>
+                                            Item cost <?= bpc($unitCost) ?> &middot; Potential Profit contribution <?= bpc($avail['price_cents'] - $unitCost) ?>
+                                        </span>
+                                    </div>
+                                    <?php endforeach; ?>
+                                    <div class="bp-detail-row bp-detail-row--divider">
+                                        <span class="bp-detail-row__label">Potential Profit</span>
+                                        <span class="bp-detail-row__value <?= $remainingGrossProfit >= 0 ? 'is-profit' : 'is-loss' ?>"><?= bpc($remainingGrossProfit) ?></span>
+                                        <span class="bp-detail-row__sub muted">Potential Sales &minus; item cost of these <?= bpc_items($remainingItems) ?> (<?= bpc($remainingCogs) ?>)</span>
+                                    </div>
+                                    <?php else: ?>
+                                    <p class="muted text-small">No available items to project.</p>
+                                    <?php endif; ?>
+                                    <h4 class="bp-sub__section-title">Registration and Inventory Status</h4>
                                     <?php if ($retiredCount > 0): ?>
                                     <div class="bp-detail-row">
-                                        <span class="bp-detail-row__label">Retired items</span>
+                                        <span class="bp-detail-row__label">Removed from Inventory</span>
                                         <span class="bp-detail-row__value muted"><?= (int) $retiredCount ?></span>
                                         <span class="bp-detail-row__sub muted">No longer eligible for sale; excluded from Potential Sales and Potential Profit</span>
                                     </div>
                                     <?php endif; ?>
                                     <?php if ($unregisteredQty > 0): ?>
                                     <div class="bp-detail-row">
-                                        <span class="bp-detail-row__label">Unregistered items</span>
+                                        <span class="bp-detail-row__label">Items Needing Registration</span>
                                         <span class="bp-detail-row__value muted"><?= (int) $unregisteredQty ?></span>
                                         <span class="bp-detail-row__sub muted">Purchased but not yet registered; excluded from Potential Sales and Potential Profit</span>
                                     </div>
                                     <?php endif; ?>
                                     <?php if ($retiredCount === 0 && $unregisteredQty === 0): ?>
-                                    <p class="muted text-small">No retired or unregistered items for this bundle.</p>
+                                    <p class="muted text-small">No items are removed from inventory or awaiting registration.</p>
                                     <?php endif; ?>
                                     <?php if ($activeOrphanedCount > 0): ?>
                                     <div class="bp-detail-row">
                                         <span class="bp-detail-row__label muted">Marked sold without an active order or recorded sale</span>
                                         <span class="bp-detail-row__value muted"><?= (int) $activeOrphanedCount ?></span>
-                                        <span class="bp-detail-row__sub muted">Counted in registered and online-held inventory; no reliable order amount, completed finances or available projection</span>
+                                        <span class="bp-detail-row__sub muted">Counted in registered and reserved inventory; no reliable order amount, completed finances, or available projection</span>
                                     </div>
                                     <?php endif; ?>
+                                </div>
+                            </details>
+
+                            <details class="bp-sub">
+                                <summary class="bp-sub__toggle">
+                                    <span class="bp-sub__title">D. Item Costs and Profit</span>
+                                    <span class="bp-sub__hint">Profit So Far <?= bpc($totalGrossProfit) ?></span>
+                                </summary>
+                                <div class="bp-sub__body">
+                                    <div class="bp-detail-row">
+                                        <span class="bp-detail-row__label">Bundle Capital</span>
+                                        <span class="bp-detail-row__value"><?= bpc($capitalTotal) ?></span>
+                                        <span class="bp-detail-row__sub muted">Total amount paid for this purchase bundle</span>
+                                    </div>
+                                    <div class="bp-detail-row">
+                                        <span class="bp-detail-row__label">Item cost</span>
+                                        <span class="bp-detail-row__value"><?= bpc($unitCost) ?></span>
+                                        <span class="bp-detail-row__sub muted">Bundle Capital &divide; original quantity (<?= $originalQty ?>), fixed at purchase</span>
+                                    </div>
+                                    <div class="bp-detail-row">
+                                        <span class="bp-detail-row__label">Cost of Sold Items</span>
+                                        <span class="bp-detail-row__value"><?= bpc($totalCompletedCogs) ?></span>
+                                        <span class="bp-detail-row__sub muted"><?= bpc($unitCost) ?> &times; <?= bpc_items($totalCompletedItems) ?> in completed sales that meet eligibility rules</span>
+                                    </div>
+                                    <div class="bp-detail-row">
+                                        <span class="bp-detail-row__label">Profit So Far</span>
+                                        <span class="bp-detail-row__value <?= $totalGrossProfit >= 0 ? 'is-profit' : 'is-loss' ?>"><?= bpc($totalGrossProfit) ?></span>
+                                        <span class="bp-detail-row__sub muted">Completed Sales (<?= bpc($totalCompletedRevenue) ?>) &minus; Cost of Sold Items (<?= bpc($totalCompletedCogs) ?>)</span>
+                                    </div>
+                                    <div class="bp-detail-row">
+                                        <span class="bp-detail-row__label">Potential Profit</span>
+                                        <span class="bp-detail-row__value <?= $remainingGrossProfit >= 0 ? 'is-profit' : 'is-loss' ?>"><?= bpc($remainingGrossProfit) ?></span>
+                                        <span class="bp-detail-row__sub muted">Potential Sales (<?= bpc($remainingRevenue) ?>) &minus; item cost of <?= $remainingItems ?> available item<?= $remainingItems === 1 ? '' : 's' ?> (<?= bpc($remainingCogs) ?>)</span>
+                                    </div>
+                                    <p class="bp-sub-note muted">
+                                        Profit figures are not net business profit; other operating expenses are not included.
+                                    </p>
                                 </div>
                             </details>
 
@@ -1077,14 +1061,14 @@ function fmt_date(string $date): string
                 <div class="bp-notes__content">
                     <ul>
                         <li>
-                            <strong>Recorded Sold Items</strong> counts physical products with
+                            <strong>Sold (History)</strong> counts physical products with
                             recorded sale-item history, whether financially eligible or not.
                             These garments remain excluded from available inventory and projections.
                             An item merely marked <code>SOLD</code> without sale-item history is
                             an availability hold, not proof of a completed sale.
                         </li>
                         <li>
-                            <strong>Eligible Completed Sales</strong>, revenue, COGS and
+                            <strong>Completed Sales</strong>, Cost of Sold Items, and
                             Profit So Far use the same canonical eligibility as Sales Monitoring.
                             Both channels require sale-item/header integrity; online sales also
                             require the canonical payment, fulfillment, receipt/handover and
@@ -1092,18 +1076,18 @@ function fmt_date(string $date): string
                             Bundle figures are all-time, not today's or the Dashboard's seven-day totals.
                         </li>
                         <li>
-                            <strong>Items in Active Orders</strong> are held by live online
+                            <strong>Items Reserved for Orders</strong> are held by live online
                             orders (Local Courier or Store Pickup). They are kept visible
-                            under <em>Sales in Active Orders</em> but are not completed
+                            under <em>Reserved Order Value</em> but are not completed
                             sales and are excluded from <em>Potential Sales</em> and
                             <em>Potential Profit</em>, which cover garments available for a
                             new sale. Cancelled orders never contribute. These amounts may
                             change if an order is cancelled or becomes inactive.
                         </li>
                         <li>
-                            <strong>Item cost</strong> = Total Puhunan &divide; original
-                            quantity, fixed at bundle creation. <em>COGS</em>
-                            allocates that fixed item cost to each garment in eligible completed
+                            <strong>Item cost</strong> = Bundle Capital &divide; original
+                            quantity, fixed at bundle creation. <em>Cost of Sold Items</em>
+                            allocates that fixed item cost to each garment in completed
                             sales; it is never recalculated against remaining inventory.
                         </li>
                         <li>
@@ -1120,9 +1104,9 @@ function fmt_date(string $date): string
                             included.
                         </li>
                         <li>
-                            <strong>Retired and unregistered items</strong> are not eligible
-                            for sale and are excluded from every projection. Unregistered
-                            items (purchased but not yet registered) are counted separately
+                            <strong>Items removed from inventory or awaiting registration</strong> are not eligible
+                            for sale and are excluded from every projection. Items awaiting registration
+                            (purchased but not yet registered) are counted separately
                             in each bundle card.
                         </li>
                         <li>
@@ -1172,17 +1156,8 @@ function fmt_date(string $date): string
     gap: 1rem;
 }
 
-.bp__eyebrow {
-    color: var(--admin-accent-strong);
-    font-size: 0.7rem;
-    font-weight: 700;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    margin: 0;
-}
-
 .bp__title {
-    margin-top: 0.2rem;
+    margin: 0;
     font-size: clamp(1.5rem, 3vw, 2rem);
     font-weight: 800;
     letter-spacing: -0.02em;
@@ -1241,6 +1216,12 @@ function fmt_date(string $date): string
     font-size: 1rem;
     font-weight: 700;
     color: var(--admin-ink);
+}
+
+.bp-toolbar__description {
+    margin: 0.25rem 0 0;
+    color: var(--color-text-muted);
+    font-size: 0.8125rem;
 }
 
 .bp-toolbar__clear {
@@ -1353,6 +1334,12 @@ function fmt_date(string $date): string
 .bp-identify__intro {
     margin-top: 0.35rem;
     max-width: 72ch;
+}
+
+.bp-identify__readonly {
+    margin: 0.2rem 0 0;
+    color: var(--color-text-muted);
+    font-size: 0.72rem;
 }
 
 .bp-identify__methods {
@@ -1683,7 +1670,9 @@ function fmt_date(string $date): string
 .bp-legacy__note {
     font-size: 0.8125rem;
     color: var(--color-text-muted);
-    margin-bottom: 1rem;
+    margin: 0.35rem 0 0;
+    max-width: 82ch;
+    line-height: 1.45;
 }
 
 .bp-legacy__tiles {
@@ -1796,8 +1785,8 @@ function fmt_date(string $date): string
     gap: 1rem;
 }
 
-@media (min-width: 900px) {
-    .bp-grid {
+@media (min-width: 1100px) {
+    .bp-grid--multi {
         grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 }
@@ -1893,6 +1882,14 @@ function fmt_date(string $date): string
     line-height: 1.1;
 }
 
+.bp-card__capital-help {
+    max-width: 27ch;
+    margin: 0.2rem 0 0 auto;
+    color: var(--color-text-muted);
+    font-size: 0.68rem;
+    line-height: 1.3;
+}
+
 .bp-card__unit-cost {
     font-size: 0.7rem;
     color: var(--color-text-muted);
@@ -1932,14 +1929,11 @@ function fmt_date(string $date): string
     margin-left: 0.3rem;
 }
 
-.bp-card__unreg-badge {
+.bp-card__unreg-message {
     font-size: 0.68rem;
     font-weight: 600;
-    padding: 0.2rem 0.5rem;
-    border-radius: 20px;
-    background: var(--admin-warning-bg, #fef3c7);
-    border: 1px solid var(--admin-warning-border, #fde68a);
     color: var(--admin-warning, #92400e);
+    text-align: right;
 }
 
 /* Progress bar */
@@ -1984,8 +1978,8 @@ function fmt_date(string $date): string
 
 .bp-results-grid {
     display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 0.5rem;
+    grid-template-columns: repeat(auto-fit, minmax(8.5rem, 1fr));
+    gap: 0.75rem;
 }
 
 .bp-result-item {
@@ -2259,13 +2253,6 @@ details[open] .bp-card__details-icon {
     margin: 0;
 }
 
-/* Profit explainer under the summary results */
-.bp-profit-note {
-    margin: 0.5rem 0 0;
-    font-size: 0.68rem;
-    line-height: 1.35;
-}
-
 /* Online-held visibility strip */
 .bp-card__held {
     display: flex;
@@ -2409,6 +2396,15 @@ details[open] .bp-card__details-icon {
 
 .bp-sub__body .bp-detail-row {
     padding: 0.3rem 0;
+}
+
+.bp-sub__section-title {
+    margin: 0.45rem 0 0;
+    padding-top: 0.65rem;
+    border-top: 1px solid var(--color-border);
+    color: var(--admin-ink);
+    font-size: 0.72rem;
+    font-weight: 750;
 }
 
 .bp-detail-row--item .bp-detail-row__label {
@@ -2595,6 +2591,9 @@ details summary::-webkit-details-marker { display: none; }
     }
     .bp-card__capital {
         text-align: left;
+    }
+    .bp-card__capital-help {
+        margin-left: 0;
     }
     .bp-results-grid,
     .bp-proj-grid,

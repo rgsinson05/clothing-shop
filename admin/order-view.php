@@ -518,6 +518,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             . (int) $verifyProgress['verified'] . ' of ' . (int) $verifyProgress['expected'] . '.'
                         );
                     }
+
+                    $shipmentInventoryBlock = payment_courier_sale_inventory_error($pdo, $lockedOrderId);
+                    if ($shipmentInventoryBlock !== null) {
+                        throw new OrderActionException(
+                            'This order cannot be shipped because its physical inventory ownership is unresolved.'
+                        );
+                    }
                 }
 
                 $advanceStmt = $pdo->prepare(
@@ -536,6 +543,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                 if ($advanceStmt->rowCount() !== 1) {
                     throw new OrderActionException('The order status could not be advanced.');
+                }
+
+                if ($lockedDeliveryMethod === 'LOCAL_COURIER') {
+                    if ($targetStatus === 'CONFIRMED') {
+                        customer_notifications_create($pdo, $lockedOrderId, 'ORDER_CONFIRMED');
+                    } elseif ($targetStatus === 'PACKED') {
+                        customer_notifications_create($pdo, $lockedOrderId, 'ORDER_PACKED');
+                    }
                 }
 
                 /*
@@ -1031,7 +1046,7 @@ if ($courierProgress !== null && $courierProgress['stage'] !== 'CANCELLED'
     $orderStatusBadgeKey = $shipment['shipment_status'];
 }
 $courierMainStages = ['PENDING' => 'clock', 'CONFIRMED' => 'check', 'PACKED' => 'package',
-    'SHIPPED' => 'truck', 'IN_TRANSIT' => 'truck', 'DELIVERED' => 'check-circle', 'COMPLETED' => 'check-circle'];
+    'SHIPPED' => 'truck', 'IN_TRANSIT' => 'warehouse', 'DELIVERED' => 'check-circle', 'COMPLETED' => 'check-circle'];
 
 if (
     $order !== false
@@ -1407,8 +1422,10 @@ if ($orderLiveRequest) {
                         <?php if (isset($courierMainStages[$courierProgress['stage'] ?? ''])): ?>
                             <ol class="admin-order-progress" role="list" aria-label="Courier order progress">
                                 <?php foreach ($courierMainStages as $mainStage => $mainIcon): ?>
-                                    <?php $mainStepState = $courierProgress['returned_step_states'][$mainStage]
-                                        ?? ($courierProgress['stage'] === $mainStage ? 'current' : ''); ?>
+                                    <?php
+                                    $mainStepState = $courierProgress['returned_step_states'][$mainStage]
+                                        ?? ($courierProgress['stage'] === $mainStage ? 'current' : '');
+                                    ?>
                                     <li class="admin-order-progress__step<?= $mainStepState !== '' ? ' is-' . $mainStepState : '' ?>"<?= $mainStepState === 'current' ? ' aria-current="step"' : '' ?><?= $mainStepState === 'unreached' ? ' aria-disabled="true"' : '' ?>>
                                         <span class="admin-order-progress__node" aria-hidden="true"><?= hopia_order_icon($mainIcon) ?></span>
                                         <div class="admin-order-progress__copy">
@@ -1450,7 +1467,7 @@ if ($orderLiveRequest) {
                                 <?php endif; ?>
                             </p>
                             <p>
-                                <a class="btn btn-secondary btn-sm" href="order-verify.php?id=<?= (int) $order['id'] ?>">Verify items</a>
+                                <a class="btn btn-secondary btn-sm" href="order-reservation.php?tab=online&amp;id=<?= (int) $order['id'] ?>">Verify items</a>
                             </p>
                         </div>
                     <?php endif; ?>
@@ -1673,7 +1690,7 @@ if ($orderLiveRequest) {
                                         </p>
                                     </div>
 
-                                    <a class="btn btn-primary" href="pickup-verify.php?order_id=<?= (int) $order['id'] ?>">
+                                    <a class="btn btn-primary" href="order-reservation.php?tab=pickup&amp;order_id=<?= (int) $order['id'] ?>">
                                         Verify Items &amp; Start Preparing
                                     </a>
                                 <?php elseif ($pickupCanAdvance): ?>

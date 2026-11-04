@@ -61,12 +61,15 @@ if (!function_exists('customer_notifications_event_labels')) {
     function customer_notifications_event_labels(): array
     {
         return [
+            'ORDER_CONFIRMED' => 'Your Order Is Confirmed!',
+            'ORDER_PACKED' => 'Your Order Is Packed!',
             'ORDER_SHIPPED' => 'Order Shipped',
             'ORDER_DELIVERED' => 'Order Delivered',
             'PICKUP_READY' => 'Ready for Pickup',
             'PICKUP_HANDED_OVER' => 'Pickup Handed Over',
             'ORDER_CANCELLED' => 'Order Cancelled',
-            'OUT_FOR_DELIVERY' => 'Out for Delivery',
+            'IN_TRANSIT' => 'Your Order Is In Transit!',
+            'OUT_FOR_DELIVERY' => 'Your Order Is Out for Delivery!',
             'DELIVERY_ATTEMPT_FAILED' => 'Delivery Attempt Failed',
             'RETURN_TO_SELLER' => 'Return to Seller',
             'RETURNED_TO_SHOP' => 'Returned to Shop',
@@ -93,6 +96,10 @@ if (!function_exists('customer_notifications_message')) {
     function customer_notifications_message(string $type, int $orderId, ?string $trackingNumber = null): string
     {
         switch ($type) {
+            case 'ORDER_CONFIRMED':
+                return 'Your order #' . $orderId . ' has been confirmed! We\'re now preparing your order for shipment. Please note that cancellation is no longer available once your order has been confirmed.';
+            case 'ORDER_PACKED':
+                return 'Good news! Your order #' . $orderId . ' has been packed and is ready for shipment. We\'ll notify you as soon as it starts moving toward your location.';
             case 'ORDER_SHIPPED':
                 $tracking = $trackingNumber !== null && trim($trackingNumber) !== ''
                     ? ' Your tracking number is ' . trim($trackingNumber) . '.'
@@ -106,8 +113,10 @@ if (!function_exists('customer_notifications_message')) {
                 return 'Your pickup order #' . $orderId . ' has been handed over to you.';
             case 'ORDER_CANCELLED':
                 return 'Your order #' . $orderId . ' has been cancelled.';
+            case 'IN_TRANSIT':
+                return 'Your order #' . $orderId . ' is now in transit and moving through the courier\'s delivery network. It\'s getting closer to you! We\'ll notify you once it\'s out for delivery.';
             case 'OUT_FOR_DELIVERY':
-                return 'Your order #' . $orderId . ' is out for delivery.';
+                return 'Your order #' . $orderId . ' is out for delivery and on its way to you! Once you receive your parcel, please tap Order Received on your order page to confirm its successful delivery.';
             case 'DELIVERY_ATTEMPT_FAILED':
                 return 'A delivery attempt for your order #' . $orderId . ' was unsuccessful. The shop will review the next delivery step.';
             case 'RETURN_TO_SELLER':

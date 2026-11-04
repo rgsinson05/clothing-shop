@@ -1233,6 +1233,83 @@ if (!function_exists('sales_monitor_today_cents')) {
     }
 }
 
+if (!function_exists('sales_monitor_today_profit')) {
+    /**
+     * Gross merchandise profit for today's eligible completed sale items.
+     *
+     * Revenue is always the historical sales_transaction_items.unit_price
+     * snapshot. Each physical garment gets its own cost from its linked
+     * purchase bundle, rounded once to the nearest centavo using the same
+     * convention as bundle_metrics_derive():
+     *
+     *   unit cost = round(capital_total in centavos / original_quantity)
+     *
+     * Missing/deleted products, missing bundles, and non-positive bundle cost
+     * data are not assigned a fabricated zero or average cost. Their item
+     * count is returned separately, and the cents value remains the known
+     * partial profit so callers can label it as incomplete.
+     */
+    function sales_monitor_today_profit(PDO $pdo): array
+    {
+        $day = new DateTimeImmutable('today', new DateTimeZone('Asia/Manila'));
+        $start = $day->format('Y-m-d H:i:s');
+        $end = $day->modify('+1 day')->format('Y-m-d H:i:s');
+
+        $stmt = $pdo->prepare(
+            "SELECT sales.reporting_channel, sti.unit_price,
+                    pr.bundle_id, pb.id AS purchase_bundle_id,
+                    pb.capital_total, pb.original_quantity
+             FROM (" . sales_monitor_source_sql() . ") sales
+             INNER JOIN sales_transaction_items sti ON sti.sale_id = sales.id
+             LEFT JOIN products pr ON pr.id = sti.product_id
+             LEFT JOIN purchase_bundles pb ON pb.id = pr.bundle_id
+             WHERE sales.reporting_issue IS NULL
+               AND sales.sold_at >= :start AND sales.sold_at < :end"
+        );
+        $stmt->execute([':start' => $start, ':end' => $end]);
+
+        $result = [
+            'OVERALL' => ['cents' => 0, 'missing_cost_items' => 0],
+            'WALKIN' => ['cents' => 0, 'missing_cost_items' => 0],
+            'LOCAL_COURIER' => ['cents' => 0, 'missing_cost_items' => 0],
+            'STORE_PICKUP' => ['cents' => 0, 'missing_cost_items' => 0],
+        ];
+
+        foreach ($stmt->fetchAll() as $row) {
+            $channel = (string) $row['reporting_channel'];
+            if (!isset($result[$channel])) {
+                continue;
+            }
+
+            $sellingPriceCents = sales_money_to_cents($row['unit_price']);
+            if ($sellingPriceCents === null) {
+                throw new UnexpectedValueException('A completed sale item has an invalid selling-price snapshot.');
+            }
+
+            $capitalCents = sales_money_to_cents($row['capital_total']);
+            $originalQuantity = (int) ($row['original_quantity'] ?? 0);
+            $hasValidCost = $row['bundle_id'] !== null
+                && $row['purchase_bundle_id'] !== null
+                && $capitalCents !== null
+                && $capitalCents > 0
+                && $originalQuantity > 0;
+
+            if (!$hasValidCost) {
+                $result[$channel]['missing_cost_items']++;
+                $result['OVERALL']['missing_cost_items']++;
+                continue;
+            }
+
+            $unitCostCents = (int) round($capitalCents / $originalQuantity);
+            $itemProfitCents = $sellingPriceCents - $unitCostCents;
+            $result[$channel]['cents'] += $itemProfitCents;
+            $result['OVERALL']['cents'] += $itemProfitCents;
+        }
+
+        return $result;
+    }
+}
+
 if (!function_exists('sales_monitor_list')) {
     /**
      * Query completed sale transactions for the Sales Monitoring list,

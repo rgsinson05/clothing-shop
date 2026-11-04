@@ -4,6 +4,7 @@ session_start();
 
 require_once __DIR__ . '/../includes/payment.php';
 require_once __DIR__ . '/../includes/customer_auth.php';
+require_once __DIR__ . '/../includes/inventory_guard.php';
 
 // Retain an authenticated, quoted receipt even if the database is unavailable on this request.
 $receiptToken = $_POST['checkout_token'] ?? $_POST['buy_now'] ?? $_GET['checkout'] ?? $_GET['buy_now'] ?? '';
@@ -492,7 +493,7 @@ if ($isRestartRequest) {
     } elseif (!empty($checkoutAttempt['proof_path']) || !empty($checkoutAttempt['reference_valid']) || !empty($checkoutAttempt['review_required'])) {
         $errors[] = 'This checkout has submitted payment evidence or needs review. Contact the shop instead of restarting or paying again.';
     } elseif (empty($checkoutAttempt['quote'])) {
-        $errors[] = 'There is no confirmed GCash amount to restart. Review your current checkout instead.';
+        $errors[] = 'There is no prepared GCash amount to restart. Review your current checkout instead.';
     } else {
         // Keep the old quote as evidence; a new checkout gets a different server token.
         $checkoutAttempt['closed'] = true;
@@ -658,6 +659,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$isQuoteRequest && !$isRestartRequ
     }
 
     if ($isGcashSubmission || $isGcashEvidenceSubmission) {
+        if (($_POST['gcash_acknowledgment'] ?? '') !== '1') {
+            $errors[] = 'Please acknowledge that you sent the exact amount shown to the provided GCash account.';
+        }
+
         $gcashReference = payment_normalize_reference($_POST['gcash_reference'] ?? '');
         $formValues['gcash_reference'] = $gcashReference;
 
@@ -768,7 +773,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$isQuoteRequest && !$isRestartRequ
         $quote = $checkoutAttemptValid ? ($checkoutAttempt['quote'] ?? null) : null;
         $quoteToken = $_POST['gcash_quote_token'] ?? '';
         if (!is_array($quote) || !is_string($quoteToken) || !hash_equals($quote['token'], $quoteToken)) {
-            $errors[] = 'The GCash amount was not confirmed for this checkout. If you already paid, contact the shop; do not send another payment.';
+            $errors[] = 'The GCash amount was not securely prepared for this checkout. If you already paid, contact the shop; do not send another payment.';
             if ($requestTrusted && ($storedProofPath !== null || !empty($checkoutAttempt['reference_valid']))) {
                 $checkoutAttempt['review_required'] = true;
             }
@@ -810,6 +815,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$isQuoteRequest && !$isRestartRequ
                 }
                 $referenceLock = $lockName;
             }
+            $pdo->exec('SET TRANSACTION ISOLATION LEVEL READ COMMITTED');
             $pdo->beginTransaction();
 
             $transactionCart = false;
@@ -970,6 +976,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$isQuoteRequest && !$isRestartRequ
                             ':pickup_status' => $isPickupOrder ? 'ORDER_RECEIVED' : null
                         ]);
                         $orderId = (int) $pdo->lastInsertId();
+
+                        $ownershipConflicts = [];
+                        $committedSaleStmt = $pdo->prepare(
+                            'SELECT id FROM sales_transaction_items WHERE product_id = ? LIMIT 1 FOR UPDATE'
+                        );
+                        foreach ($lockedItems as $lockedItem) {
+                            $lockedProductId = (int) $lockedItem['product_id'];
+                            $committedSaleStmt->execute([$lockedProductId]);
+                            if (inventory_has_other_hold_locked($pdo, $lockedProductId, $orderId)
+                                || $committedSaleStmt->fetchColumn() !== false) {
+                                $ownershipConflicts[] = $lockedItem['name'] . ' (#' . $lockedProductId . ')';
+                            }
+                        }
+                        if ($ownershipConflicts !== []) {
+                            $errors[] = $isBuyNowCheckout
+                                ? 'Sorry, this piece is no longer available.'
+                                : cart_selection_unavailable_message($ownershipConflicts);
+                            throw new RuntimeException('A selected product already has an active owner or committed sale.');
+                        }
 
                         $orderItemStmt = $pdo->prepare(
                             'INSERT INTO order_items (
@@ -1578,7 +1603,7 @@ require __DIR__ . '/../includes/ui.header.php';
                             <dl class="gcash-checkout__details">
                                 <div class="gcash-checkout__row">
                                     <dt>Amount due</dt>
-                                    <dd class="gcash-checkout__amount" id="gcash-checkout-amount"><?= $savedGcashQuote === null ? 'Confirm the amount before paying' : '&#8369;' . number_format($savedGcashQuote['total_cents'] / 100, 2) ?></dd>
+                                    <dd class="gcash-checkout__amount" id="gcash-checkout-amount"><?= $savedGcashQuote === null ? ($displayRateCents === null ? 'Select your delivery location' : '&#8369;' . number_format($subtotal + $displayRateCents / 100, 2)) : '&#8369;' . number_format($savedGcashQuote['total_cents'] / 100, 2) ?></dd>
                                 </div>
                                 <div class="gcash-checkout__row">
                                     <dt>Account name</dt>
@@ -1593,8 +1618,7 @@ require __DIR__ . '/../includes/ui.header.php';
                                     </dd>
                                 </div>
                             </dl>
-                            <button type="button" class="btn btn-secondary btn-sm" id="gcash-confirm-amount" <?= !$checkoutCanSubmit || $hasGcashEvidence ? 'disabled' : '' ?>>Confirm GCash amount</button>
-                            <p class="alert alert-warning" id="gcash-quote-status" role="status" <?= $gcashQuoteReady ? 'hidden' : '' ?>>Confirm your selected items and delivery amount before sending payment. If you have already paid, do not send another payment.</p>
+                            <p class="alert alert-warning" id="gcash-quote-status" role="status" <?= $gcashQuoteReady ? 'hidden' : '' ?>>Preparing the secure GCash payment amount. Do not send payment until the amount is ready.</p>
                             <?php if (!$hasGcashEvidence): ?>
                                 <div class="field" id="gcash-restart-controls" <?= $savedGcashQuote === null ? 'hidden' : '' ?>>
                                     <label class="checkbox-label"><input type="checkbox" name="confirm_unpaid" value="1"> I have not sent this GCash payment.</label>
@@ -1614,6 +1638,15 @@ require __DIR__ . '/../includes/ui.header.php';
                                 <li>Enter that reference and attach your payment screenshot below.</li>
                                 <li>Place your order. Your payment stays pending until our team confirms the transfer.</li>
                             </ol>
+
+                            <div class="gcash-checkout__acknowledgment">
+                                <p class="gcash-checkout__acknowledgment-title">Payment Acknowledgment</p>
+                                <label class="gcash-checkout__acknowledgment-label" for="gcash-acknowledgment">
+                                    <input type="checkbox" id="gcash-acknowledgment" name="gcash_acknowledgment" value="1">
+                                    <span>I confirm that I have sent the exact amount shown above to the GCash account provided.</span>
+                                </label>
+                                <p class="hint">Your payment will still be subject to admin verification.</p>
+                            </div>
 
                             <div class="field">
                                 <label for="gcash_reference">GCash reference number</label>
@@ -1642,7 +1675,7 @@ require __DIR__ . '/../includes/ui.header.php';
                                 <?php if ($retainedProof): ?><p class="hint">Your original uploaded proof is retained. No new payment or screenshot is required for this retry.</p><?php endif; ?>
                             </div>
 
-                            <p class="alert alert-warning" id="gcash-requirement" role="status" hidden>Please complete GCash payment first before placing order.</p>
+                            <p class="alert alert-warning" id="gcash-requirement" role="status" hidden>Please acknowledge your payment, enter a valid GCash reference number, and attach the payment screenshot before placing your order.</p>
                         </div>
                     <?php endif; ?>
                 </section>
@@ -1727,7 +1760,7 @@ require __DIR__ . '/../includes/ui.header.php';
                             form="checkout-form"
                             class="checkout-submit"
                             id="checkout-submit"
-                            <?= !$checkoutCanSubmit || ($formValues['payment_method'] === 'GCASH' && (!$gcashQuoteReady || !$retainedProof || empty($checkoutAttempt['reference_valid']))) ? 'disabled' : '' ?>
+                            <?= !$checkoutCanSubmit || $formValues['payment_method'] === 'GCASH' ? 'disabled' : '' ?>
                         >
                             <span class="checkout-submit__spinner" aria-hidden="true"></span>
                             <svg class="checkout-submit__icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
@@ -1844,9 +1877,9 @@ require __DIR__ . '/../includes/ui.header.php';
             var gcashCheckoutAmount = document.getElementById('gcash-checkout-amount');
             var gcashReferenceInput = document.getElementById('gcash_reference');
             var gcashProofInput = document.getElementById('gcash-proof');
+            var gcashAcknowledgment = document.getElementById('gcash-acknowledgment');
             var gcashRequirement = document.getElementById('gcash-requirement');
             var gcashQuoteToken = document.getElementById('gcash-quote-token');
-            var gcashConfirmAmount = document.getElementById('gcash-confirm-amount');
             var gcashQuoteStatus = document.getElementById('gcash-quote-status');
             var gcashCashWarning = document.getElementById('gcash-cash-warning');
             var gcashRestartControls = document.getElementById('gcash-restart-controls');
@@ -1890,6 +1923,14 @@ require __DIR__ . '/../includes/ui.header.php';
                     && gcashProofInput.files.length > 0);
             }
 
+            function gcashPaymentAcknowledged() {
+                return !!(gcashAcknowledgment && gcashAcknowledgment.checked);
+            }
+
+            function currentGcashFeeCents() {
+                return currentMethod() === 'STORE_PICKUP' ? 0 : rateCentsForCurrentRegion();
+            }
+
             function gcashQuoteMatchesSelection() {
                 return gcashQuote && gcashQuote.usable && gcashQuote.delivery_method === currentMethod()
                     && gcashQuote.region === (currentMethod() === 'STORE_PICKUP' ? '' : (fields.region ? fields.region.value : ''));
@@ -1900,8 +1941,53 @@ require __DIR__ . '/../includes/ui.header.php';
                     return true;
                 }
 
-                return !quoteBusy && gcashQuoteMatchesSelection() && gcashReferenceLooksValid(gcashReferenceValue())
-                    && gcashProofSelected();
+                return !quoteBusy && gcashQuoteMatchesSelection() && gcashPaymentAcknowledged()
+                    && gcashReferenceLooksValid(gcashReferenceValue()) && gcashProofSelected();
+            }
+
+            function prepareGcashQuote() {
+                if (quoteBusy || !checkoutEligible || submittedGcashEvidence || gcashQuote
+                    || selectedPaymentMethod() !== 'GCASH' || currentGcashFeeCents() === null) {
+                    return;
+                }
+
+                var data = new FormData();
+                data.append('checkout_action', 'prepare_gcash');
+                data.append('csrf_token', form.elements.csrf_token.value);
+                data.append('checkout_token', form.elements.checkout_token.value);
+                data.append('delivery_method', currentMethod());
+                data.append('region', fields.region ? fields.region.value : '');
+                data.append('payment_method', 'GCASH');
+                if (form.elements.buy_now) {
+                    data.append('buy_now', form.elements.buy_now.value);
+                }
+
+                quoteBusy = true;
+                quoteError = '';
+                refreshGcashCheckout();
+                fetch(form.action, {
+                    method: 'POST',
+                    body: data,
+                    credentials: 'same-origin',
+                    headers: {'X-Requested-With': 'XMLHttpRequest'}
+                }).then(function (response) {
+                    return response.json();
+                }).then(function (payload) {
+                    if (!payload.ok) {
+                        throw new Error(payload.message);
+                    }
+                    gcashQuote = payload;
+                    gcashQuote.usable = true;
+                    gcashQuoteToken.value = payload.quote_token;
+                }).catch(function (error) {
+                    quoteError = error.message || 'We could not prepare the GCash amount. Do not pay until the checkout amount is ready.';
+                    if (gcashQuote) {
+                        gcashQuote.usable = false;
+                    }
+                }).finally(function () {
+                    quoteBusy = false;
+                    refreshGcashCheckout();
+                });
             }
 
             function refreshGcashCheckout() {
@@ -1917,8 +2003,10 @@ require __DIR__ . '/../includes/ui.header.php';
                 }
                 gcashCheckout.hidden = !isGcash;
                 if (isGcash && gcashCheckoutAmount) {
+                    var feeCents = currentGcashFeeCents();
                     gcashCheckoutAmount.textContent = gcashQuote
-                        ? formatPeso(gcashQuote.total_cents) : 'Confirm the amount before paying';
+                        ? formatPeso(gcashQuote.total_cents)
+                        : (feeCents === null ? 'Select your delivery location' : formatPeso(subtotalCents + feeCents));
                 }
 
                 /* GCash-only fields are required only while GCash is the
@@ -1932,6 +2020,10 @@ require __DIR__ . '/../includes/ui.header.php';
                     gcashProofInput.required = isGcash && !retainedGcashProof;
                     gcashProofInput.disabled = !isGcash || retainedGcashProof;
                 }
+                if (gcashAcknowledgment) {
+                    gcashAcknowledgment.required = isGcash;
+                    gcashAcknowledgment.disabled = !isGcash;
+                }
 
                 var met = gcashRequirementsMet();
 
@@ -1939,15 +2031,12 @@ require __DIR__ . '/../includes/ui.header.php';
                     gcashRequirement.hidden = !isGcash || met;
                 }
 
-                if (gcashConfirmAmount) {
-                    gcashConfirmAmount.disabled = !isGcash || quoteBusy || !checkoutEligible || submittedGcashEvidence;
-                    gcashConfirmAmount.textContent = quoteBusy ? 'Confirming amount...' : 'Confirm GCash amount';
-                }
                 if (gcashQuoteStatus) {
                     gcashQuoteStatus.hidden = !quoteError && !!gcashQuoteMatchesSelection();
                     gcashQuoteStatus.textContent = quoteError || (gcashQuote
                         ? 'The original payment amount is kept. Restore its delivery details or, if you already paid, contact the shop. Do not pay a changed amount.'
-                        : 'Confirm your selected items and delivery amount before paying. If you have already paid, do not send another payment.');
+                        : (quoteBusy ? 'Preparing the secure GCash payment amount. Do not send payment until the amount is ready.'
+                            : 'Select your complete delivery details so the secure GCash payment amount can be prepared.'));
                 }
                 if (gcashRestartControls) {
                     gcashRestartControls.hidden = !gcashQuote;
@@ -1955,51 +2044,10 @@ require __DIR__ . '/../includes/ui.header.php';
                 if (gcashRestartButton) {
                     gcashRestartButton.disabled = !isGcash || !gcashQuote || quoteBusy || submittedGcashEvidence;
                 }
-            }
 
-            if (gcashConfirmAmount) {
-                gcashConfirmAmount.addEventListener('click', function (event) {
-                    event.preventDefault();
-                    if (quoteBusy || !checkoutEligible || submittedGcashEvidence) {
-                        return;
-                    }
-                    var data = new FormData();
-                    data.append('checkout_action', 'prepare_gcash');
-                    data.append('csrf_token', form.elements.csrf_token.value);
-                    data.append('checkout_token', form.elements.checkout_token.value);
-                    data.append('delivery_method', currentMethod());
-                    data.append('region', fields.region ? fields.region.value : '');
-                    data.append('payment_method', 'GCASH');
-                    if (form.elements.buy_now) {
-                        data.append('buy_now', form.elements.buy_now.value);
-                    }
-                    quoteBusy = true;
-                    quoteError = '';
-                    refreshGcashCheckout();
-                    fetch(form.action, {
-                        method: 'POST',
-                        body: data,
-                        credentials: 'same-origin',
-                        headers: {'X-Requested-With': 'XMLHttpRequest'}
-                    }).then(function (response) {
-                        return response.json();
-                    }).then(function (payload) {
-                        if (!payload.ok) {
-                            throw new Error(payload.message);
-                        }
-                        gcashQuote = payload;
-                        gcashQuote.usable = true;
-                        gcashQuoteToken.value = payload.quote_token;
-                    }).catch(function (error) {
-                        quoteError = error.message || 'We could not confirm the amount. Do not pay until the checkout amount is confirmed.';
-                        if (gcashQuote) {
-                            gcashQuote.usable = false;
-                        }
-                    }).finally(function () {
-                        quoteBusy = false;
-                        refreshGcashCheckout();
-                    });
-                });
+                if (isGcash && !gcashQuote && !quoteBusy && !quoteError) {
+                    prepareGcashQuote();
+                }
             }
 
             levelOrder.forEach(function (name) {
@@ -2463,14 +2511,19 @@ require __DIR__ . '/../includes/ui.header.php';
                 Array.prototype.forEach.call(
                     form.querySelectorAll('input[name="payment_method"]'),
                     function (radio) {
-                        radio.addEventListener('change', refreshGcashCheckout);
+                        radio.addEventListener('change', function () {
+                            if (radio.checked && radio.value === 'GCASH' && !gcashQuote) {
+                                quoteError = '';
+                            }
+                            refreshGcashCheckout();
+                        });
                     }
                 );
             }
 
-            /* Keep the Place Order state in sync with the reference input and
-             * proof selection. This is convenience feedback only. */
-            [gcashReferenceInput, gcashProofInput].forEach(function (input) {
+            /* Keep the Place Order state in sync with the acknowledgment,
+             * reference input, and proof selection. This is convenience feedback only. */
+            [gcashAcknowledgment, gcashReferenceInput, gcashProofInput].forEach(function (input) {
                 if (!input) {
                     return;
                 }
@@ -2511,7 +2564,7 @@ require __DIR__ . '/../includes/ui.header.php';
 
             form.addEventListener('submit', function (event) {
                 if (event.submitter && event.submitter.name === 'checkout_action') {
-                    // Quote confirmation and an explicitly unpaid restart do not create an order.
+                    // An explicitly unpaid restart does not create an order.
                     return;
                 }
                 if (!checkoutEligible || quoteBusy) {
@@ -2530,10 +2583,10 @@ require __DIR__ . '/../includes/ui.header.php';
                         gcashRequirement.hidden = false;
                     }
 
-                    if (!gcashReferenceLooksValid(gcashReferenceValue()) && gcashReferenceInput) {
+                    if (!gcashPaymentAcknowledged() && gcashAcknowledgment) {
+                        gcashAcknowledgment.focus();
+                    } else if (!gcashReferenceLooksValid(gcashReferenceValue()) && gcashReferenceInput) {
                         gcashReferenceInput.focus();
-                    } else if (!gcashQuoteMatchesSelection() && gcashConfirmAmount) {
-                        gcashConfirmAmount.focus();
                     } else if (!gcashProofSelected() && gcashProofInput) {
                         gcashProofInput.focus();
                     }

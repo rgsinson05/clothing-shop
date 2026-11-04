@@ -111,9 +111,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <div class="register-alert register-alert--error" role="alert"><?= hopia_e($googleMessage) ?></div>
         <?php endif; ?>
 
-        <?php hopia_google_button('register'); ?>
-        <div class="auth-divider"><span>or register with email</span></div>
-
         <form class="auth-form" method="POST" novalidate>
             <div class="auth-form__row">
                 <div class="field">

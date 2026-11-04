@@ -35,8 +35,7 @@ require_once __DIR__ . '/../includes/order_verify.php';
 require_once __DIR__ . '/../includes/ui.php';
 require_once __DIR__ . '/../includes/admin-feedback.php';
 require_once __DIR__ . '/../includes/dynamsoft_scanner.php';
-
-$adminName = $_SESSION['admin_name'] ?? 'Admin';
+require_once __DIR__ . '/../includes/admin_order_ui.php';
 
 /*
  * Stable per-session CSRF token for pickup scans and the final preparation
@@ -168,12 +167,12 @@ if ($hasOrderParam && $requestedOrderId !== false && $requestedOrderId > 0) {
 
 $pageTitleBase = ($order !== false)
     ? 'Verify Pickup Order #' . (int) $order['id']
-    : 'Scan Pickup Orders';
+    : 'Order Reservation';
 
 $page_title = $pageTitleBase . " - Admin - Hopia's Ukay-Ukay";
 $page_description = "Scan and verify every item of a Store Pickup order before preparation.";
 $ui_section = 'admin';
-$ui_active = 'pickup-verify.php';
+$ui_active = 'order-reservation.php';
 $body_class = 'admin-pickup-verify-page';
 
 require __DIR__ . '/../includes/ui.head.php';
@@ -236,21 +235,11 @@ require __DIR__ . '/../includes/ui.header.php';
 
 <div class="admin-pickup-verify">
 
+<?php admin_order_reservation_header('pickup'); ?>
+
 <?php if (!$hasOrderParam): ?>
 
     <?php /* ======================= LIST MODE ======================= */ ?>
-    <header class="admin-page-header">
-        <div>
-            <p class="admin-page-header__eyebrow">Store Pickup &middot; preparation</p>
-            <h1>SCAN PICKUP ORDERS</h1>
-            <p class="admin-page-header__copy">
-                Welcome, <?= hopia_e($adminName) ?>. Select a Store Pickup order that is still at
-                <strong>Order Received</strong>. Every ordered item must be scanned and verified before the
-                order can move to <strong>Preparing for Pickup</strong>.
-            </p>
-        </div>
-    </header>
-
     <?php if ($actionError !== ''): ?>
         <div class="alert alert-error" role="alert"><?= hopia_e($actionError) ?></div>
     <?php endif; ?>
@@ -310,7 +299,7 @@ require __DIR__ . '/../includes/ui.header.php';
                                 </span>
                             </td>
                             <td>
-                                <a class="btn btn-primary btn-sm" href="pickup-verify.php?order_id=<?= $eligibleId ?>">Verify Items</a>
+                                <a class="btn btn-primary btn-sm" href="order-reservation.php?tab=pickup&amp;order_id=<?= $eligibleId ?>">Verify Items</a>
                             </td>
                         </tr>
                     <?php endforeach; ?>
@@ -326,7 +315,7 @@ require __DIR__ . '/../includes/ui.header.php';
         <p class="admin-page-header__eyebrow">Store Pickup &middot; preparation</p>
         <h1>ORDER NOT FOUND</h1>
         <p>Order not found. The order ID may be missing, invalid, or the order may no longer exist.</p>
-        <a class="btn btn-primary" href="pickup-verify.php">Back to Scan Pickup Orders</a>
+        <a class="btn btn-primary" href="order-reservation.php?tab=pickup">Back to Store Pickup</a>
     </div>
 
 <?php elseif ($orderError !== null): ?>
@@ -334,7 +323,7 @@ require __DIR__ . '/../includes/ui.header.php';
     <?php /* =================== LOADED BUT INELIGIBLE =================== */ ?>
     <header class="admin-page-header">
         <div>
-            <a class="admin-page-header__back" href="pickup-verify.php">&larr; Back to Scan Pickup Orders</a>
+            <a class="admin-page-header__back" href="order-reservation.php?tab=pickup">&larr; Back to Store Pickup</a>
             <p class="admin-page-header__eyebrow">Store Pickup &middot; preparation</p>
             <h1>PICKUP ORDER #<?= (int) $order['id'] ?></h1>
         </div>
@@ -347,7 +336,7 @@ require __DIR__ . '/../includes/ui.header.php';
 
     <p>
         <a class="btn btn-secondary" href="order-view.php?id=<?= (int) $order['id'] ?>">Open order details</a>
-        <a class="btn btn-ghost" href="pickup-verify.php">Back to Scan Pickup Orders</a>
+        <a class="btn btn-ghost" href="order-reservation.php?tab=pickup">Back to Store Pickup</a>
     </p>
 
 <?php else: ?>
@@ -366,7 +355,7 @@ require __DIR__ . '/../includes/ui.header.php';
     ?>
     <header class="admin-page-header">
         <div>
-            <a class="admin-page-header__back" href="pickup-verify.php">&larr; Back to Scan Pickup Orders</a>
+            <a class="admin-page-header__back" href="order-reservation.php?tab=pickup">&larr; Back to Store Pickup</a>
             <p class="admin-page-header__eyebrow">Store Pickup &middot; verify before preparation</p>
             <h1>VERIFY PICKUP ORDER #<?= $orderIdInt ?></h1>
             <p class="admin-page-header__copy">
@@ -602,7 +591,7 @@ require __DIR__ . '/../includes/ui.header.php';
                 </div>
             <?php endif; ?>
 
-            <form method="POST" action="pickup-verify.php?order_id=<?= $orderIdInt ?>">
+            <form method="POST" action="order-reservation.php?tab=pickup&amp;order_id=<?= $orderIdInt ?>">
                 <input type="hidden" name="csrf_token" value="<?= hopia_e($pickupVerifyCsrf) ?>">
                 <input type="hidden" name="order_id" value="<?= $orderIdInt ?>">
                 <input type="hidden" name="action" value="start_preparing">

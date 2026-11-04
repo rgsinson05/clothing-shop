@@ -40,7 +40,7 @@ function schema_expect(string $label, array $metadata, string $state = 'blocked'
     schema_result_check($label, delivery_schema_evaluate($metadata), $state);
 }
 
-/** Independently transcribed metadata from schema.sql and migrations 010/015/016. */
+/** Independently transcribed metadata from schema.sql and migrations 010/015/016/020. */
 function schema_fixture(bool $ready = true, string $platform = 'mysql'): array
 {
     $metadata = [
@@ -98,13 +98,13 @@ function schema_fixture(bool $ready = true, string $platform = 'mysql'): array
             'delivery_revision' => ['int unsigned', 'NO', '0'],
             'failed_attempts' => ['tinyint unsigned', 'NO', '0'],
         ];
-        $definitions['customer_order_notifications']['notification_type'][0] = "enum('ORDER_SHIPPED','ORDER_DELIVERED','PICKUP_READY','PICKUP_HANDED_OVER','ORDER_CANCELLED','OUT_FOR_DELIVERY','DELIVERY_ATTEMPT_FAILED','RETURN_TO_SELLER','RETURNED_TO_SHOP','DELIVERY_CYCLE_AUTHORIZED')";
+        $definitions['customer_order_notifications']['notification_type'][0] = "enum('ORDER_SHIPPED','ORDER_DELIVERED','PICKUP_READY','PICKUP_HANDED_OVER','ORDER_CANCELLED','OUT_FOR_DELIVERY','DELIVERY_ATTEMPT_FAILED','RETURN_TO_SELLER','RETURNED_TO_SHOP','DELIVERY_CYCLE_AUTHORIZED','ORDER_CONFIRMED','ORDER_PACKED','IN_TRANSIT')";
         $definitions['customer_order_notifications']['occurrence_key'] = ['varchar(64)', 'NO', 'legacy', '', 'ascii'];
         $definitions['delivery_events'] = [
             'id' => ['bigint unsigned', 'NO', null, 'auto_increment'],
             'order_id' => ['int unsigned', 'NO', null], 'delivery_cycle' => ['int unsigned', 'NO', null],
             'delivery_revision' => ['int unsigned', 'NO', null],
-            'event_type' => ["enum('OUT_FOR_DELIVERY','DELIVERY_ATTEMPT_FAILED','RETURN_TO_SELLER','RETURNED_TO_SHOP','RETURN_INSPECTED','DELIVERY_CYCLE_AUTHORIZED','DELIVERED')", 'NO', null],
+            'event_type' => ["enum('OUT_FOR_DELIVERY','DELIVERY_ATTEMPT_FAILED','RETURN_TO_SELLER','RETURNED_TO_SHOP','RETURN_INSPECTED','DELIVERY_CYCLE_AUTHORIZED','DELIVERED','IN_TRANSIT')", 'NO', null],
             'admin_id' => ['int unsigned', 'NO', null], 'attempt_number' => ['tinyint unsigned', 'YES', null],
             'reason' => ['varchar(255)', 'YES', null],
             'previous_state' => ['varchar(32)', 'NO', null], 'resulting_state' => ['varchar(32)', 'NO', null],

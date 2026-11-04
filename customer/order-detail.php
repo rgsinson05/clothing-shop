@@ -88,7 +88,7 @@ $orderStepIcons = [
     'CONFIRMED' => 'check',
     'PACKED' => 'package',
     'SHIPPED' => 'truck',
-    'IN_TRANSIT' => 'truck',
+    'IN_TRANSIT' => 'warehouse',
     'DELIVERED' => 'check-circle'
 ];
 

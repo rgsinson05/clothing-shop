@@ -89,9 +89,6 @@ require __DIR__ . '/../includes/ui.header.php';
             <p class="alert alert-error" role="alert"><?= hopia_e($message) ?></p>
         <?php endif; ?>
 
-        <?php hopia_google_button('login'); ?>
-        <div class="auth-divider"><span>or continue with email</span></div>
-
         <form class="auth-form" method="POST" novalidate>
             <input type="hidden" name="csrf_token" value="<?= hopia_e($_SESSION['csrf_token_login']) ?>">
             <div class="field">

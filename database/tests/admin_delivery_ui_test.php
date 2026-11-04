@@ -32,7 +32,8 @@ function deliveryUiFixture(string $stage, int $failed = 0, int $cycle = 1): arra
     }
     // Synthetic availability is input to the renderer, not a second production state machine.
     $allowed = match ($stage) {
-        'SHIPPED', 'IN_TRANSIT' => ['out_for_delivery'],
+        'SHIPPED' => ['in_transit'],
+        'IN_TRANSIT' => ['out_for_delivery'],
         'DELIVERY_ATTEMPT_FAILED' => $failed === 3 ? ['return_to_seller'] : ['out_for_delivery'],
         'OUT_FOR_DELIVERY' => ['fail_attempt'],
         'RETURN_TO_SELLER' => ['confirm_return'],
@@ -66,7 +67,7 @@ function deliveryUiRender(array $fixture): string
     extract($fixture, EXTR_SKIP);
     $adminCsrfToken = 'synthetic-csrf-"<&';
     $orderStatusLabels = ['PENDING' => 'Pending', 'CONFIRMED' => 'Confirmed', 'PACKED' => 'Packed',
-        'SHIPPED' => 'Shipped', 'DELIVERED' => 'Delivered', 'CANCELLED' => 'Cancelled'];
+        'SHIPPED' => 'Shipped', 'IN_TRANSIT' => 'In Transit', 'DELIVERED' => 'Delivered', 'CANCELLED' => 'Cancelled'];
     $_SESSION = ['admin_id' => 7, 'admin_name' => 'Offline UI Test'];
     ob_start();
     require __DIR__ . '/../../includes/ui.admin-delivery.php';
@@ -195,7 +196,9 @@ foreach (['PENDING', 'CONFIRMED', 'PACKED'] as $status) {
     $html = deliveryUiRender($fixture);
     deliveryUiCheck($status . ' keeps early fulfillment outside delivery API', deliveryUiActions($html) === [] && str_contains($html, 'Use the order controls above'));
 }
-foreach (['SHIPPED', 'IN_TRANSIT', 'DELIVERY_ATTEMPT_FAILED'] as $stage) {
+deliveryUiCheck('SHIPPED renders only the missing In Transit action',
+    deliveryUiActions(deliveryUiRender(deliveryUiFixture('SHIPPED'))) === ['in_transit']);
+foreach (['IN_TRANSIT', 'DELIVERY_ATTEMPT_FAILED'] as $stage) {
     deliveryUiCheck($stage . ' renders only validated outing', deliveryUiActions(deliveryUiRender(deliveryUiFixture($stage))) === ['out_for_delivery']);
 }
 for ($attempt = 1; $attempt <= 3; $attempt++) {
@@ -305,7 +308,7 @@ foreach (['legacy', 'blocked'] as $schemaState) {
     deliveryUiCheck($schemaState . ' explains safe migration path', str_contains($html, $schemaState === 'legacy' ? 'existing fulfillment controls above remain available' : 'Do not fall back to legacy delivery confirmation'));
 }
 $fixture = deliveryUiFixture('SHIPPED');
-$fixture['courierView']['actions']['out_for_delivery'] = delivery_failure('manual_review');
+$fixture['courierView']['actions']['in_transit'] = delivery_failure('manual_review');
 $fixture['courierView']['blockers'][] = 'The payment record is missing.';
 deliveryUiCheck('missing payment remains a manual-review state', deliveryUiActions(deliveryUiRender($fixture)) === [] && str_contains(deliveryUiRender($fixture), 'payment record is missing'));
 $fixture['courierView']['error'] = 'Delivery records could not be safely loaded.';
@@ -428,7 +431,7 @@ foreach (['SHIPPED', 'OUT_FOR_DELIVERY', 'DELIVERED'] as $stage) {
 $root = dirname(__DIR__, 2);
 $validSession = ['admin_id' => 7, 'admin_csrf_token' => 'test-token'];
 $validPost = ['csrf_token' => 'test-token', 'order_id' => 801, 'cycle' => 1, 'revision' => 0,
-    'action' => 'out_for_delivery', 'stage' => 'SHIPPED', 'action_key' => str_repeat('a', 32)];
+    'action' => 'in_transit', 'stage' => 'SHIPPED', 'action_key' => str_repeat('a', 32)];
 $apiCases = [
     ['anonymous', [], 'POST', [], 401, 'auth'],
     ['GET', $validSession, 'GET', [], 405, 'method'],

@@ -112,6 +112,9 @@ if (!function_exists('hopia_admin_icon')) {
             // Barcode labels.
             'barcode' =>
                 '<path d="M4 5v14M7 5v14M10.5 5v14M14 5v14M17 5v14M20 5v14"/>',
+            // Barcode scanner - framed barcode used by the admin camera scanner.
+            'scan-barcode' =>
+                '<path d="M4 7V5a1 1 0 0 1 1-1h2M17 4h2a1 1 0 0 1 1 1v2M20 17v2a1 1 0 0 1-1 1h-2M7 20H5a1 1 0 0 1-1-1v-2M7 9v6M10 9v6M14 9v6M17 9v6"/>',
             // Walk-in sale - cash register / point of sale.
             'register' =>
                 '<rect x="3.5" y="9" width="17" height="11" rx="1.5"/>'
@@ -214,13 +217,7 @@ if ($ui_section === 'admin') {
         'ORDER MANAGEMENT' => [
             ['url' => 'orders.php', 'label' => 'Online Orders', 'icon' => 'orders'],
             ['url' => 'pickups.php', 'label' => 'Store Pickup', 'icon' => 'pickup'],
-        ],
-        'ORDER FULFILLMENT' => [
-            ['url' => 'order-verify.php', 'label' => 'Scan Online Orders', 'icon' => 'verify'],
-            // Dedicated Store Pickup barcode-verification destination. It is
-            // separate from the courier scanner (admin/order-verify.php) and
-            // gates ORDER_RECEIVED -> PREPARING on every item being verified.
-            ['url' => 'pickup-verify.php', 'label' => 'Scan Pickup Orders', 'icon' => 'verify'],
+            ['url' => 'order-reservation.php', 'label' => 'Order Reservation', 'icon' => 'scan-barcode'],
         ],
         'NOTIFICATIONS' => [
             ['url' => 'notifications.php', 'label' => 'Notifications', 'icon' => 'bell'],

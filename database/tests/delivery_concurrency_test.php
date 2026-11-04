@@ -34,7 +34,7 @@ try {
     // B operates while A's transaction holds the identically numbered local
     // rows. It cannot see either A's locks or A's competing hold.
     $b->exec('SET SESSION innodb_lock_wait_timeout=2');
-    $resultB = delivery_action($b, 1, 1, 'out_for_delivery', 1, 0, 'SHIPPED', $key);
+    $resultB = delivery_action($b, 1, 1, 'in_transit', 1, 0, 'SHIPPED', $key);
     if (!$resultB['ok'] || $resultB['idempotent']
         || $a->query('SELECT COUNT(*) FROM delivery_events')->fetchColumn() !== 0
         || $b->query('SELECT COUNT(*) FROM delivery_events')->fetchColumn() !== 1) {
@@ -43,7 +43,7 @@ try {
     $a->rollBack();
     // Remove only the temporary competing membership to exercise A's helper.
     $a->exec('UPDATE order_items SET product_id=2 WHERE order_id=2');
-    $resultA = delivery_action($a, 1, 1, 'out_for_delivery', 1, 0, 'SHIPPED', $key);
+    $resultA = delivery_action($a, 1, 1, 'in_transit', 1, 0, 'SHIPPED', $key);
     if (!$resultA['ok'] || $resultA['idempotent']
         || $a->query('SELECT COUNT(*) FROM delivery_events')->fetchColumn() !== 1) {
         throw new RuntimeException('A did not operate on its separate temporary fixture.');

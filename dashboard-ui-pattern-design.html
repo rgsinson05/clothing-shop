@@ -1,0 +1,885 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>UKAY UKAY Thrift Shop - Bundle Sales Dashboard</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Chart.js CDN for live interactive charts -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- FontAwesome icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Inter Font -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                    colors: {
+                        ukay: {
+                            50: '#f0fdf4',
+                            100: '#dcfce7',
+                            200: '#bbf7d0',
+                            500: '#22c55e',
+                            600: '#16a34a',
+                            700: '#15803d',
+                            800: '#166534',
+                            900: '#14532d',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #f1f1f1; border-radius: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+    </style>
+</head>
+<body class="bg-slate-100 text-slate-800 antialiased flex h-screen overflow-hidden">
+
+    <!-- SIDEBAR NAVIGATION -->
+    <aside class="w-64 bg-slate-900 text-slate-300 flex flex-col justify-between hidden md:flex shrink-0">
+        <div>
+            <!-- Shop Branding -->
+            <div class="p-5 border-b border-slate-800 flex items-center space-x-3">
+                <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-ukay-600 to-emerald-400 flex items-center justify-center text-white font-bold text-xl shadow-lg shadow-ukay-900/50">
+                    <i class="fa-solid fa-tags"></i>
+                </div>
+                <div>
+                    <h1 class="font-bold text-white text-base tracking-wide uppercase leading-tight">UKAY UKAY</h1>
+                    <p class="text-xs text-ukay-500 font-medium tracking-wider">BUNDLE SALES SYSTEM</p>
+                </div>
+            </div>
+
+            <!-- Navigation Links -->
+            <nav class="p-4 space-y-1">
+                <a href="#" class="flex items-center space-x-3 px-3 py-2.5 rounded-lg bg-ukay-600 text-white font-medium text-sm transition-all shadow-sm">
+                    <i class="fa-solid fa-chart-pie w-5 text-center"></i>
+                    <span>Dashboard</span>
+                </a>
+                <a href="#" class="flex items-center space-x-3 px-3 py-2.5 rounded-lg text-slate-400 hover:bg-slate-800 hover:text-slate-200 font-medium text-sm transition-all">
+                    <i class="fa-solid fa-boxes-packing w-5 text-center"></i>
+                    <span>Bundles</span>
+                    <span class="ml-auto bg-ukay-900 text-ukay-200 text-xs px-2 py-0.5 rounded-full font-bold">6 Active</span>
+                </a>
+                <a href="#" class="flex items-center space-x-3 px-3 py-2.5 rounded-lg text-slate-400 hover:bg-slate-800 hover:text-slate-200 font-medium text-sm transition-all">
+                    <i class="fa-solid fa-cash-register w-5 text-center"></i>
+                    <span>Sales & POS</span>
+                </a>
+                <a href="#" class="flex items-center space-x-3 px-3 py-2.5 rounded-lg text-slate-400 hover:bg-slate-800 hover:text-slate-200 font-medium text-sm transition-all">
+                    <i class="fa-solid fa-warehouse w-5 text-center"></i>
+                    <span>Inventory</span>
+                </a>
+                <a href="#" class="flex items-center space-x-3 px-3 py-2.5 rounded-lg text-slate-400 hover:bg-slate-800 hover:text-slate-200 font-medium text-sm transition-all">
+                    <i class="fa-solid fa-wallet w-5 text-center"></i>
+                    <span>Payments & COD</span>
+                    <span class="ml-auto bg-amber-500/20 text-amber-400 text-xs px-2 py-0.5 rounded-full font-bold">₱1.8k</span>
+                </a>
+                <a href="#" class="flex items-center space-x-3 px-3 py-2.5 rounded-lg text-slate-400 hover:bg-slate-800 hover:text-slate-200 font-medium text-sm transition-all">
+                    <i class="fa-solid fa-users w-5 text-center"></i>
+                    <span>Customers</span>
+                </a>
+                <a href="#" class="flex items-center space-x-3 px-3 py-2.5 rounded-lg text-slate-400 hover:bg-slate-800 hover:text-slate-200 font-medium text-sm transition-all">
+                    <i class="fa-solid fa-file-invoice-dollar w-5 text-center"></i>
+                    <span>Reports</span>
+                </a>
+            </nav>
+        </div>
+
+        <!-- Sidebar Footer -->
+        <div class="p-4 border-t border-slate-800 space-y-1">
+            <a href="#" class="flex items-center space-x-3 px-3 py-2 rounded-lg text-slate-400 hover:bg-slate-800 text-sm transition-all">
+                <i class="fa-solid fa-gear w-5 text-center"></i>
+                <span>Settings</span>
+            </a>
+            <div class="pt-2 flex items-center justify-between text-xs text-slate-500 px-3">
+                <span>Shop Admin: <b>Boss Manager</b></span>
+                <button onclick="showToast('Logged out successfully')" class="text-rose-400 hover:text-rose-300"><i class="fa-solid fa-right-from-bracket"></i></button>
+            </div>
+        </div>
+    </aside>
+
+    <!-- MAIN CONTENT AREA -->
+    <div class="flex-1 flex flex-col h-full overflow-hidden">
+        
+        <!-- HEADER -->
+        <header class="bg-white border-b border-slate-200 px-6 py-4 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 shrink-0 shadow-sm">
+            <div>
+                <div class="flex items-center space-x-2">
+                    <h2 class="text-2xl font-bold text-slate-900 tracking-tight">Bundle Sales Dashboard</h2>
+                    <span class="bg-emerald-100 text-emerald-800 text-xs font-semibold px-2.5 py-0.5 rounded-full border border-emerald-300">Phase B Live</span>
+                </div>
+                <p class="text-xs text-slate-500 font-medium mt-0.5">
+                    Monitor your ukay-ukay bundle sales performance • <span id="currentDate">October 14, 2026</span>
+                </p>
+            </div>
+
+            <!-- Quick Action Header Buttons -->
+            <div class="flex items-center space-x-3 w-full md:w-auto">
+                <button onclick="refreshData()" class="p-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-sm transition-all shadow-sm" title="Refresh Dashboard Data">
+                    <i class="fa-solid fa-arrows-rotate"></i>
+                </button>
+                <button onclick="openModal('createBundleModal')" class="flex-1 md:flex-initial bg-ukay-600 hover:bg-ukay-700 text-white font-semibold px-4 py-2.5 rounded-xl text-sm transition-all shadow-md shadow-ukay-600/30 flex items-center justify-center space-x-2">
+                    <i class="fa-solid fa-plus"></i>
+                    <span>Create New Bundle</span>
+                </button>
+            </div>
+        </header>
+
+        <!-- DASHBOARD CONTAINER (SCROLLABLE) -->
+        <main class="flex-1 overflow-y-auto p-4 md:p-6 space-y-6 custom-scrollbar">
+
+            <!-- ALERT BANNERS SECTION -->
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                <!-- Low Stock Alert Banner -->
+                <div class="bg-amber-50 border border-amber-300 rounded-2xl p-4 flex items-start space-x-3 shadow-sm">
+                    <div class="p-2 bg-amber-500 text-white rounded-xl text-lg shrink-0">
+                        <i class="fa-solid fa-triangle-exclamation"></i>
+                    </div>
+                    <div class="flex-1">
+                        <div class="flex items-center justify-between">
+                            <h3 class="font-bold text-amber-900 text-sm">Low Stock Alert! (80%+ Sold)</h3>
+                            <span class="text-xs font-semibold text-amber-700 bg-amber-200/80 px-2 py-0.5 rounded-md">Action Needed</span>
+                        </div>
+                        <p class="text-xs text-amber-800 mt-1">
+                            <b>2 bundles almost sold:</b> BUNDLE-003 Pants (2 pcs left) • BUNDLE-005 Jackets (1 pc left). Ready your next stock bundles!
+                        </p>
+                    </div>
+                </div>
+
+                <!-- Pending COD Collections Banner -->
+                <div class="bg-blue-50 border border-blue-300 rounded-2xl p-4 flex items-start space-x-3 shadow-sm">
+                    <div class="p-2 bg-blue-600 text-white rounded-xl text-lg shrink-0">
+                        <i class="fa-solid fa-truck-ramp-box"></i>
+                    </div>
+                    <div class="flex-1">
+                        <div class="flex items-center justify-between">
+                            <h3 class="font-bold text-blue-900 text-sm">Pending Payments / COD to Collect</h3>
+                            <button onclick="showToast('COD collection report downloaded')" class="text-xs font-semibold text-blue-700 hover:text-blue-900 underline">View List</button>
+                        </div>
+                        <p class="text-xs text-blue-800 mt-1">
+                            You have <b>₱1,800 pending COD collections</b> across 2 orders waiting to be remitted today.
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- TOP LEVEL: 4 KPI CARDS -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                
+                <!-- CARD 1: Total Sales Today -->
+                <div class="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm relative overflow-hidden group hover:shadow-md transition-all">
+                    <div class="flex items-center justify-between">
+                        <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">Total Sales Today</span>
+                        <div class="w-9 h-9 rounded-xl bg-emerald-100 text-emerald-600 flex items-center justify-center font-bold text-base">
+                            ₱
+                        </div>
+                    </div>
+                    <div class="mt-3 flex items-baseline justify-between">
+                        <h3 class="text-2xl font-extrabold text-slate-900 tracking-tight">₱8,450</h3>
+                        <span class="inline-flex items-center text-xs font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full">
+                            <i class="fa-solid fa-arrow-trend-up mr-1"></i> +12.5%
+                        </span>
+                    </div>
+                    <p class="text-[11px] text-slate-500 mt-1">vs ₱7,510 yesterday</p>
+                    <div class="absolute bottom-0 left-0 right-0 h-1 bg-emerald-500"></div>
+                </div>
+
+                <!-- CARD 2: Total Profit Today -->
+                <div class="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm relative overflow-hidden group hover:shadow-md transition-all">
+                    <div class="flex items-center justify-between">
+                        <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">Total Profit Today</span>
+                        <div class="w-9 h-9 rounded-xl bg-teal-100 text-teal-600 flex items-center justify-center font-bold text-base">
+                            <i class="fa-solid fa-chart-line"></i>
+                        </div>
+                    </div>
+                    <div class="mt-3 flex items-baseline justify-between">
+                        <h3 class="text-2xl font-extrabold text-slate-900 tracking-tight">₱2,100</h3>
+                        <span class="inline-flex items-center text-xs font-bold text-teal-700 bg-teal-100 px-2 py-0.5 rounded-full">
+                            <i class="fa-solid fa-arrow-trend-up mr-1"></i> Net Tubo
+                        </span>
+                    </div>
+                    <p class="text-[11px] text-slate-500 mt-1">Average Profit Margin: <b>24.8%</b></p>
+                    <div class="absolute bottom-0 left-0 right-0 h-1 bg-teal-500"></div>
+                </div>
+
+                <!-- CARD 3: Total Sold Today -->
+                <div class="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm relative overflow-hidden group hover:shadow-md transition-all">
+                    <div class="flex items-center justify-between">
+                        <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">Total Sold Today</span>
+                        <div class="w-9 h-9 rounded-xl bg-blue-100 text-blue-600 flex items-center justify-center font-bold text-base">
+                            <i class="fa-solid fa-shirt"></i>
+                        </div>
+                    </div>
+                    <div class="mt-3 flex items-baseline justify-between">
+                        <h3 class="text-2xl font-extrabold text-slate-900 tracking-tight">28 <span class="text-sm font-semibold text-slate-500">pcs</span></h3>
+                        <span class="inline-flex items-center text-xs font-bold text-blue-700 bg-blue-100 px-2 py-0.5 rounded-full">
+                            <i class="fa-solid fa-cart-shopping mr-1"></i> Per Piece
+                        </span>
+                    </div>
+                    <p class="text-[11px] text-slate-500 mt-1">Across 4 different active bundles</p>
+                    <div class="absolute bottom-0 left-0 right-0 h-1 bg-blue-500"></div>
+                </div>
+
+                <!-- CARD 4: Total Bundles Active -->
+                <div class="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm relative overflow-hidden group hover:shadow-md transition-all">
+                    <div class="flex items-center justify-between">
+                        <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">Active Bundles</span>
+                        <div class="w-9 h-9 rounded-xl bg-purple-100 text-purple-600 flex items-center justify-center font-bold text-base">
+                            <i class="fa-solid fa-layer-group"></i>
+                        </div>
+                    </div>
+                    <div class="mt-3 flex items-baseline justify-between">
+                        <h3 class="text-2xl font-extrabold text-slate-900 tracking-tight">6 <span class="text-sm font-semibold text-slate-500">Bundles</span></h3>
+                        <span class="inline-flex items-center text-xs font-bold text-purple-700 bg-purple-100 px-2 py-0.5 rounded-full">
+                            Open
+                        </span>
+                    </div>
+                    <div class="text-[11px] text-slate-500 mt-1 flex items-center space-x-2">
+                        <span class="text-emerald-600 font-semibold">4 Selling</span> •
+                        <span class="text-amber-600 font-semibold">2 Pending</span>
+                    </div>
+                    <div class="absolute bottom-0 left-0 right-0 h-1 bg-purple-500"></div>
+                </div>
+
+            </div>
+
+            <!-- 7-DAY SALES TREND CHART & TOP CATEGORY -->
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <!-- 7-Day Chart -->
+                <div class="lg:col-span-2 bg-white rounded-2xl p-5 border border-slate-200 shadow-sm flex flex-col justify-between">
+                    <div class="flex items-center justify-between mb-4">
+                        <div>
+                            <h3 class="font-bold text-slate-900 text-base">7-Day Sales Trend (₱)</h3>
+                            <p class="text-xs text-slate-500">Daily revenue tracking for ukay bundle items</p>
+                        </div>
+                        <div class="flex items-center space-x-1 bg-slate-100 p-1 rounded-lg text-xs font-medium text-slate-600">
+                            <span class="bg-white text-slate-900 shadow-sm px-2.5 py-1 rounded-md font-semibold">Past 7 Days</span>
+                        </div>
+                    </div>
+                    <div class="relative w-full h-64">
+                        <canvas id="salesTrendChart"></canvas>
+                    </div>
+                </div>
+
+                <!-- Top Category Card & Distribution -->
+                <div class="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm flex flex-col justify-between">
+                    <div>
+                        <div class="flex items-center justify-between mb-3">
+                            <h3 class="font-bold text-slate-900 text-base">Top Selling Category Today</h3>
+                            <span class="bg-amber-100 text-amber-800 text-xs px-2 py-0.5 rounded-full font-bold">#1 Best Seller</span>
+                        </div>
+
+                        <!-- Highlight Box -->
+                        <div class="bg-gradient-to-br from-ukay-900 to-emerald-950 text-white rounded-xl p-4 shadow-md mb-4 flex items-center justify-between">
+                            <div>
+                                <span class="text-xs uppercase text-ukay-300 font-semibold tracking-wider">Top Category</span>
+                                <h4 class="text-2xl font-extrabold text-white">Shirts & Tops</h4>
+                                <p class="text-xs text-emerald-200 mt-0.5">12 items sold today (40% of total revenue)</p>
+                            </div>
+                            <div class="w-12 h-12 rounded-full bg-white/10 flex items-center justify-center text-3xl text-emerald-400">
+                                <i class="fa-solid fa-shirt"></i>
+                            </div>
+                        </div>
+
+                        <h4 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Category Breakdown</h4>
+                        <div class="space-y-2 text-xs">
+                            <div>
+                                <div class="flex justify-between font-semibold text-slate-700 mb-1">
+                                    <span>Shirts & Tops</span>
+                                    <span>40% (₱3,380)</span>
+                                </div>
+                                <div class="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
+                                    <div class="bg-ukay-600 h-full rounded-full" style="width: 40%"></div>
+                                </div>
+                            </div>
+                            <div>
+                                <div class="flex justify-between font-semibold text-slate-700 mb-1">
+                                    <span>Denim & Pants</span>
+                                    <span>30% (₱2,535)</span>
+                                </div>
+                                <div class="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
+                                    <div class="bg-blue-600 h-full rounded-full" style="width: 30%"></div>
+                                </div>
+                            </div>
+                            <div>
+                                <div class="flex justify-between font-semibold text-slate-700 mb-1">
+                                    <span>Jackets & Hoodies</span>
+                                    <span>20% (₱1,690)</span>
+                                </div>
+                                <div class="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
+                                    <div class="bg-purple-600 h-full rounded-full" style="width: 20%"></div>
+                                </div>
+                            </div>
+                            <div>
+                                <div class="flex justify-between font-semibold text-slate-700 mb-1">
+                                    <span>Dresses & Skirts</span>
+                                    <span>10% (₱845)</span>
+                                </div>
+                                <div class="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
+                                    <div class="bg-amber-500 h-full rounded-full" style="width: 10%"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- SECOND LEVEL: ACTIVE BUNDLES MONITORING -->
+            <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                <div class="p-5 border-b border-slate-100 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                    <div>
+                        <h3 class="font-bold text-slate-900 text-lg">Active Bundles Monitoring</h3>
+                        <p class="text-xs text-slate-500">Live piece-by-piece inventory progress per ukay bundle</p>
+                    </div>
+                    <div class="flex items-center space-x-2 w-full sm:w-auto">
+                        <input type="text" id="searchBundleInput" onkeyup="filterBundles()" placeholder="Search bundle name or ID..." class="px-3 py-1.5 border border-slate-200 rounded-xl text-xs w-full sm:w-60 focus:outline-none focus:border-ukay-500">
+                        <button class="bg-slate-100 text-slate-700 px-3 py-1.5 rounded-xl text-xs font-semibold hover:bg-slate-200">
+                            <i class="fa-solid fa-filter mr-1"></i> Filter
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Active Bundles List Grid / Cards -->
+                <div class="p-5 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4" id="bundleCardsContainer">
+
+                    <!-- BUNDLE CARD 1 -->
+                    <div class="bundle-card border border-slate-200 rounded-xl p-4 bg-slate-50/50 hover:bg-white hover:shadow-md transition-all">
+                        <div class="flex items-start justify-between">
+                            <div>
+                                <span class="text-[10px] font-bold text-ukay-700 bg-ukay-100 px-2 py-0.5 rounded-full uppercase tracking-wider">BUNDLE-001</span>
+                                <h4 class="font-bold text-slate-900 text-base mt-1">Shirts Capital</h4>
+                                <span class="text-xs text-slate-500 font-medium">Category: Apparel</span>
+                            </div>
+                            <div class="text-right">
+                                <span class="text-lg font-extrabold text-slate-900">₱800</span>
+                                <p class="text-[10px] text-slate-500">per piece price avg</p>
+                            </div>
+                        </div>
+
+                        <!-- Stats pills -->
+                        <div class="grid grid-cols-3 gap-2 my-3 text-center">
+                            <div class="bg-emerald-50 border border-emerald-200 rounded-lg p-1.5">
+                                <span class="block text-xs font-bold text-emerald-800">10 Sold</span>
+                                <span class="text-[10px] text-emerald-600">66.6%</span>
+                            </div>
+                            <div class="bg-amber-50 border border-amber-200 rounded-lg p-1.5">
+                                <span class="block text-xs font-bold text-amber-800">3 Avail</span>
+                                <span class="text-[10px] text-amber-600">In Stock</span>
+                            </div>
+                            <div class="bg-slate-100 border border-slate-200 rounded-lg p-1.5">
+                                <span class="block text-xs font-bold text-slate-700">2 Pend</span>
+                                <span class="text-[10px] text-slate-500">Reserved</span>
+                            </div>
+                        </div>
+
+                        <!-- Progress bar -->
+                        <div class="space-y-1">
+                            <div class="flex justify-between text-xs font-bold">
+                                <span class="text-slate-600">Sales Progress</span>
+                                <span class="text-ukay-700">66% (10/15 pcs)</span>
+                            </div>
+                            <div class="w-full bg-slate-200 h-2.5 rounded-full overflow-hidden">
+                                <div class="bg-ukay-600 h-full rounded-full transition-all duration-500" style="width: 66%"></div>
+                            </div>
+                        </div>
+
+                        <!-- Action Buttons -->
+                        <div class="mt-4 pt-3 border-t border-slate-200/80 flex items-center justify-between text-xs">
+                            <button onclick="showToast('Loading items for BUNDLE-001...')" class="font-semibold text-ukay-700 hover:text-ukay-900 flex items-center space-x-1">
+                                <i class="fa-solid fa-eye"></i>
+                                <span>View Items</span>
+                            </button>
+                            <button onclick="showToast('Printing barcode stickers...')" class="font-semibold text-slate-600 hover:text-slate-900 flex items-center space-x-1">
+                                <i class="fa-solid fa-barcode"></i>
+                                <span>Print Barcodes</span>
+                            </button>
+                            <button onclick="showToast('Editing Bundle details')" class="font-semibold text-slate-500 hover:text-slate-800">
+                                <i class="fa-solid fa-pen-to-square"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- BUNDLE CARD 2 -->
+                    <div class="bundle-card border border-slate-200 rounded-xl p-4 bg-slate-50/50 hover:bg-white hover:shadow-md transition-all">
+                        <div class="flex items-start justify-between">
+                            <div>
+                                <span class="text-[10px] font-bold text-blue-700 bg-blue-100 px-2 py-0.5 rounded-full uppercase tracking-wider">BUNDLE-002</span>
+                                <h4 class="font-bold text-slate-900 text-base mt-1">Vintage Denim Jeans</h4>
+                                <span class="text-xs text-slate-500 font-medium">Category: Denim</span>
+                            </div>
+                            <div class="text-right">
+                                <span class="text-lg font-extrabold text-slate-900">₱1,200</span>
+                                <p class="text-[10px] text-slate-500">per piece price avg</p>
+                            </div>
+                        </div>
+
+                        <!-- Stats pills -->
+                        <div class="grid grid-cols-3 gap-2 my-3 text-center">
+                            <div class="bg-emerald-50 border border-emerald-200 rounded-lg p-1.5">
+                                <span class="block text-xs font-bold text-emerald-800">12 Sold</span>
+                                <span class="text-[10px] text-emerald-600">60%</span>
+                            </div>
+                            <div class="bg-amber-50 border border-amber-200 rounded-lg p-1.5">
+                                <span class="block text-xs font-bold text-amber-800">8 Avail</span>
+                                <span class="text-[10px] text-amber-600">In Stock</span>
+                            </div>
+                            <div class="bg-slate-100 border border-slate-200 rounded-lg p-1.5">
+                                <span class="block text-xs font-bold text-slate-700">0 Pend</span>
+                                <span class="text-[10px] text-slate-500">Reserved</span>
+                            </div>
+                        </div>
+
+                        <!-- Progress bar -->
+                        <div class="space-y-1">
+                            <div class="flex justify-between text-xs font-bold">
+                                <span class="text-slate-600">Sales Progress</span>
+                                <span class="text-blue-700">60% (12/20 pcs)</span>
+                            </div>
+                            <div class="w-full bg-slate-200 h-2.5 rounded-full overflow-hidden">
+                                <div class="bg-blue-600 h-full rounded-full transition-all duration-500" style="width: 60%"></div>
+                            </div>
+                        </div>
+
+                        <!-- Action Buttons -->
+                        <div class="mt-4 pt-3 border-t border-slate-200/80 flex items-center justify-between text-xs">
+                            <button onclick="showToast('Loading items for BUNDLE-002...')" class="font-semibold text-blue-700 hover:text-blue-900 flex items-center space-x-1">
+                                <i class="fa-solid fa-eye"></i>
+                                <span>View Items</span>
+                            </button>
+                            <button onclick="showToast('Printing barcode stickers...')" class="font-semibold text-slate-600 hover:text-slate-900 flex items-center space-x-1">
+                                <i class="fa-solid fa-barcode"></i>
+                                <span>Print Barcodes</span>
+                            </button>
+                            <button onclick="showToast('Editing Bundle details')" class="font-semibold text-slate-500 hover:text-slate-800">
+                                <i class="fa-solid fa-pen-to-square"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- BUNDLE CARD 3 (Low Stock Alert Card) -->
+                    <div class="bundle-card border border-rose-300 rounded-xl p-4 bg-rose-50/30 hover:bg-white hover:shadow-md transition-all relative">
+                        <span class="absolute top-2 right-2 bg-rose-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full animate-pulse">ALMOST SOLD</span>
+                        <div class="flex items-start justify-between">
+                            <div>
+                                <span class="text-[10px] font-bold text-rose-700 bg-rose-100 px-2 py-0.5 rounded-full uppercase tracking-wider">BUNDLE-003</span>
+                                <h4 class="font-bold text-slate-900 text-base mt-1">Korean Pants Mix</h4>
+                                <span class="text-xs text-slate-500 font-medium">Category: Bottoms</span>
+                            </div>
+                            <div class="text-right">
+                                <span class="text-lg font-extrabold text-slate-900">₱650</span>
+                            </div>
+                        </div>
+
+                        <!-- Stats pills -->
+                        <div class="grid grid-cols-3 gap-2 my-3 text-center">
+                            <div class="bg-emerald-50 border border-emerald-200 rounded-lg p-1.5">
+                                <span class="block text-xs font-bold text-emerald-800">18 Sold</span>
+                                <span class="text-[10px] text-emerald-600">90%</span>
+                            </div>
+                            <div class="bg-rose-100 border border-rose-300 rounded-lg p-1.5">
+                                <span class="block text-xs font-bold text-rose-800">2 Avail</span>
+                                <span class="text-[10px] text-rose-600">Low Stock</span>
+                            </div>
+                            <div class="bg-slate-100 border border-slate-200 rounded-lg p-1.5">
+                                <span class="block text-xs font-bold text-slate-700">0 Pend</span>
+                                <span class="text-[10px] text-slate-500">Reserved</span>
+                            </div>
+                        </div>
+
+                        <!-- Progress bar -->
+                        <div class="space-y-1">
+                            <div class="flex justify-between text-xs font-bold">
+                                <span class="text-slate-600">Sales Progress</span>
+                                <span class="text-rose-700 font-extrabold">90% (18/20 pcs)</span>
+                            </div>
+                            <div class="w-full bg-slate-200 h-2.5 rounded-full overflow-hidden">
+                                <div class="bg-rose-600 h-full rounded-full transition-all duration-500" style="width: 90%"></div>
+                            </div>
+                        </div>
+
+                        <!-- Action Buttons -->
+                        <div class="mt-4 pt-3 border-t border-slate-200/80 flex items-center justify-between text-xs">
+                            <button onclick="showToast('Loading items for BUNDLE-003...')" class="font-semibold text-rose-700 hover:text-rose-900 flex items-center space-x-1">
+                                <i class="fa-solid fa-eye"></i>
+                                <span>View Items</span>
+                            </button>
+                            <button onclick="showToast('Printing barcode stickers...')" class="font-semibold text-slate-600 hover:text-slate-900 flex items-center space-x-1">
+                                <i class="fa-solid fa-barcode"></i>
+                                <span>Print Barcodes</span>
+                            </button>
+                            <button onclick="showToast('Editing Bundle details')" class="font-semibold text-slate-500 hover:text-slate-800">
+                                <i class="fa-solid fa-pen-to-square"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+
+            <!-- THIRD LEVEL: SALES BREAKDOWN & RECENT ACTIVITY FEED -->
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+                <!-- PAYMENT METHOD SALES BREAKDOWN -->
+                <div class="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm flex flex-col justify-between">
+                    <div>
+                        <div class="flex items-center justify-between border-b border-slate-100 pb-3 mb-4">
+                            <div>
+                                <h3 class="font-bold text-slate-900 text-base">Payment Method Breakdown</h3>
+                                <p class="text-xs text-slate-500">Benta per payment type today</p>
+                            </div>
+                            <span class="p-2 bg-slate-100 rounded-lg text-slate-600 text-xs font-bold">Today</span>
+                        </div>
+
+                        <!-- Method Breakdown List -->
+                        <div class="space-y-3">
+                            <div class="flex items-center justify-between p-3 rounded-xl bg-slate-50 border border-slate-100">
+                                <div class="flex items-center space-x-3">
+                                    <div class="w-9 h-9 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold">
+                                        <i class="fa-solid fa-money-bill-wave"></i>
+                                    </div>
+                                    <div>
+                                        <h4 class="font-bold text-slate-800 text-sm">Walk-in Cash</h4>
+                                        <span class="text-[11px] text-slate-500">Direct register cash</span>
+                                    </div>
+                                </div>
+                                <span class="font-extrabold text-slate-900 text-base">₱3,200</span>
+                            </div>
+
+                            <div class="flex items-center justify-between p-3 rounded-xl bg-slate-50 border border-slate-100">
+                                <div class="flex items-center space-x-3">
+                                    <div class="w-9 h-9 rounded-lg bg-blue-100 text-blue-700 flex items-center justify-center font-bold">
+                                        <i class="fa-solid fa-mobile-screen-button"></i>
+                                    </div>
+                                    <div>
+                                        <h4 class="font-bold text-slate-800 text-sm">GCASH Digital</h4>
+                                        <span class="text-[11px] text-slate-500">QR / Transfer verified</span>
+                                    </div>
+                                </div>
+                                <span class="font-extrabold text-slate-900 text-base">₱3,000</span>
+                            </div>
+
+                            <div class="flex items-center justify-between p-3 rounded-xl bg-slate-50 border border-slate-100">
+                                <div class="flex items-center space-x-3">
+                                    <div class="w-9 h-9 rounded-lg bg-amber-100 text-amber-700 flex items-center justify-center font-bold">
+                                        <i class="fa-solid fa-truck"></i>
+                                    </div>
+                                    <div>
+                                        <h4 class="font-bold text-slate-800 text-sm">Cash On Delivery (COD)</h4>
+                                        <span class="text-[11px] text-slate-500">Pending & Collected</span>
+                                    </div>
+                                </div>
+                                <span class="font-extrabold text-slate-900 text-base">₱1,800</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Financial Summary Card -->
+                    <div class="mt-5 p-4 rounded-xl bg-slate-900 text-white space-y-2">
+                        <div class="flex justify-between text-xs text-slate-400">
+                            <span>Total Gross Sales</span>
+                            <span class="text-white font-bold">₱8,000</span>
+                        </div>
+                        <div class="flex justify-between text-xs text-slate-400">
+                            <span>Total Net Profit</span>
+                            <span class="text-emerald-400 font-bold">₱1,700</span>
+                        </div>
+                        <div class="pt-2 border-t border-slate-800 flex justify-between items-center">
+                            <span class="text-xs font-semibold text-slate-300">Profit Margin Rate</span>
+                            <span class="text-sm font-extrabold bg-emerald-500/20 text-emerald-300 px-2.5 py-0.5 rounded-full">21.25%</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- LIVE RECENT SALES ACTIVITY FEED -->
+                <div class="lg:col-span-2 bg-white rounded-2xl p-5 border border-slate-200 shadow-sm flex flex-col justify-between">
+                    <div>
+                        <div class="flex items-center justify-between border-b border-slate-100 pb-3 mb-4">
+                            <div>
+                                <h3 class="font-bold text-slate-900 text-base">Recent Sales Activity Feed</h3>
+                                <p class="text-xs text-slate-500">Real-time live monitoring of ukay transactions</p>
+                            </div>
+                            <span class="flex items-center text-xs font-bold text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200">
+                                <span class="w-2 h-2 rounded-full bg-emerald-500 animate-ping mr-1.5"></span> Live Feed
+                            </span>
+                        </div>
+
+                        <!-- Activity List -->
+                        <div class="space-y-3" id="activityFeed">
+
+                            <div class="flex items-center justify-between p-3 rounded-xl border border-slate-100 hover:bg-slate-50 transition-all">
+                                <div class="flex items-center space-x-3">
+                                    <span class="text-xs font-mono font-bold text-slate-400 bg-slate-100 px-2 py-1 rounded">14:32</span>
+                                    <div>
+                                        <h4 class="font-bold text-slate-800 text-sm">Shirts Capital Bundle x2 pcs</h4>
+                                        <p class="text-xs text-slate-500">Customer: Ate Marites • Cashier: Boss Manager</p>
+                                    </div>
+                                </div>
+                                <div class="text-right">
+                                    <span class="font-extrabold text-emerald-600 text-sm">+₱1,600</span>
+                                    <span class="block text-[10px] font-semibold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded">GCASH</span>
+                                </div>
+                            </div>
+
+                            <div class="flex items-center justify-between p-3 rounded-xl border border-slate-100 hover:bg-slate-50 transition-all">
+                                <div class="flex items-center space-x-3">
+                                    <span class="text-xs font-mono font-bold text-slate-400 bg-slate-100 px-2 py-1 rounded">14:15</span>
+                                    <div>
+                                        <h4 class="font-bold text-slate-800 text-sm">Vintage Denim Jeans x1 pc</h4>
+                                        <p class="text-xs text-slate-500">Customer: Walk-in Client</p>
+                                    </div>
+                                </div>
+                                <div class="text-right">
+                                    <span class="font-extrabold text-emerald-600 text-sm">+₱1,200</span>
+                                    <span class="block text-[10px] font-semibold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded">Cash</span>
+                                </div>
+                            </div>
+
+                            <div class="flex items-center justify-between p-3 rounded-xl border border-slate-100 hover:bg-slate-50 transition-all">
+                                <div class="flex items-center space-x-3">
+                                    <span class="text-xs font-mono font-bold text-slate-400 bg-slate-100 px-2 py-1 rounded">13:48</span>
+                                    <div>
+                                        <h4 class="font-bold text-slate-800 text-sm">Korean Pants Mix x3 pcs (COD Order)</h4>
+                                        <p class="text-xs text-slate-500">Rider dispatch • Tracking #UKAY-8821</p>
+                                    </div>
+                                </div>
+                                <div class="text-right">
+                                    <span class="font-extrabold text-amber-600 text-sm">₱1,950</span>
+                                    <span class="block text-[10px] font-semibold text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded">COD Pending</span>
+                                </div>
+                            </div>
+
+                            <div class="flex items-center justify-between p-3 rounded-xl border border-slate-100 hover:bg-slate-50 transition-all">
+                                <div class="flex items-center space-x-3">
+                                    <span class="text-xs font-mono font-bold text-slate-400 bg-slate-100 px-2 py-1 rounded">12:10</span>
+                                    <div>
+                                        <h4 class="font-bold text-slate-800 text-sm">Windbreaker Hoodies x1 pc</h4>
+                                        <p class="text-xs text-slate-500">Customer: Online Reservation</p>
+                                    </div>
+                                </div>
+                                <div class="text-right">
+                                    <span class="font-extrabold text-emerald-600 text-sm">+₱850</span>
+                                    <span class="block text-[10px] font-semibold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded">GCASH</span>
+                                </div>
+                            </div>
+
+                        </div>
+                    </div>
+
+                    <div class="pt-3 border-t border-slate-100 text-center">
+                        <button onclick="addSimulatedSale()" class="text-xs font-bold text-ukay-700 hover:text-ukay-900 bg-ukay-50 hover:bg-ukay-100 px-4 py-2 rounded-xl transition-all w-full">
+                            + Simulate New Sale Transaction
+                        </button>
+                    </div>
+                </div>
+
+            </div>
+
+        </main>
+    </div>
+
+    <!-- CREATE NEW BUNDLE MODAL -->
+    <div id="createBundleModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm hidden items-center justify-center p-4 z-50">
+        <div class="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-200">
+            <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+                <h3 class="text-lg font-bold text-slate-900">Create New Ukay Bundle</h3>
+                <button onclick="closeModal('createBundleModal')" class="text-slate-400 hover:text-slate-600 p-1">
+                    <i class="fa-solid fa-xmark text-lg"></i>
+                </button>
+            </div>
+
+            <form onsubmit="handleCreateBundle(event)" class="space-y-4 mt-4">
+                <div>
+                    <label class="block text-xs font-bold text-slate-700 mb-1">Bundle ID & Name</label>
+                    <input type="text" required placeholder="ex. BUNDLE-007 Unisex Hoodies" class="w-full px-3 py-2 border border-slate-300 rounded-xl text-sm focus:outline-none focus:border-ukay-500">
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs font-bold text-slate-700 mb-1">Category</label>
+                        <select class="w-full px-3 py-2 border border-slate-300 rounded-xl text-sm focus:outline-none focus:border-ukay-500">
+                            <option>Apparel / Tops</option>
+                            <option>Denim & Bottoms</option>
+                            <option>Jackets & Outerwear</option>
+                            <option>Dresses & Skirts</option>
+                            <option>Accessories / Bags</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-700 mb-1">Total Quantity (pcs)</label>
+                        <input type="number" required min="1" placeholder="15" class="w-full px-3 py-2 border border-slate-300 rounded-xl text-sm focus:outline-none focus:border-ukay-500">
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs font-bold text-slate-700 mb-1">Price per Bundle (₱)</label>
+                        <input type="number" required placeholder="800" class="w-full px-3 py-2 border border-slate-300 rounded-xl text-sm focus:outline-none focus:border-ukay-500">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-700 mb-1">Target Capital Cost (₱)</label>
+                        <input type="number" required placeholder="500" class="w-full px-3 py-2 border border-slate-300 rounded-xl text-sm focus:outline-none focus:border-ukay-500">
+                    </div>
+                </div>
+
+                <div class="pt-4 flex justify-end space-x-3 border-t border-slate-100">
+                    <button type="button" onclick="closeModal('createBundleModal')" class="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200">
+                        Cancel
+                    </button>
+                    <button type="submit" class="px-5 py-2 rounded-xl text-xs font-bold text-white bg-ukay-600 hover:bg-ukay-700 shadow-md">
+                        Save Bundle
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- TOAST NOTIFICATION CONTAINER -->
+    <div id="toast" class="fixed bottom-5 right-5 bg-slate-900 text-white px-4 py-3 rounded-xl shadow-2xl flex items-center space-x-3 translate-y-20 opacity-0 transition-all duration-300 z-50 pointer-events-none">
+        <i class="fa-solid fa-circle-check text-ukay-400"></i>
+        <span id="toastMsg" class="text-xs font-semibold">Action completed successfully!</span>
+    </div>
+
+    <script>
+        // Chart.js 7-Day Sales Trend Implementation
+        document.addEventListener('DOMContentLoaded', function () {
+            const ctx = document.getElementById('salesTrendChart').getContext('2d');
+            
+            // Gradient fill for chart
+            const gradient = ctx.createLinearGradient(0, 0, 0, 250);
+            gradient.addColorStop(0, 'rgba(22, 163, 74, 0.35)');
+            gradient.addColorStop(1, 'rgba(22, 163, 74, 0.0)');
+
+            new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: ['Oct 8', 'Oct 9', 'Oct 10', 'Oct 11', 'Oct 12', 'Oct 13', 'Oct 14 Today'],
+                    datasets: [{
+                        label: 'Sales Revenue (₱)',
+                        data: [4200, 5800, 6100, 7500, 6900, 7510, 8450],
+                        borderColor: '#16a34a',
+                        borderWidth: 3,
+                        backgroundColor: gradient,
+                        fill: true,
+                        tension: 0.3,
+                        pointBackgroundColor: '#16a34a',
+                        pointRadius: 5,
+                        pointHoverRadius: 7
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return ' Revenue: ₱' + context.parsed.y.toLocaleString();
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            grid: { borderDash: [4, 4], color: '#f1f5f9' },
+                            ticks: {
+                                callback: function(value) { return '₱' + value; },
+                                font: { size: 11 }
+                            }
+                        },
+                        x: {
+                            grid: { display: false },
+                            ticks: { font: { size: 11 } }
+                        }
+                    }
+                }
+            });
+        });
+
+        // Toast Helper
+        function showToast(msg) {
+            const toast = document.getElementById('toast');
+            const toastMsg = document.getElementById('toastMsg');
+            toastMsg.innerText = msg;
+            toast.classList.remove('translate-y-20', 'opacity-0');
+            
+            setTimeout(() => {
+                toast.classList.add('translate-y-20', 'opacity-0');
+            }, 3000);
+        }
+
+        // Modal Controls
+        function openModal(id) {
+            document.getElementById(id).classList.remove('hidden');
+            document.getElementById(id).classList.add('flex');
+        }
+
+        function closeModal(id) {
+            document.getElementById(id).classList.add('hidden');
+            document.getElementById(id).classList.remove('flex');
+        }
+
+        // Handle Create Bundle Form
+        function handleCreateBundle(event) {
+            event.preventDefault();
+            closeModal('createBundleModal');
+            showToast('New Bundle created and added to active inventory!');
+        }
+
+        // Live Simulation of new sales
+        function addSimulatedSale() {
+            const activityFeed = document.getElementById('activityFeed');
+            const now = new Date();
+            const timeStr = now.getHours().toString().padStart(2, '0') + ':' + now.getMinutes().toString().padStart(2, '0');
+            
+            const newRow = document.createElement('div');
+            newRow.className = 'flex items-center justify-between p-3 rounded-xl border border-emerald-200 bg-emerald-50/50 transition-all';
+            newRow.innerHTML = `
+                <div class="flex items-center space-x-3">
+                    <span class="text-xs font-mono font-bold text-emerald-700 bg-emerald-100 px-2 py-1 rounded">${timeStr}</span>
+                    <div>
+                        <h4 class="font-bold text-slate-800 text-sm">Shirts Capital Bundle x1 pc</h4>
+                        <p class="text-xs text-slate-500">Customer: Live Walk-in</p>
+                    </div>
+                </div>
+                <div class="text-right">
+                    <span class="font-extrabold text-emerald-600 text-sm">+₱800</span>
+                    <span class="block text-[10px] font-semibold text-emerald-700 bg-emerald-100 px-1.5 py-0.5 rounded">Cash</span>
+                </div>
+            `;
+            
+            activityFeed.insertBefore(newRow, activityFeed.firstChild);
+            showToast('Simulated sale added! Total Sales Updated.');
+        }
+
+        // Simple Search Filter
+        function filterBundles() {
+            const query = document.getElementById('searchBundleInput').value.toLowerCase();
+            const cards = document.querySelectorAll('.bundle-card');
+            
+            cards.forEach(card => {
+                const text = card.innerText.toLowerCase();
+                if (text.includes(query)) {
+                    card.style.display = 'block';
+                } else {
+                    card.style.display = 'none';
+                }
+            });
+        }
+
+        function refreshData() {
+            showToast('Dashboard sales data synced with server!');
+        }
+    </script>
+</body>
+</html>

@@ -3,7 +3,7 @@
 declare(strict_types=1);
 
 /**
- * Read-only migration-016 structural gate. No bootstrap, writes, cache or repair.
+ * Read-only migration-016/020 structural gate. No bootstrap, writes, cache or repair.
  * A ready result is NOT verification of data, persistent DDL/trigger execution,
  * deployment safety or concurrent actions. Run separately approved rollout checks.
  * Only the inspected MySQL 8.4 / MariaDB 11.4 metadata dialects are supported.
@@ -329,7 +329,7 @@ function delivery_schema_evaluate(array $metadata): array
     $newShipment = substr($oldShipment, 0, -1) . ",'DELIVERY_ATTEMPT_FAILED','RETURN_TO_SELLER','RETURNED_TO_SHOP')";
     $oldNotification = "enum('ORDER_SHIPPED','ORDER_DELIVERED','PICKUP_READY','PICKUP_HANDED_OVER','ORDER_CANCELLED')";
     $newNotification = substr($oldNotification, 0, -1)
-        . ",'OUT_FOR_DELIVERY','DELIVERY_ATTEMPT_FAILED','RETURN_TO_SELLER','RETURNED_TO_SHOP','DELIVERY_CYCLE_AUTHORIZED')";
+        . ",'OUT_FOR_DELIVERY','DELIVERY_ATTEMPT_FAILED','RETURN_TO_SELLER','RETURNED_TO_SHOP','DELIVERY_CYCLE_AUTHORIZED','ORDER_CONFIRMED','ORDER_PACKED','IN_TRANSIT')";
     $type = static function ($value): ?array {
         if (!is_string($value)) return null;
         return delivery_schema_tokens(preg_replace('/\b(tinyint|int|bigint)\s*\([0-9]+\)/i', '$1', $value));
@@ -380,7 +380,7 @@ function delivery_schema_evaluate(array $metadata): array
         $spec['delivery_events'] = [
             'id' => ['bigint unsigned', 'NO', null, 'auto_increment'], 'order_id' => $uint,
             'delivery_cycle' => $uint, 'delivery_revision' => $uint,
-            'event_type' => ["enum('OUT_FOR_DELIVERY','DELIVERY_ATTEMPT_FAILED','RETURN_TO_SELLER','RETURNED_TO_SHOP','RETURN_INSPECTED','DELIVERY_CYCLE_AUTHORIZED','DELIVERED')", 'NO', null, ''],
+            'event_type' => ["enum('OUT_FOR_DELIVERY','DELIVERY_ATTEMPT_FAILED','RETURN_TO_SELLER','RETURNED_TO_SHOP','RETURN_INSPECTED','DELIVERY_CYCLE_AUTHORIZED','DELIVERED','IN_TRANSIT')", 'NO', null, ''],
             'admin_id' => $uint, 'attempt_number' => ['tinyint unsigned', 'YES', null, ''],
             'reason' => ['varchar(255)', 'YES', null, ''],
             'previous_state' => ['varchar(32)', 'NO', null, ''], 'resulting_state' => ['varchar(32)', 'NO', null, ''],

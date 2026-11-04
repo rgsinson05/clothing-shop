@@ -62,14 +62,17 @@ function sourceCode(string $path): string
 try {
     echo "== Pure event, message, destination and presentation (no DB) ==\n";
     foreach ([
-        'ORDER_SHIPPED' => true, 'ORDER_DELIVERED' => true, 'PICKUP_READY' => true,
+        'ORDER_CONFIRMED' => true, 'ORDER_PACKED' => true, 'ORDER_SHIPPED' => true,
+        'IN_TRANSIT' => true, 'ORDER_DELIVERED' => true, 'PICKUP_READY' => true,
         'PICKUP_HANDED_OVER' => true, 'ORDER_CANCELLED' => true, 'DELIVERY_CYCLE_AUTHORIZED' => false,
         'BOGUS' => false, '' => false,
     ] as $event => $supported) {
         assertEq("event {$event} supported = " . var_export($supported, true), customer_notifications_is_supported_event($event), $supported);
     }
-    assertEq('nine supported event labels excluding removed redelivery authorization', count(customer_notifications_event_labels()), 9);
+    assertEq('twelve supported event labels excluding removed redelivery authorization', count(customer_notifications_event_labels()), 12);
 
+    assertEq('confirmed', customer_notifications_message('ORDER_CONFIRMED', 121), 'Your order #121 has been confirmed! We\'re now preparing your order for shipment. Please note that cancellation is no longer available once your order has been confirmed.');
+    assertEq('packed', customer_notifications_message('ORDER_PACKED', 122), 'Good news! Your order #122 has been packed and is ready for shipment. We\'ll notify you as soon as it starts moving toward your location.');
     assertEq('shipped with tracking', customer_notifications_message('ORDER_SHIPPED', 123, 'JTX1'), 'Your order #123 has been shipped. Your tracking number is JTX1.');
     assertEq('shipped without tracking', customer_notifications_message('ORDER_SHIPPED', 123, null), 'Your order #123 has been shipped.');
     assertEq('shipped blank tracking', customer_notifications_message('ORDER_SHIPPED', 123, '   '), 'Your order #123 has been shipped.');
@@ -77,6 +80,8 @@ try {
     assertEq('pickup ready', customer_notifications_message('PICKUP_READY', 125), 'Your order #125 is ready for pickup at the store.');
     assertEq('pickup handed over', customer_notifications_message('PICKUP_HANDED_OVER', 125), 'Your pickup order #125 has been handed over to you.');
     assertEq('cancelled', customer_notifications_message('ORDER_CANCELLED', 126), 'Your order #126 has been cancelled.');
+    assertEq('in transit', customer_notifications_message('IN_TRANSIT', 127), 'Your order #127 is now in transit and moving through the courier\'s delivery network. It\'s getting closer to you! We\'ll notify you once it\'s out for delivery.');
+    assertEq('out for delivery', customer_notifications_message('OUT_FOR_DELIVERY', 128), 'Your order #128 is out for delivery and on its way to you! Once you receive your parcel, please tap Order Received on your order page to confirm its successful delivery.');
 
     assertEq('destination is the customer order detail page', customer_notifications_destination(123), 'order-detail.php?id=123');
     assertEq('destination clamps non-positive id', customer_notifications_destination(-5), 'order-detail.php?id=1');
@@ -103,6 +108,7 @@ try {
     $helper = sourceCode('includes/customer_notifications.php');
     $api = sourceCode('customer/api/notifications.php');
     $orderView = sourceCode('admin/order-view.php');
+    $cancelRequest = sourceCode('customer/order-cancel-request.php');
     $pickup = sourceCode('includes/pickup.php');
     $orderCancel = sourceCode('includes/order_cancel.php');
     $payment = sourceCode('includes/payment.php');
@@ -121,6 +127,11 @@ try {
     foreach (["'ORDER_SHIPPED'", "'ORDER_DELIVERED'", "'ORDER_CANCELLED'", 'order_cancel_pending_locked($pdo, $lockedOrder)'] as $needle) {
         assertEq('order-view advance/cancel wiring contains ' . $needle, strpos($orderView, $needle) !== false, true);
     }
+    foreach (["'ORDER_CONFIRMED'", "'ORDER_PACKED'"] as $needle) {
+        assertEq('order-view Local Courier timeline wiring contains ' . $needle, strpos($orderView, $needle) !== false, true);
+    }
+    assertEq('customer cancellation request remains server-limited to PENDING orders',
+        substr_count($cancelRequest, "status = 'PENDING'") >= 1 && strpos($cancelRequest, "\$lockedOrder['status'] !== 'PENDING'") !== false, true);
     assertEq('order-view notifications are created inside the action transaction before the single commit', strpos($orderView, 'customer_notifications_create(') < strpos($orderView, '$pdo->commit();'), true);
     $readBoundary = strpos($orderView, '$order = false;');
     assertEq('order-view read-only refresh is outside the status/approve path', $readBoundary !== false, true);

@@ -2,11 +2,71 @@
     'use strict';
 
     var sdkReady;
+    var requiredCameraLabel = 'HP HD Camera';
 
     function canceled() {
         var error = new Error('Camera start canceled.');
         error.name = 'AbortError';
         return error;
+    }
+
+    function requiredCameraUnavailable(message) {
+        var error = new Error(message);
+        error.name = 'RequiredCameraUnavailableError';
+        return error;
+    }
+
+    function stopStream(stream) {
+        if (!stream || typeof stream.getTracks !== 'function') { return; }
+        stream.getTracks().forEach(function (track) { track.stop(); });
+    }
+
+    function normalizeCameraLabel(label) {
+        return String(label || '').trim().toLowerCase().replace(/\s+/g, ' ');
+    }
+
+    function isRequiredCamera(device) {
+        var label = normalizeCameraLabel(device && device.label);
+        var required = normalizeCameraLabel(requiredCameraLabel);
+        return label === required || label.indexOf(required + ' (') === 0;
+    }
+
+    async function enumerateVideoInputs() {
+        var devices = await global.navigator.mediaDevices.enumerateDevices();
+        return devices.filter(function (device) { return device.kind === 'videoinput'; });
+    }
+
+    async function findRequiredCamera() {
+        var cameras = await enumerateVideoInputs();
+        var camera = cameras.find(isRequiredCamera);
+        if (camera) { return camera; }
+
+        // Device labels may be hidden until this origin has opened a camera once.
+        // The temporary stream is always released before Dynamsoft is initialized.
+        var labelsHidden = cameras.length === 0 || cameras.some(function (device) { return !device.label; });
+        if (labelsHidden) {
+            var permissionStream = null;
+            try {
+                permissionStream = await global.navigator.mediaDevices.getUserMedia({ audio: false, video: true });
+            } finally {
+                stopStream(permissionStream);
+            }
+            cameras = await enumerateVideoInputs();
+            camera = cameras.find(isRequiredCamera);
+            if (camera) { return camera; }
+        }
+
+        throw requiredCameraUnavailable(
+            'HP HD Camera is unavailable. DroidCam Video was not selected; connect or enable the HP camera and try again.'
+        );
+    }
+
+    async function isRequiredCameraActive(cameraSettings) {
+        if (!cameraSettings || !cameraSettings.deviceId) { return false; }
+        var cameras = await enumerateVideoInputs();
+        return cameras.some(function (camera) {
+            return camera.deviceId === cameraSettings.deviceId && isRequiredCamera(camera);
+        });
     }
 
     function ensureSdk() {
@@ -39,12 +99,17 @@
     }
 
     Scanner.prototype.start = async function (_camera, _options, onDecode) {
-        if (this.starting || this.running) { return; }
+        if (this.starting) { return; }
         if (!this.container) { throw new Error('Scanner preview is unavailable.'); }
+
+        // Release any stream owned by this scanner before selecting a new one.
+        if (this.running || this.router || this.enhancer || this.view) { await this.stop(); }
 
         var generation = ++this.generation;
         this.starting = true;
         try {
+            var requiredCamera = await findRequiredCamera();
+            if (generation !== this.generation) { throw canceled(); }
             await ensureSdk();
             if (generation !== this.generation) { throw canceled(); }
             this.router = await Dynamsoft.CVR.CaptureVisionRouter.createInstance();
@@ -57,6 +122,8 @@
             this.container.appendChild(this.view.getUIElement());
             this.router.setInput(this.enhancer);
             this.enhancer.setScanRegion({ x: 5, y: 25, width: 90, height: 50, isMeasuredInPercentage: true });
+            this.enhancer.ifSaveLastUsedCamera = false;
+            this.enhancer.ifSkipCameraInspection = true;
 
             await this.router.addResultReceiver({
                 onDecodedBarcodesReceived: function (result) {
@@ -81,10 +148,14 @@
             var result = await this.router.updateSettings('ReadSingleBarcode', settings);
             if (result && result.errorCode) { throw new Error('Code 128 settings were rejected.'); }
 
-            if (typeof this.enhancer.requestCamera === 'function') {
-                await this.enhancer.requestCamera('back');
-            }
+            await this.enhancer.selectCamera(requiredCamera.deviceId);
             await this.enhancer.open();
+            var cameraSettings = this.enhancer.getCameraSettings();
+            if (!(await isRequiredCameraActive(cameraSettings))) {
+                throw requiredCameraUnavailable(
+                    'HP HD Camera could not be activated. The scanner was stopped instead of using DroidCam Video.'
+                );
+            }
             await this.router.startCapturing('ReadSingleBarcode');
             if (generation !== this.generation) { await this.stop(); throw canceled(); }
             this.starting = false;
@@ -143,7 +214,12 @@
 
     global.HopiaDynamsoftScanner = {
         isSupported: function () {
-            return Boolean(global.Dynamsoft && Dynamsoft.CVR && Dynamsoft.DCE && navigator.mediaDevices);
+            return Boolean(
+                global.Dynamsoft && Dynamsoft.CVR && Dynamsoft.DCE
+                && global.navigator && global.navigator.mediaDevices
+                && typeof global.navigator.mediaDevices.getUserMedia === 'function'
+                && typeof global.navigator.mediaDevices.enumerateDevices === 'function'
+            );
         },
         create: function (containerId) { return new Scanner(containerId); }
     };

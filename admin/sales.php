@@ -19,9 +19,10 @@
  * values only ever enter the query as bound parameters, and LIKE
  * wildcards in the typed term are escaped so they match literally.
  *
- * Today's overview and channel cards show global completed merchandise sales,
- * item counts and the existing fulfillment/payment breakdown, not profit.
- * Payment metadata is displayed as stored; shipping is not sales revenue.
+ * Today's overview and channel cards show completed merchandise sales, item
+ * counts, item-level gross profit and the existing fulfillment/payment
+ * breakdown. Payment metadata is displayed as stored; shipping is not sales
+ * revenue or profit.
  */
 
 session_start();
@@ -435,7 +436,13 @@ $queryError = false;
 
 /* Today's channel/payment categories (Asia/Manila day boundaries). */
 $today = [];
-$todayOverview = ['cents' => 0, 'items' => 0];
+$todayOverview = ['transactions' => 0, 'cents' => 0, 'items' => 0];
+$todayProfit = [
+    'OVERALL' => ['cents' => 0, 'missing_cost_items' => 0],
+    'WALKIN' => ['cents' => 0, 'missing_cost_items' => 0],
+    'LOCAL_COURIER' => ['cents' => 0, 'missing_cost_items' => 0],
+    'STORE_PICKUP' => ['cents' => 0, 'missing_cost_items' => 0],
+];
 
 try {
     $sales = sales_monitor_list(
@@ -472,12 +479,14 @@ try {
     }
 
     $today = sales_monitor_today_cents($pdo);
+    $todayProfit = sales_monitor_today_profit($pdo);
 
-    /* Reuse the dashboard's eligible sales and recorded item-count definitions,
+    /* Reuse the dashboard's eligible transaction, sales and item-count definitions,
        including valid historical categories outside the channel cards below. */
     $todayStart = new DateTimeImmutable('today', new DateTimeZone('Asia/Manila'));
     $overviewStmt = $pdo->prepare(
-        "SELECT COALESCE(SUM(total_amount), 0) AS sales_total,
+        "SELECT COUNT(*) AS transaction_count,
+                COALESCE(SUM(total_amount), 0) AS sales_total,
                 COALESCE(SUM(item_count), 0) AS items_sold
          FROM (" . sales_monitor_source_sql() . ") sales
          WHERE reporting_issue IS NULL AND sold_at >= :start AND sold_at < :end"
@@ -488,6 +497,7 @@ try {
     ]);
     $overviewRow = $overviewStmt->fetch();
     $todayOverview = [
+        'transactions' => (int) $overviewRow['transaction_count'],
         'cents' => sales_money_to_cents($overviewRow['sales_total']) ?? 0,
         'items' => (int) $overviewRow['items_sold'],
     ];
@@ -536,6 +546,24 @@ require __DIR__ . '/../includes/ui.header.php';
                 <p class="dash-kpi__value"><?= $queryError ? '&mdash;' : sales_monitor_money($todayOverview['cents']) ?></p>
                 <p class="dash-kpi__sub">Merchandise sales only; shipping excluded.</p>
             </article>
+            <article class="dash-kpi sales-monitor__metric dash-kpi--profit">
+                <div class="dash-kpi__top">
+                    <span class="dash-kpi__label">Profit Today</span>
+                    <span class="dash-kpi__icon"><?= sales_monitor_icon('peso') ?></span>
+                </div>
+                <p class="dash-kpi__value<?= !$queryError && $todayProfit['OVERALL']['cents'] < 0 ? ' is-loss' : '' ?>">
+                    <?= $queryError ? '&mdash;' : sales_monitor_money($todayProfit['OVERALL']['cents']) ?>
+                    <?php if (!$queryError && $todayProfit['OVERALL']['missing_cost_items'] > 0): ?>
+                        <span class="dash-kpi__unit">partial</span>
+                    <?php endif; ?>
+                </p>
+                <p class="dash-kpi__sub">
+                    Completed item selling prices minus each item's own bundle cost.
+                    <?php if (!$queryError && $todayProfit['OVERALL']['missing_cost_items'] > 0): ?>
+                        <span class="dash-kpi__note">Partial total: <?= number_format($todayProfit['OVERALL']['missing_cost_items']) ?> sold item<?= $todayProfit['OVERALL']['missing_cost_items'] === 1 ? '' : 's' ?> without a valid bundle cost.</span>
+                    <?php endif; ?>
+                </p>
+            </article>
             <article class="dash-kpi sales-monitor__metric">
                 <div class="dash-kpi__top">
                     <span class="dash-kpi__label">Items Sold Today</span>
@@ -543,6 +571,14 @@ require __DIR__ . '/../includes/ui.header.php';
                 </div>
                 <p class="dash-kpi__value"><?= $queryError ? '&mdash;' : number_format($todayOverview['items']) ?></p>
                 <p class="dash-kpi__sub">Actual completed sale-item records.</p>
+            </article>
+            <article class="dash-kpi sales-monitor__metric">
+                <div class="dash-kpi__top">
+                    <span class="dash-kpi__label">Transactions Today</span>
+                    <span class="dash-kpi__icon"><?= sales_monitor_icon('receipt') ?></span>
+                </div>
+                <p class="dash-kpi__value"><?= $queryError ? '&mdash;' : number_format($todayOverview['transactions']) ?></p>
+                <p class="dash-kpi__sub">Completed transactions across all sales channels.</p>
             </article>
         </div>
     </section>
@@ -554,7 +590,8 @@ require __DIR__ . '/../includes/ui.header.php';
                 'description' => 'In-store barcode and cashier transactions.',
                 'metrics' => [
                     ['label' => 'Transactions', 'category' => 'WALKIN', 'value' => 'count', 'note' => 'Completed counter transactions today.'],
-                    ['label' => 'Sales Amount', 'category' => 'WALKIN', 'value' => 'cents', 'note' => 'Completed merchandise sales today.'],
+                    ['label' => 'Completed Sales', 'category' => 'WALKIN', 'value' => 'cents', 'note' => 'Completed merchandise sales today.'],
+                    ['label' => 'Profit Today', 'profit_channel' => 'WALKIN', 'note' => 'Profit from completed walk-in items using their individual bundle costs.'],
                 ],
             ],
             'courier' => [
@@ -563,6 +600,7 @@ require __DIR__ . '/../includes/ui.header.php';
                 'metrics' => [
                     ['label' => 'COD Sales', 'category' => 'LOCAL_COURIER_COD', 'value' => 'cents', 'note' => 'Cash collected and sale finalized.'],
                     ['label' => 'GCash Sales', 'category' => 'LOCAL_COURIER_GCASH', 'value' => 'cents', 'note' => 'GCash verified and sale finalized.'],
+                    ['label' => 'Profit Today', 'profit_channel' => 'LOCAL_COURIER', 'note' => 'Combined profit from completed courier sales across all payment methods.'],
                 ],
             ],
             'pickup' => [
@@ -571,6 +609,7 @@ require __DIR__ . '/../includes/ui.header.php';
                 'metrics' => [
                     ['label' => 'Cash on Pickup', 'category' => 'STORE_PICKUP_CASH_ON_PICKUP', 'value' => 'cents', 'note' => 'Cash collected and handover completed.'],
                     ['label' => 'GCash Sales', 'category' => 'STORE_PICKUP_GCASH', 'value' => 'cents', 'note' => 'GCash verified and handover completed.'],
+                    ['label' => 'Profit Today', 'profit_channel' => 'STORE_PICKUP', 'note' => 'Combined profit from completed pickup sales across all payment methods.'],
                 ],
             ],
         ] as $sectionId => $channelSection): ?>
@@ -582,18 +621,35 @@ require __DIR__ . '/../includes/ui.header.php';
                         <p><?= hopia_e($channelSection['description']) ?></p>
                     </div>
                 </header>
-                <div class="sales-monitor__metrics">
+                <div class="sales-monitor__metrics<?= $sectionId !== 'walkin' ? ' sales-monitor__metrics--payment-summary' : '' ?>">
                     <?php foreach ($channelSection['metrics'] as $metric):
-                        $category = $metric['category'];
+                        $profitChannel = $metric['profit_channel'] ?? null;
+                        $category = $metric['category'] ?? null;
+                        $profitMetric = $profitChannel !== null ? $todayProfit[$profitChannel] : null;
+                        $profitSummary = $profitMetric !== null && $sectionId !== 'walkin';
                     ?>
-                        <article class="dash-kpi sales-monitor__metric">
+                        <article class="dash-kpi sales-monitor__metric<?= $profitChannel !== null ? ' dash-kpi--profit' : '' ?><?= $profitSummary ? ' sales-monitor__metric--profit-summary' : '' ?>">
                             <span class="dash-kpi__label"><?= hopia_e($metric['label']) ?></span>
-                            <p class="dash-kpi__value"><?= $queryError ? '&mdash;' : ($metric['value'] === 'cents' ? sales_monitor_money($today[$category]['cents']) : number_format($today[$category]['count'])) ?></p>
+                            <p class="dash-kpi__value<?= !$queryError && $profitMetric !== null && $profitMetric['cents'] < 0 ? ' is-loss' : '' ?>">
+                                <?php if ($queryError): ?>
+                                    &mdash;
+                                <?php elseif ($profitMetric !== null): ?>
+                                    <?= sales_monitor_money($profitMetric['cents']) ?>
+                                    <?php if ($profitMetric['missing_cost_items'] > 0): ?>
+                                        <span class="dash-kpi__unit">partial</span>
+                                    <?php endif; ?>
+                                <?php else: ?>
+                                    <?= $metric['value'] === 'cents' ? sales_monitor_money($today[$category]['cents']) : number_format($today[$category]['count']) ?>
+                                <?php endif; ?>
+                            </p>
                             <p class="dash-kpi__sub">
-                                <?php if ($sectionId !== 'walkin' && !$queryError): ?>
+                                <?php if ($profitMetric === null && $sectionId !== 'walkin' && !$queryError): ?>
                                     <span class="sales-monitor__transaction-count"><?= number_format($today[$category]['count']) ?> completed transaction<?= $today[$category]['count'] === 1 ? '' : 's' ?> today.</span>
                                 <?php endif; ?>
                                 <?= hopia_e($metric['note']) ?>
+                                <?php if (!$queryError && $profitMetric !== null && $profitMetric['missing_cost_items'] > 0): ?>
+                                    <span class="dash-kpi__note">Partial total: <?= number_format($profitMetric['missing_cost_items']) ?> sold item<?= $profitMetric['missing_cost_items'] === 1 ? '' : 's' ?> without a valid bundle cost.</span>
+                                <?php endif; ?>
                             </p>
                         </article>
                     <?php endforeach; ?>
@@ -601,7 +657,7 @@ require __DIR__ . '/../includes/ui.header.php';
             </section>
         <?php endforeach; ?>
     </div>
-    <p class="text-small muted sales-monitor__today-note">Today uses the Philippine local day and is not changed by the filters below. All amounts exclude shipping.</p>
+    <p class="text-small muted sales-monitor__today-note">Today uses the Philippine local calendar day. KPI values are independent of the transaction filters below. Merchandise amounts exclude shipping charges.</p>
     <?php if (!$queryError && $today['unclassified_count'] > 0): ?>
         <div class="alert alert-warning" role="alert">
             <?= (int) $today['unclassified_count'] ?> completed transaction(s) today have a stored channel/payment combination

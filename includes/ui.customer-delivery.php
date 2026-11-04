@@ -37,6 +37,8 @@ if ($courierHistory['state'] !== 'ready' || $courierHistory['stage'] === null): 
                         ? DateTimeImmutable::createFromFormat('!Y-m-d H:i:s', $courierEvent['created_at'], new DateTimeZone('Asia/Manila')) : false;
                     if ($courierDate !== false && $courierDate->format('Y-m-d H:i:s') !== $courierEvent['created_at']) $courierDate = false;
                     $courierIcon = match ($courierEvent['type']) {
+                        'IN_TRANSIT' => 'warehouse',
+                        'OUT_FOR_DELIVERY' => 'motorcycle',
                         'DELIVERY_ATTEMPT_FAILED' => 'x-circle',
                         'DELIVERED', 'RETURNED_TO_SHOP' => 'check-circle',
                         default => 'truck',

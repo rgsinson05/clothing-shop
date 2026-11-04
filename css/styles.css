@@ -15102,7 +15102,7 @@ body.ui-admin {
 
 .sales-monitor .dash-kpi__sub { margin-top: auto; }
 .sales-monitor__overview .sales-monitor__metrics {
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 17rem), 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .sales-monitor__overview .sales-monitor__metric { padding: var(--sp-5); }
@@ -15126,7 +15126,38 @@ body.ui-admin {
 
 .sales-monitor__channel:first-child { grid-column: 1 / -1; }
 .sales-monitor__transaction-count { display: block; margin-bottom: 0.2rem; }
-.sales-monitor__today-note { margin-top: calc(-1 * var(--sp-2)); }
+.sales-monitor__today-note { margin-top: calc(-1 * var(--sp-2)); line-height: 1.55; }
+
+.sales-monitor__metrics--payment-summary {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.ui-admin .sales-monitor .dash-kpi.sales-monitor__metric--profit-summary {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: minmax(9rem, 0.65fr) minmax(0, 1.35fr);
+  grid-template-areas:
+    "label description"
+    "value description";
+  align-items: center;
+  column-gap: var(--sp-5);
+  row-gap: 0.2rem;
+  min-height: 0;
+  background: var(--color-primary-soft);
+  border-color: var(--color-primary);
+  border-left-width: 3px;
+}
+
+.sales-monitor__metric--profit-summary .dash-kpi__label {
+  grid-area: label;
+  color: var(--admin-accent-strong);
+}
+
+.sales-monitor__metric--profit-summary .dash-kpi__value { grid-area: value; }
+.sales-monitor__metric--profit-summary .dash-kpi__sub {
+  grid-area: description;
+  margin-top: 0;
+}
 
 .sales-monitor__transactions {
   display: flex;
@@ -15235,12 +15266,31 @@ body.ui-admin {
 }
 
 @media (max-width: 560px) {
+  .sales-monitor__overview .sales-monitor__metrics,
+  .sales-monitor__metrics--payment-summary {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .ui-admin .sales-monitor .dash-kpi.sales-monitor__metric--profit-summary {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      "label"
+      "value"
+      "description";
+  }
+
   .sales-monitor__filters > .field,
   .sales-monitor__dates,
   .sales-monitor__filters .admin-filter-form__actions { flex-basis: 100%; }
 
   .sales-monitor__pagination {
     justify-content: center;
+  }
+}
+
+@media (min-width: 1400px) {
+  .sales-monitor__overview .sales-monitor__metrics {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 }
 
@@ -15339,6 +15389,33 @@ body.ui-admin {
   font-size: 0.8125rem;
   color: var(--color-success);
   font-weight: 600;
+}
+
+.gcash-checkout__acknowledgment {
+  margin: var(--sp-4) 0;
+}
+
+.gcash-checkout__acknowledgment-title {
+  margin: 0 0 var(--sp-2);
+  font-weight: 650;
+}
+
+.gcash-checkout__acknowledgment-label {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.65rem;
+  color: var(--color-text);
+  line-height: 1.5;
+  cursor: pointer;
+}
+
+.gcash-checkout__acknowledgment-label input {
+  flex: 0 0 auto;
+  margin-top: 0.25rem;
+}
+
+.gcash-checkout__acknowledgment .hint {
+  margin: var(--sp-2) 0 0 1.65rem;
 }
 
 /* Checkout requirement alert + submitted-payment note spacing. */

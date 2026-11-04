@@ -160,6 +160,94 @@ function hopia_google_config(): array
     ];
 }
 
+function hopia_google_failure_diagnostic(string $stage, Throwable $error): string
+{
+    // Never log exception messages, request data, response bodies, or claims.
+    $messageCategories = [
+        'Google authentication is not configured.' => 'configuration_invalid',
+        'The token response did not contain an ID token.' => 'id_token_missing',
+        'Audience does not match' => 'audience_mismatch',
+        'Issuer does not match' => 'issuer_mismatch',
+        'Google ID token rejected: claims_invalid' => 'claims_invalid',
+        'Google ID token rejected: nonce_mismatch' => 'nonce_mismatch',
+        'Google ID token rejected: email_unverified' => 'email_unverified',
+        'Google ID token rejected: subject_invalid' => 'subject_invalid',
+        'Google ID token rejected: email_invalid' => 'email_invalid',
+        'Google ID token rejected: token_expired' => 'token_expired',
+        'Google ID token rejected: token_issued_in_future' => 'token_issued_in_future',
+    ];
+    $diagnostic = [
+        'stage' => $stage,
+        'category' => $messageCategories[$error->getMessage()] ?? $stage . '_failed',
+        'exception' => get_class($error),
+        'code' => (string) $error->getCode(),
+        'location' => basename($error->getFile()) . ':' . $error->getLine(),
+    ];
+
+    if ($error instanceof Firebase\JWT\ExpiredException) {
+        $diagnostic['category'] = 'token_expired';
+    } elseif ($error instanceof Firebase\JWT\BeforeValidException) {
+        $diagnostic['category'] = 'token_not_yet_valid';
+    } elseif ($error instanceof Firebase\JWT\SignatureInvalidException) {
+        $diagnostic['category'] = 'signature_invalid';
+    } elseif ($error instanceof PDOException) {
+        $diagnostic['category'] = match ((string) $error->getCode()) {
+            '42S02' => 'database_table_missing',
+            '42S22' => 'database_column_missing',
+            '23000' => 'database_constraint_violation',
+            default => 'database_error',
+        };
+    } elseif ($error instanceof GuzzleHttp\Exception\BadResponseException) {
+        $response = $error->getResponse();
+        $diagnostic['category'] = $stage === 'id_token_validation'
+            ? 'signing_keys_http_error'
+            : 'oauth_http_error';
+        if ($response !== null) {
+            $diagnostic['http_status'] = $response->getStatusCode();
+            if ($stage === 'token_exchange') {
+                try {
+                    $body = json_decode((string) $response->getBody(), true);
+                    $oauthError = is_array($body) ? ($body['error'] ?? null) : null;
+                    if (in_array($oauthError, [
+                        'invalid_client', 'invalid_grant', 'invalid_request',
+                        'unauthorized_client', 'disabled_client', 'deleted_client',
+                        'redirect_uri_mismatch', 'access_denied',
+                        'temporarily_unavailable', 'server_error',
+                    ], true)) {
+                        $diagnostic['category'] = $oauthError;
+                    }
+                } catch (Throwable $ignored) {
+                    // An unreadable response must not hide the original failure.
+                }
+            }
+        }
+    } elseif ($error instanceof GuzzleHttp\Exception\TransferException) {
+        $curlErrno = null;
+        if (method_exists($error, 'getHandlerContext')) {
+            $context = $error->getHandlerContext();
+            $curlErrno = is_int($context['errno'] ?? null) ? $context['errno'] : null;
+        }
+        // Guzzle 8 no longer exposes handler context; extract only the number.
+        if ($curlErrno === null
+            && preg_match('/\AcURL error ([0-9]+):/', $error->getMessage(), $matches) === 1) {
+            $curlErrno = (int) $matches[1];
+        }
+        $diagnostic['curl_errno'] = $curlErrno;
+        $diagnostic['category'] = match ($curlErrno) {
+            5, 6 => 'dns_resolution_failed',
+            7 => 'connection_failed',
+            28 => 'network_timeout',
+            35 => 'tls_handshake_failed',
+            51, 60 => 'tls_certificate_validation_failed',
+            58 => 'tls_client_certificate_failed',
+            77 => 'tls_ca_bundle_unavailable',
+            default => 'http_transport_failed',
+        };
+    }
+
+    return 'Google OAuth failure: ' . json_encode($diagnostic, JSON_INVALID_UTF8_SUBSTITUTE);
+}
+
 function hopia_google_oauth_client(
     array $config,
     ?string $state = null,
@@ -250,19 +338,23 @@ function hopia_google_validate_id_token(
         'throwException' => true,
     ]);
 
-    if (!is_array($claims)
-        || !is_string($claims['nonce'] ?? null)
-        || !hash_equals($expectedNonce, $claims['nonce'])
-        || ($claims['email_verified'] ?? null) !== true
-        || !is_string($claims['sub'] ?? null)
-        || $claims['sub'] === ''
-        || strlen($claims['sub']) > 255
-        || !is_string($claims['email'] ?? null)
-        || !filter_var($claims['email'], FILTER_VALIDATE_EMAIL)
-        || strlen($claims['email']) > 255
-        || (int) ($claims['exp'] ?? 0) <= time()
-        || (int) ($claims['iat'] ?? 0) > time() + 300) {
-        throw new UnexpectedValueException('The Google identity claims are invalid.');
+    $claimFailure = match (true) {
+        !is_array($claims) => 'claims_invalid',
+        !is_string($claims['nonce'] ?? null)
+            || !hash_equals($expectedNonce, $claims['nonce']) => 'nonce_mismatch',
+        ($claims['email_verified'] ?? null) !== true => 'email_unverified',
+        !is_string($claims['sub'] ?? null)
+            || $claims['sub'] === ''
+            || strlen($claims['sub']) > 255 => 'subject_invalid',
+        !is_string($claims['email'] ?? null)
+            || !filter_var($claims['email'], FILTER_VALIDATE_EMAIL)
+            || strlen($claims['email']) > 255 => 'email_invalid',
+        (int) ($claims['exp'] ?? 0) <= time() => 'token_expired',
+        (int) ($claims['iat'] ?? 0) > time() + 300 => 'token_issued_in_future',
+        default => null,
+    };
+    if ($claimFailure !== null) {
+        throw new UnexpectedValueException('Google ID token rejected: ' . $claimFailure);
     }
 
     $firstName = is_string($claims['given_name'] ?? null)

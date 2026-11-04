@@ -283,6 +283,20 @@ if (!function_exists('hopia_order_icon')) {
                 . '<path d="M19 18h2a1 1 0 0 0 1-1v-3.65a1 1 0 0 0-.22-.62l-3.48-4.35A1 1 0 0 0 17.52 8H14"/>'
                 . '<circle cx="17" cy="18" r="2"/>'
                 . '<circle cx="7" cy="18" r="2"/>',
+            // OUT_FOR_DELIVERY step - motorcycle / delivery rider outline.
+            'motorcycle' =>
+                '<circle cx="5" cy="17" r="3"/>'
+                . '<circle cx="19" cy="17" r="3"/>'
+                . '<path d="M8 17h4l3-6h3"/>'
+                . '<path d="m12 17-3-6H6"/>'
+                . '<path d="M10 11h5l-2-4h-2"/>'
+                . '<path d="M17 7h3"/>',
+            // IN_TRANSIT step - courier warehouse / sorting facility outline.
+            'warehouse' =>
+                '<path d="M22 19V8.35a2 2 0 0 0-1.26-1.86l-8-3a2 2 0 0 0-1.48 0l-8 3A2 2 0 0 0 2 8.35V19a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2Z"/>'
+                . '<path d="M6 21V10a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v11"/>'
+                . '<path d="M6 13h12"/>'
+                . '<path d="M6 17h12"/>',
             // NEED TO MAKE A CHANGE? section - edit / pencil outline.
             'actions' =>
                 '<path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/>',

@@ -9,7 +9,7 @@ require_once __DIR__ . '/inventory_guard.php';
 
 function delivery_action_names(): array
 {
-    return ['out_for_delivery', 'fail_attempt', 'return_to_seller', 'confirm_return', 'inspect_return', 'make_available'];
+    return ['in_transit', 'out_for_delivery', 'fail_attempt', 'return_to_seller', 'confirm_return', 'inspect_return', 'make_available'];
 }
 
 /** Read-only courier classification; these are not additional order stages. */
@@ -117,9 +117,12 @@ function delivery_transition(array $order, array $payment, array $shipment, stri
     }
     $next = null;
     switch ($action) {
+        case 'in_transit':
+            if ($failures === 0 && $stage === 'SHIPPED') $next = 'IN_TRANSIT';
+            break;
         case 'out_for_delivery':
             if ($failures >= 3) return delivery_failure('attempt_limit');
-            if (($failures === 0 && in_array($stage, ['SHIPPED', 'IN_TRANSIT'], true))
+            if (($failures === 0 && $stage === 'IN_TRANSIT')
                 || ($failures > 0 && $stage === 'DELIVERY_ATTEMPT_FAILED')) {
                 $next = 'OUT_FOR_DELIVERY';
             }
@@ -413,7 +416,8 @@ function delivery_action(PDO $pdo, int $adminId, int $orderId, string $action, i
             $pdo->commit();
             return $decision + ['idempotent' => false, 'received_at' => $receivedAt, 'sale' => null, 'status' => 200];
         }
-        $types = ['out_for_delivery' => 'OUT_FOR_DELIVERY', 'fail_attempt' => 'DELIVERY_ATTEMPT_FAILED',
+        $types = ['in_transit' => 'IN_TRANSIT', 'out_for_delivery' => 'OUT_FOR_DELIVERY',
+            'fail_attempt' => 'DELIVERY_ATTEMPT_FAILED',
             'return_to_seller' => 'RETURN_TO_SELLER',
             'confirm_return' => 'RETURNED_TO_SHOP', 'inspect_return' => 'RETURN_INSPECTED'];
         $events = [[$types[$action], $expectedStage, $decision['state']]];

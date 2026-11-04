@@ -29,7 +29,10 @@ $shipment = ['delivery_method' => 'LOCAL_COURIER', 'shipment_status' => 'SHIPPED
     'tracking_number' => 'TEST-ONLY', 'delivered_at' => null, 'delivery_cycle' => 1, 'delivery_revision' => 0, 'failed_attempts' => 0];
 $decide = static fn ($action, $s, $attempt = null, $reason = '') => delivery_transition($order, $payment, $s, $action,
     (int) $s['delivery_cycle'], (int) $s['delivery_revision'], $s['shipment_status'], $attempt, $reason);
-check('valid out for delivery', $decide('out_for_delivery', $shipment)['state'], 'OUT_FOR_DELIVERY');
+check('valid in transit', $decide('in_transit', $shipment)['state'], 'IN_TRANSIT');
+check('cannot skip in transit', $decide('out_for_delivery', $shipment)['reason'], 'invalid_state');
+$inTransit = array_replace($shipment, ['shipment_status' => 'IN_TRANSIT']);
+check('valid out for delivery', $decide('out_for_delivery', $inTransit)['state'], 'OUT_FOR_DELIVERY');
 for ($i = 1; $i <= 3; $i++) {
     $s = array_replace($shipment, ['shipment_status' => 'OUT_FOR_DELIVERY', 'failed_attempts' => $i - 1]);
     $r = $decide('fail_attempt', $s, $i, 'Customer unavailable');
@@ -47,7 +50,7 @@ foreach ([0, 1, 2] as $failed) {
     check('return decision requires three failures, not ' . $failed, $decide('return_to_seller',
         array_replace($exhausted, ['failed_attempts' => $failed]), null, 'Return reason')['reason'], 'invalid_state');
 }
-foreach (['SHIPPED', 'OUT_FOR_DELIVERY', 'RETURN_TO_SELLER', 'RETURNED_TO_SHOP', 'DELIVERED'] as $stage) {
+foreach (['SHIPPED', 'IN_TRANSIT', 'OUT_FOR_DELIVERY', 'RETURN_TO_SELLER', 'RETURNED_TO_SHOP', 'DELIVERED'] as $stage) {
     check('return decision rejects predecessor ' . $stage, $decide('return_to_seller',
         array_replace($exhausted, ['shipment_status' => $stage]), null, 'Return reason')['reason'], 'invalid_state');
 }
@@ -110,21 +113,21 @@ check('manual delivered is not an admin action', in_array('delivered', delivery_
 check('manual delivered transition is rejected', $decide('delivered', $shipment)['reason'], 'bad_request');
 check('customer receipt is not an admin action', in_array('confirm_receipt', delivery_action_names(), true), false);
 check('customer receipt completes an eligible courier delivery', $decide('confirm_receipt', $out)['state'], 'DELIVERED');
-check('stale revision rejected', delivery_transition($order, $payment, $shipment, 'out_for_delivery', 1, 9, 'SHIPPED', null, '')['reason'], 'conflict');
-check('stale cycle rejected', delivery_transition($order, $payment, $shipment, 'out_for_delivery', 2, 0, 'SHIPPED', null, '')['reason'], 'conflict');
+check('stale revision rejected', delivery_transition($order, $payment, $shipment, 'in_transit', 1, 9, 'SHIPPED', null, '')['reason'], 'conflict');
+check('stale cycle rejected', delivery_transition($order, $payment, $shipment, 'in_transit', 2, 0, 'SHIPPED', null, '')['reason'], 'conflict');
 foreach (['PENDING', 'DELIVERED', 'CANCELLED'] as $state) {
     check('order ' . $state . ' fails closed', delivery_transition(array_replace($order, ['status' => $state]), $payment, $shipment,
-        'out_for_delivery', 1, 0, 'SHIPPED', null, '')['reason'], 'manual_review');
+        'in_transit', 1, 0, 'SHIPPED', null, '')['reason'], 'manual_review');
 }
-check('pickup never enters courier flow', $decide('out_for_delivery', array_replace($shipment, ['delivery_method' => 'STORE_PICKUP']))['reason'], 'manual_review');
-check('legacy unknown method fails closed', $decide('out_for_delivery', array_replace($shipment, ['delivery_method' => null]))['reason'], 'manual_review');
+check('pickup never enters courier flow', $decide('in_transit', array_replace($shipment, ['delivery_method' => 'STORE_PICKUP']))['reason'], 'manual_review');
+check('legacy unknown method fails closed', $decide('in_transit', array_replace($shipment, ['delivery_method' => null]))['reason'], 'manual_review');
 foreach (['FAILED', 'REFUNDED', 'PAID'] as $state) {
     check('COD payment ' . $state . ' rejected', delivery_transition($order, array_replace($payment, ['payment_status' => $state]), $shipment,
-        'out_for_delivery', 1, 0, 'SHIPPED', null, '')['reason'], 'manual_review');
+        'in_transit', 1, 0, 'SHIPPED', null, '')['reason'], 'manual_review');
 }
 $gcash = array_replace($payment, ['payment_method' => 'GCASH', 'payment_status' => 'PAID']);
 check('PAID alone is not GCash verification', delivery_transition($order, $gcash, $shipment,
-    'out_for_delivery', 1, 0, 'SHIPPED', null, '')['reason'], 'manual_review');
+    'in_transit', 1, 0, 'SHIPPED', null, '')['reason'], 'manual_review');
 check('GCash fulfillment gate unchanged', payment_gcash_fulfillment_reason(['payment_method' => 'GCASH', 'payment_status' => 'PENDING']), 'gcash_awaiting_verification');
 check('COD finalizer rejects failed shipment', payment_cod_collection_reason($order, $payment, $return), 'cod_not_delivered');
 check('GCash finalizer retains attribution guard', payment_gcash_completion_reason($order, $gcash, $return), 'gcash_not_verified');
@@ -246,7 +249,7 @@ try {
         // Compare every action with an individually fingerprinted locked preview.
         // Impossible transitions may be prefiltered with a different denial reason.
         $actions = $inspections = [];
-        foreach (['out_for_delivery', 'fail_attempt', 'return_to_seller', 'confirm_return'] as $action) {
+        foreach (['in_transit', 'out_for_delivery', 'fail_attempt', 'return_to_seller', 'confirm_return'] as $action) {
             $actions[$action] = $call($id, $action,
                 attempt: $action === 'fail_attempt' ? (int) $s['failed_attempts'] + 1 : null,
                 reason: 'Eligibility check only', token: $s, validateOnly: true);
@@ -264,7 +267,7 @@ try {
         return $result;
     };
     $fixture(1);
-    $shippedView = $view('SHIPPED', 1, ['out_for_delivery']);
+    $shippedView = $view('SHIPPED', 1, ['in_transit']);
     check('admin view result contract', array_keys($shippedView),
         ['actions', 'inspection_actions', 'stock_actions', 'stock_decisions', 'stock_events', 'stock_records', 'stock_schema',
             'items', 'events', 'evidence', 'inspections', 'returns', 'blockers', 'error']);
@@ -272,18 +275,21 @@ try {
         [$shippedView['events'], $shippedView['evidence'], $shippedView['returns'], $shippedView['inspections']], [[], [], [], []]);
     $original = $db->query('SELECT * FROM shipments WHERE order_id = 1')->fetch();
     $key = bin2hex(random_bytes(16));
-    $first = $call(1, 'out_for_delivery', token: $original, key: $key);
-    check('persisted out for delivery', [$first['ok'], $first['state']], [true, 'OUT_FOR_DELIVERY']);
-    $replay = $call(1, 'out_for_delivery', token: $original, key: $key);
+    $first = $call(1, 'in_transit', token: $original, key: $key);
+    check('persisted in transit', [$first['ok'], $first['state']], [true, 'IN_TRANSIT']);
+    check('in transit creates one event-keyed notification', $db->query("SELECT COUNT(*) FROM customer_order_notifications WHERE order_id=1 AND notification_type='IN_TRANSIT'")->fetchColumn(), 1);
+    $replay = $call(1, 'in_transit', token: $original, key: $key);
     check('identical replay returns original committed result', [$replay['ok'], $replay['idempotent'], $replay['event_id']], [true, true, $first['event_id']]);
     check('different payload same key rejected', $call(1, 'fail_attempt', 1, 'Reason', token: $original, key: $key)['reason'], 'key_conflict');
-    check('competing stale token rejected (sequential, NOT concurrency)', $call(1, 'out_for_delivery', token: $original)['reason'], 'conflict');
+    check('competing stale token rejected (sequential, NOT concurrency)', $call(1, 'in_transit', token: $original)['reason'], 'conflict');
     check('preview never treats a committed old key as current eligibility',
-        $call(1, 'out_for_delivery', token: $original, key: $key, validateOnly: true)['reason'], 'conflict');
+        $call(1, 'in_transit', token: $original, key: $key, validateOnly: true)['reason'], 'conflict');
+    $view('IN_TRANSIT', 1, ['out_for_delivery']);
+    check('persisted out for delivery', $call(1, 'out_for_delivery')['state'], 'OUT_FOR_DELIVERY');
     foreach (['stage' => ['shipment_status' => 'SHIPPED'], 'revision' => ['delivery_revision' => 0]] as $field => $changes) {
         $staleView = $view('stale ' . $field . ' (sequential)', 1, [], shipmentChanges: $changes);
         check('stale ' . $field . ' rejects the otherwise eligible shipment action',
-            $staleView['actions']['out_for_delivery']['reason'], 'conflict');
+            $staleView['actions']['in_transit']['reason'], 'conflict');
     }
     check('nonexistent admin rejected', $call(1, 'fail_attempt', 1, 'Reason', admin: 999)['reason'], 'admin_required');
     check('blank failure causes no event', $call(1, 'fail_attempt', 1, '  ')['reason'], 'reason_required');
@@ -305,7 +311,7 @@ try {
     $failedView = $view('manual return to seller awaits physical custody', 1, ['confirm_return']);
     check('third failure view separates return-to-seller history from physical custody',
         [array_column($failedView['events'], 'event_type'), $failedView['returns'], $failedView['inspections']],
-        [['OUT_FOR_DELIVERY', 'DELIVERY_ATTEMPT_FAILED', 'OUT_FOR_DELIVERY', 'DELIVERY_ATTEMPT_FAILED',
+        [['IN_TRANSIT', 'OUT_FOR_DELIVERY', 'DELIVERY_ATTEMPT_FAILED', 'OUT_FOR_DELIVERY', 'DELIVERY_ATTEMPT_FAILED',
             'OUT_FOR_DELIVERY', 'DELIVERY_ATTEMPT_FAILED', 'RETURN_TO_SELLER'], [], []]);
     check('fourth failure never recorded', $call(1, 'fail_attempt', 4, 'Reason')['reason'], 'attempt_limit');
     check('return state cannot be confirmed as received', sales_confirm_receipt_online($db, 1, 1)['reason'], 'not_delivered');
@@ -385,16 +391,18 @@ try {
     check('generic edit/delete cannot release a held return', $blocked, true);
     // Forced notification failure must roll back shipment and event writes.
     $fixture(2);
-    $db->exec("ALTER TABLE customer_order_notifications ADD CONSTRAINT test_notification_block CHECK (order_id <> 2)");
+    $db->exec("ALTER TABLE customer_order_notifications ADD CONSTRAINT test_notification_block CHECK (order_id <> 2 OR notification_type <> 'OUT_FOR_DELIVERY')");
+    check('In Transit notification succeeds before constrained Out for Delivery', $call(2, 'in_transit')['ok'], true);
     $view('preview stops before the deliberately failing notification write', 2, ['out_for_delivery']);
     check('notification failure rolls action back', $call(2, 'out_for_delivery')['reason'], 'error');
-    check('shipment rollback', $db->query('SELECT shipment_status FROM shipments WHERE order_id=2')->fetchColumn(), 'SHIPPED');
-    check('event rollback', $db->query('SELECT COUNT(*) FROM delivery_events WHERE order_id=2')->fetchColumn(), 0);
+    check('shipment rollback', $db->query('SELECT shipment_status FROM shipments WHERE order_id=2')->fetchColumn(), 'IN_TRANSIT');
+    check('event rollback', $db->query('SELECT COUNT(*) FROM delivery_events WHERE order_id=2')->fetchColumn(), 1);
     $fixture(3, 'GCASH');
     $db->exec("UPDATE payments SET payment_status='PAID' WHERE order_id=3");
     $view('GCash PAID without verification', 3, []);
-    check('persisted PAID without attribution rejected', $call(3, 'out_for_delivery')['reason'], 'manual_review');
+    check('persisted PAID without attribution rejected', $call(3, 'in_transit')['reason'], 'manual_review');
     $db->exec("UPDATE payments SET verified_by=1,verified_at=NOW(),submitted_at=NOW(),gcash_reference='1234567890123' WHERE order_id=3");
+    check('verified GCash transit permitted', $call(3, 'in_transit')['ok'], true);
     check('verified GCash delivery permitted', $call(3, 'out_for_delivery')['ok'], true);
     $view('verified GCash OUT_FOR_DELIVERY', 3, ['fail_attempt']);
     check('outing alone never records receipt', $db->query('SELECT received_at FROM orders WHERE id=3')->fetchColumn(), null);
@@ -402,7 +410,7 @@ try {
     $deliveredView = $view('DELIVERED has no courier actions', 3, []);
     check('delivered view retains delivery history without approvals',
         [array_column($deliveredView['events'], 'event_type'), $deliveredView['returns'], $deliveredView['inspections']],
-        [['OUT_FOR_DELIVERY'], [], []]);
+        [['IN_TRANSIT', 'OUT_FOR_DELIVERY'], [], []]);
     check('delivered does not create sale', $db->query('SELECT COUNT(*) FROM sales_transactions')->fetchColumn(), 0);
     check('customer receipt uses the shipment delivery timestamp',
         $db->query('SELECT o.received_at = s.delivered_at FROM orders o JOIN shipments s ON s.order_id=o.id WHERE o.id=3')->fetchColumn(), 1);
@@ -413,12 +421,12 @@ try {
     $fixture(4);
     $db->exec("UPDATE shipments SET delivery_method='STORE_PICKUP' WHERE order_id=4");
     $view('pickup never enables courier previews', 4, []);
-    check('persisted pickup rejected without mutation', $call(4, 'out_for_delivery')['reason'], 'manual_review');
+    check('persisted pickup rejected without mutation', $call(4, 'in_transit')['reason'], 'manual_review');
     check('pickup remains untouched', $db->query('SELECT pickup_status FROM orders WHERE id=4')->fetchColumn(), null);
     $fixture(5);
     $db->exec('DELETE FROM order_item_verifications WHERE order_id=5');
     $view('missing item verification', 5, []);
-    check('missing verification fails closed', $call(5, 'out_for_delivery')['reason'], 'manual_review');
+    check('missing verification fails closed', $call(5, 'in_transit')['reason'], 'manual_review');
     // Retained history from a proven pending cancellation is not an active hold.
     $fixture(6);
     $db->exec("UPDATE orders SET status='CANCELLED',cancellation_status='APPROVED' WHERE id=6");
@@ -436,6 +444,7 @@ try {
     $db->commit();
     // Unsupported resolution does not become authoritative physical custody.
     $fixture(7);
+    $call(7, 'in_transit');
     $call(7, 'out_for_delivery');
     for ($i = 1; $i <= 3; $i++) {
         if ($i > 1) $call(7, 'out_for_delivery');
@@ -469,6 +478,9 @@ try {
         if ($method === 'GCASH') {
             $db->prepare("UPDATE payments SET payment_status='PAID',verified_by=1,verified_at=NOW(),
                 submitted_at=NOW(),gcash_reference='1234567890123' WHERE order_id=?")->execute([$id]);
+        }
+        if (!$call($id, 'in_transit')['ok']) {
+            throw new RuntimeException('Eligible return fixture did not enter transit.');
         }
         for ($i = 1; $i <= 3; $i++) {
             if (!$call($id, 'out_for_delivery')['ok'] || !$call($id, 'fail_attempt', $i, 'Temporary failure')['ok']) {
@@ -523,8 +535,8 @@ try {
             VALUES(?,?,?,'Historical review snapshot',100,1,100)")->execute([$id + 1000, $id, $id]);
         $db->exec('UPDATE order_items SET ' . ($name === 'duplicate_product' ? 'product_id=' . $id : $change) . ' WHERE id=' . ($id + 1000));
         $legacyView = $view('legacy ' . $name . ' outing', $id, []);
-        check('legacy ' . $name . ' view uses physical identity guard', $legacyView['actions']['out_for_delivery']['reason'], 'legacy_item_review');
-        $rejectUnchanged('legacy ' . $name . ' outing', $id, 'out_for_delivery', 'legacy_item_review');
+        check('legacy ' . $name . ' view uses physical identity guard', $legacyView['actions']['in_transit']['reason'], 'legacy_item_review');
+        $rejectUnchanged('legacy ' . $name . ' outing', $id, 'in_transit', 'legacy_item_review');
     }
     $atReturn(33);
     $db->exec('UPDATE order_items SET quantity=2 WHERE id=33');
@@ -642,6 +654,7 @@ try {
         VALUES(1050,50,1050,'Second temporary snapshot',100,1,100)");
     $db->exec("INSERT INTO order_item_verifications(order_id,order_item_id,product_id,verified_by,method,reason)
         VALUES(50,1050,1050,1,'MANUAL','Second physical item verified')");
+    check('multi-item enters transit', $call(50, 'in_transit')['ok'], true);
     for ($i = 1; $i <= 3; $i++) {
         check('multi-item outing ' . $i, $call(50, 'out_for_delivery')['ok'], true);
         check('multi-item failed attempt ' . $i, $call(50, 'fail_attempt', $i, 'Temporary failure')['ok'], true);

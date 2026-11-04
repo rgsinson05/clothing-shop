@@ -2,6 +2,46 @@
 
 require_once __DIR__ . '/ui.php';
 
+/** Shared heading and existing tab treatment for the two reservation workflows. */
+function admin_order_reservation_header(string $activeTab): void
+{
+    $pickup = $activeTab === 'pickup';
+    ?>
+    <header class="admin-page-header">
+        <div>
+            <p class="admin-page-header__eyebrow">Order management</p>
+            <h1>ORDER RESERVATION</h1>
+            <p class="admin-page-header__copy">
+                Scan and verify garment items to reserve them for online orders and store pickup.
+            </p>
+        </div>
+    </header>
+
+    <div class="orders-filters admin-list-filters">
+        <nav class="orders-filter-tabs" aria-label="Order reservation type">
+            <a class="orders-filter<?= $pickup ? '' : ' is-active' ?>" href="order-reservation.php?tab=online"<?= $pickup ? '' : ' aria-current="page"' ?>>
+                <span class="orders-filter__icon"><?= hopia_admin_icon('orders') ?></span>
+                <span>Online Orders</span>
+            </a>
+            <a class="orders-filter<?= $pickup ? ' is-active' : '' ?>" href="order-reservation.php?tab=pickup"<?= $pickup ? ' aria-current="page"' : '' ?>>
+                <span class="orders-filter__icon"><?= hopia_admin_icon('pickup') ?></span>
+                <span>Store Pickup</span>
+            </a>
+        </nav>
+    </div>
+
+    <div class="admin-orders__summary">
+        <p class="text-small muted">
+            <?php if ($pickup): ?>
+                Select a Store Pickup order at <strong>Order Received</strong>. Every item must be verified before preparation can begin.
+            <?php else: ?>
+                Select a <strong>Confirmed</strong> or <strong>Packed</strong> online order without a pending or approved cancellation.
+            <?php endif; ?>
+        </p>
+    </div>
+    <?php
+}
+
 /** Presentation only: each category opens a specific existing filter, not a new lifecycle. */
 function admin_order_filter_nav(string $page, array $filters, ?string $active, string $search = '', ?array $counts = null, ?array $direct = null): void
 {

@@ -65,7 +65,8 @@ function delivery_test_connection(): PDO
         ADD delivery_revision INT UNSIGNED NOT NULL DEFAULT 0, ADD failed_attempts TINYINT UNSIGNED NOT NULL DEFAULT 0");
     $db->exec("ALTER TABLE customer_order_notifications ADD occurrence_key VARCHAR(64) NOT NULL DEFAULT 'legacy',
         MODIFY notification_type ENUM('ORDER_SHIPPED','ORDER_DELIVERED','PICKUP_READY','PICKUP_HANDED_OVER','ORDER_CANCELLED',
-        'OUT_FOR_DELIVERY','DELIVERY_ATTEMPT_FAILED','RETURN_TO_SELLER','RETURNED_TO_SHOP','DELIVERY_CYCLE_AUTHORIZED') NOT NULL,
+        'OUT_FOR_DELIVERY','DELIVERY_ATTEMPT_FAILED','RETURN_TO_SELLER','RETURNED_TO_SHOP','DELIVERY_CYCLE_AUTHORIZED',
+        'ORDER_CONFIRMED','ORDER_PACKED','IN_TRANSIT') NOT NULL,
         DROP INDEX uq_customer_notification_order_type, ADD UNIQUE(customer_id,order_id,notification_type,occurrence_key)");
     if ($db->query("SHOW COLUMNS FROM shipments LIKE 'delivery_revision'")->fetch() === false) {
         throw new RuntimeException('Temporary post-schema cutoff not detected.');

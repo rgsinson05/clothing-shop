@@ -12,6 +12,8 @@ $deliveryAttempts = filter_var($shipment['failed_attempts'] ?? null, FILTER_VALI
     ['options' => ['min_range' => 0, 'max_range' => 3]]);
 $deliveryIsReturn = in_array($deliveryStage, ['RETURN_TO_SELLER', 'RETURNED_TO_SHOP'], true);
 $deliveryGuidance = match ($deliveryDisplayStage) {
+    'SHIPPED' => 'The parcel has been dispatched from the shop. Mark it In Transit when the courier journey has started; Out for Delivery remains the following separate step.',
+    'IN_TRANSIT' => 'The parcel is in transit. Mark it Out for Delivery only when the courier begins the delivery attempt.',
     'OUT_FOR_DELIVERY' => 'The customer can now confirm Order Received after receiving the parcel. That confirmation automatically marks the order Delivered. Record a failed attempt only if delivery was unsuccessful; payment and sale finalization remain separate.',
     'DELIVERY_ATTEMPT_FAILED' => $deliveryAttempts === 3
         ? 'Three failed attempts are recorded. This delivery cycle is exhausted. Record Return to Seller explicitly with a return reason; a fourth attempt is not allowed.'
@@ -20,7 +22,7 @@ $deliveryGuidance = match ($deliveryDisplayStage) {
     'RETURNED_TO_SHOP' => 'Physical return is recorded and the delivery journey has ended. Review item inspection, reservation, payment and stock-disposition requirements separately.',
     'RETURN_INSPECTED' => 'Inspection is recorded. Review each item and any unresolved safeguards. Refund, inventory release and sale finalization remain separate.',
     'DELIVERED' => 'Courier delivery is closed. Earlier delivery cycles and return events remain historical records; customer receipt and applicable payment/sale finalization are separate.',
-    default => 'Shipped records dispatch from the shop. The existing Out for Delivery action starts or continues In Transit. Attempts, returns and inspection stay inside this workflow; they are not additional main order stages.',
+    default => 'Attempts, returns and inspection stay inside this courier workflow; they are not additional main order stages.',
 };
 $deliveryHistoryCycles = [];
 foreach ($courierView['events'] ?? [] as $deliveryHistoryEvent) {
@@ -28,9 +30,7 @@ foreach ($courierView['events'] ?? [] as $deliveryHistoryEvent) {
 }
 $deliveryReady = $courierSchema['state'] === 'ready' && $courierView !== null && $courierView['error'] === null;
 $stockStructureReady = ($courierView['stock_schema']['state'] ?? 'legacy') === 'ready';
-if ($deliveryStage === 'SHIPPED') {
-    $deliveryDefinitions['out_for_delivery']['label'] = 'Start In Transit / Out for Delivery';
-} elseif ($deliveryStage === 'DELIVERY_ATTEMPT_FAILED') {
+if ($deliveryStage === 'DELIVERY_ATTEMPT_FAILED') {
     $deliveryDefinitions['out_for_delivery']['label'] = 'Next Permitted Attempt / Out for Delivery';
 }
 $deliveryForm = static function (string $action, ?array $item = null, bool $stock = false) use (

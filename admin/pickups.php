@@ -621,7 +621,7 @@ require __DIR__ . '/../includes/ui.header.php';
                                 <?= htmlspecialchars($copLinkageError['message'] ?? payment_message($copFinalizationReason ?? 'cop_error'), ENT_QUOTES, 'UTF-8') ?>
                             </span>
                         <?php elseif ($canAdvance && $stage === 'ORDER_RECEIVED' && $verifyProgress !== null): ?>
-                            <a class="btn btn-primary btn-sm" href="pickup-verify.php?order_id=<?= $orderId ?>">
+                            <a class="btn btn-primary btn-sm" href="order-reservation.php?tab=pickup&amp;order_id=<?= $orderId ?>">
                                 Verify Items
                             </a>
                             <span class="muted text-small">

@@ -33,8 +33,7 @@ if (!isset($_SESSION['admin_id'])) {
 require_once __DIR__ . '/../includes/database.php';
 require_once __DIR__ . '/../includes/order_verify.php';
 require_once __DIR__ . '/../includes/ui.php';
-
-$adminName = $_SESSION['admin_name'] ?? 'Admin';
+require_once __DIR__ . '/../includes/admin_order_ui.php';
 
 /*
  * Stable per-session CSRF token for the Phase B verify endpoints. Separate from
@@ -107,12 +106,12 @@ if ($hasOrderParam && $requestedOrderId !== false && $requestedOrderId > 0) {
 
 $pageTitleBase = ($order !== false)
     ? 'Verify Order #' . (int) $order['id']
-    : 'Verify Orders';
+    : 'Order Reservation';
 
 $page_title = $pageTitleBase . " - Admin - Hopia's Ukay-Ukay";
 $page_description = "Scan each item of an online order to verify it before shipment.";
 $ui_section = 'admin';
-$ui_active = 'order-verify.php';
+$ui_active = 'order-reservation.php';
 $body_class = 'admin-order-verify-page';
 
 require __DIR__ . '/../includes/ui.head.php';
@@ -182,21 +181,11 @@ require __DIR__ . '/../includes/ui.header.php';
 
 <div class="admin-order-verify">
 
+<?php admin_order_reservation_header('online'); ?>
+
 <?php if (!$hasOrderParam || $requestedOrderId === false || $requestedOrderId <= 0): ?>
 
     <?php /* ======================= LIST MODE ======================= */ ?>
-    <header class="admin-page-header">
-        <div>
-            <p class="admin-page-header__eyebrow">Online fulfilment</p>
-            <h1>VERIFY ORDERS</h1>
-            <p class="admin-page-header__copy">
-                Welcome, <?= hopia_e($adminName) ?>. Select an order to scan each item and verify it is in
-                the parcel before it ships. Only <strong>Confirmed</strong> and <strong>Packed</strong> orders
-                without a pending or approved cancellation are listed.
-            </p>
-        </div>
-    </header>
-
     <?php if (count($eligibleOrders) === 0): ?>
         <div class="empty-state">
             <p>No orders are currently awaiting verification.</p>
@@ -240,7 +229,7 @@ require __DIR__ . '/../includes/ui.header.php';
                                 </span>
                             </td>
                             <td><?= hopia_e(date('M j, Y g:i A', strtotime($eligible['created_at']))) ?></td>
-                            <td><a class="btn btn-primary btn-sm" href="order-verify.php?id=<?= (int) $eligible['id'] ?>">Verify Items</a></td>
+                            <td><a class="btn btn-primary btn-sm" href="order-reservation.php?tab=online&amp;id=<?= (int) $eligible['id'] ?>">Verify Items</a></td>
                         </tr>
                     <?php endforeach; ?>
                 </tbody>
@@ -255,7 +244,7 @@ require __DIR__ . '/../includes/ui.header.php';
         <p class="admin-page-header__eyebrow">Online fulfilment</p>
         <h1>ORDER NOT FOUND</h1>
         <p>Order not found. The order ID may be missing, invalid, or the order may no longer exist.</p>
-        <a class="btn btn-primary" href="order-verify.php">Back to Verify Orders</a>
+        <a class="btn btn-primary" href="order-reservation.php?tab=online">Back to Online Orders</a>
     </div>
 
 <?php elseif ($orderError !== null): ?>
@@ -263,7 +252,7 @@ require __DIR__ . '/../includes/ui.header.php';
     <?php /* =================== LOADED BUT INELIGIBLE =================== */ ?>
     <header class="admin-page-header">
         <div>
-            <a class="admin-page-header__back" href="order-verify.php">&larr; Back to Verify Orders</a>
+            <a class="admin-page-header__back" href="order-reservation.php?tab=online">&larr; Back to Online Orders</a>
             <p class="admin-page-header__eyebrow">Online fulfilment</p>
             <h1>ORDER #<?= (int) $order['id'] ?></h1>
         </div>
@@ -287,7 +276,7 @@ require __DIR__ . '/../includes/ui.header.php';
     ?>
     <header class="admin-page-header">
         <div>
-            <a class="admin-page-header__back" href="order-verify.php">&larr; Back to Verify Orders</a>
+            <a class="admin-page-header__back" href="order-reservation.php?tab=online">&larr; Back to Online Orders</a>
             <p class="admin-page-header__eyebrow">Online fulfilment &middot; verify before shipment</p>
             <h1>VERIFY ORDER #<?= $orderIdInt ?></h1>
             <p class="admin-page-header__copy">

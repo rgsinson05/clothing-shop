@@ -51,6 +51,7 @@ try {
     $linkedCustomer = hopia_google_identity_customer($pdo, $identity['provider_subject']);
 
     if ($linkedCustomer !== null) {
+        $failureStage = 'session_completion';
         $destination = hopia_customer_complete_login(
             $linkedCustomer,
             $attempt['destination'] ?? null
@@ -80,6 +81,7 @@ try {
         exit;
     }
 
+    $failureStage = 'session_completion';
     $destination = hopia_customer_complete_login(
         $result['customer'],
         $attempt['destination'] ?? null
@@ -87,69 +89,10 @@ try {
     header('Location: ' . $destination, true, 303);
     exit;
 } catch (Throwable $e) {
-    $diagnostic = sprintf(
-        'Google OAuth callback failed at %s: %s (%s)',
-        $failureStage,
-        get_class($e),
-        (string) $e->getCode()
+    error_log(
+        hopia_google_failure_diagnostic($failureStage, $e),
+        ini_get('error_log') === '' ? 4 : 0
     );
-
-    if ($failureStage === 'token_exchange'
-        && $e instanceof GuzzleHttp\Exception\ConnectException) {
-        $curlErrno = null;
-        $connectionError = null;
-
-        if (method_exists($e, 'getHandlerContext')) {
-            $handlerContext = $e->getHandlerContext();
-            if (is_array($handlerContext)) {
-                $curlErrno = is_int($handlerContext['errno'] ?? null)
-                    ? $handlerContext['errno']
-                    : null;
-                $connectionError = is_string($handlerContext['error'] ?? null)
-                    ? $handlerContext['error']
-                    : null;
-            }
-        }
-
-        if ($curlErrno === null || $connectionError === null) {
-            $matched = preg_match(
-                '/\AcURL error ([0-9]+): (.*?)'
-                    . ' \(see https:\/\/curl\.se\/libcurl\/c\/libcurl-errors\.html\)'
-                    . '(?: for .*)?\z/s',
-                $e->getMessage(),
-                $connectionMatches
-            );
-            if ($matched === 1) {
-                $curlErrno = (int) $connectionMatches[1];
-                $connectionError = $connectionMatches[2];
-            }
-        }
-
-        if (is_string($connectionError)) {
-            $connectionError = preg_replace(
-                [
-                    '/https?:\/\/\S+/i',
-                    '/\b(code|client_secret|access_token|id_token|refresh_token|code_verifier|session_id)\s*[:=]\s*\S+/i',
-                    '/[\x00-\x1F\x7F]+/',
-                ],
-                ['[redacted-url]', '$1=[redacted]', ' '],
-                $connectionError
-            );
-            $connectionError = is_string($connectionError)
-                ? substr(trim($connectionError), 0, 500)
-                : null;
-        }
-
-        $diagnostic .= sprintf(
-            '; curl_errno=%s; connection_error=%s',
-            $curlErrno === null ? 'unavailable' : (string) $curlErrno,
-            $connectionError === null || $connectionError === ''
-                ? 'unavailable'
-                : $connectionError
-        );
-    }
-
-    error_log($diagnostic, 4);
     hopia_google_flash(
         'We could not verify your Google account. Please try again or use your password.',
         $source

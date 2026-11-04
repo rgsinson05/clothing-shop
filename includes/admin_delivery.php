@@ -74,6 +74,11 @@ function admin_delivery_progress(array $order, ?array $payment, ?array $shipment
 function admin_delivery_actions(): array
 {
     return [
+        'in_transit' => [
+            'label' => 'In Transit',
+            'confirmation' => 'Confirm that the dispatched parcel is now in transit. This records the next courier stage only; it does not mark the parcel Out for Delivery, delivered, received, or paid.',
+            'reason_label' => null,
+        ],
         'out_for_delivery' => [
             'label' => 'Mark Out for Delivery',
             'confirmation' => 'Confirm that the courier is making the next delivery attempt. This records Out for Delivery within the In Transit stage. No failure, customer receipt or payment collection will be recorded.',

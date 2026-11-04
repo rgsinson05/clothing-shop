@@ -1,5 +1,10 @@
 <?php
 
+// Google Sign-In is temporarily disabled due to hosting DNS resolution failures.
+// Remove this guard and restore the login/register buttons to re-enable it.
+header('Location: login.php', true, 303);
+exit;
+
 session_start();
 
 require_once __DIR__ . '/../includes/database.php';
@@ -20,6 +25,10 @@ try {
     header('Location: ' . $authorizationUrl, true, 302);
     exit;
 } catch (Throwable $e) {
+    error_log(
+        hopia_google_failure_diagnostic('authorization_start', $e),
+        ini_get('error_log') === '' ? 4 : 0
+    );
     hopia_google_flash(
         'Continue with Google is not available right now. Please use your email and password.',
         $source
