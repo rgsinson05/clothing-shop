@@ -181,7 +181,10 @@ $ui_is_admin = isset($ui_section) && $ui_section === 'admin';
             </div>
 
             <div class="site-footer__bottom">
-                <span>&copy; <?= hopia_e(date('Y')) ?> HOPIA FITS</span>
+                <div class="site-footer__credits">
+                    <p>Designed by Lhealyn Dorado</p>
+                    <p>Developed by RG Sinson</p>
+                </div>
                 <span>This website is For Educational Purposes Only</span>
             </div>
         </div>

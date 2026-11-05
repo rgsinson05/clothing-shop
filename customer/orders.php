@@ -81,17 +81,43 @@ $orderStatusIconKeys = [
 ];
 
 /*
- * Simple customer-facing filter groups over the existing
- * database statuses. Display-only; no new statuses.
+ * Customer-facing fulfillment and status filters over the existing order
+ * data. Store Pickup uses pickup_progress() below, so this remains a
+ * display-only layer and never introduces a second lifecycle.
  */
+
+$requestedFulfillment = isset($_GET['fulfillment'])
+    ? strtoupper(str_replace('-', '_', trim((string) $_GET['fulfillment'])))
+    : 'LOCAL_COURIER';
+$orderFulfillment = in_array($requestedFulfillment, ['LOCAL_COURIER', 'STORE_PICKUP'], true)
+    ? $requestedFulfillment
+    : 'LOCAL_COURIER';
 
 $orderFilter = isset($_GET['filter'])
     ? strtoupper(str_replace('-', ' ', trim((string) $_GET['filter'])))
     : 'ALL';
+$allowedOrderFilters = $orderFulfillment === 'STORE_PICKUP'
+    ? ['ALL', 'PREPARING FOR PICKUP', 'READY FOR PICKUP', 'PICKED UP', 'CANCELLED']
+    : ['ALL', 'IN PROGRESS', 'DELIVERED', 'CANCELLED'];
 
-if (!in_array($orderFilter, ['ALL', 'IN PROGRESS', 'DELIVERED', 'CANCELLED'], true)) {
+if (!in_array($orderFilter, $allowedOrderFilters, true)) {
     $orderFilter = 'ALL';
 }
+
+$orderFilterTabs = $orderFulfillment === 'STORE_PICKUP'
+    ? [
+        ['value' => 'ALL', 'slug' => 'all', 'label' => 'All', 'icon' => 'layers'],
+        ['value' => 'PREPARING FOR PICKUP', 'slug' => 'preparing-for-pickup', 'label' => 'Preparing for Pickup', 'icon' => 'package'],
+        ['value' => 'READY FOR PICKUP', 'slug' => 'ready-for-pickup', 'label' => 'Ready for Pickup', 'icon' => 'check-circle'],
+        ['value' => 'PICKED UP', 'slug' => 'picked-up', 'label' => 'Picked Up', 'icon' => 'check'],
+        ['value' => 'CANCELLED', 'slug' => 'cancelled', 'label' => 'Cancelled', 'icon' => 'x-circle'],
+    ]
+    : [
+        ['value' => 'ALL', 'slug' => 'all', 'label' => 'All', 'icon' => 'layers'],
+        ['value' => 'IN PROGRESS', 'slug' => 'in-progress', 'label' => 'In Progress', 'icon' => 'clock'],
+        ['value' => 'DELIVERED', 'slug' => 'delivered', 'label' => 'Delivered', 'icon' => 'check-circle'],
+        ['value' => 'CANCELLED', 'slug' => 'cancelled', 'label' => 'Cancelled', 'icon' => 'x-circle'],
+    ];
 
 /*
  * Retrieve only the orders belonging to the authenticated
@@ -218,30 +244,43 @@ require __DIR__ . '/../includes/ui.header.php';
         <p class="orders-intro">Track your purchases and see their latest status.</p>
     </header>
 
-    <nav class="orders-filters" aria-label="Order filters">
-        <div class="orders-filter-tabs" role="list">
-            <a class="orders-filter<?= $orderFilter === 'ALL' ? ' is-active' : '' ?>"
-               href="?filter=all"<?= $orderFilter === 'ALL' ? ' aria-current="true"' : '' ?>>
-                <span class="orders-filter__icon" aria-hidden="true"><?= hopia_orders_icon('layers') ?></span>
-                <span class="orders-filter__label">ALL</span>
-            </a>
-            <a class="orders-filter<?= $orderFilter === 'IN PROGRESS' ? ' is-active' : '' ?>"
-               href="?filter=in-progress"<?= $orderFilter === 'IN PROGRESS' ? ' aria-current="true"' : '' ?>>
-                <span class="orders-filter__icon" aria-hidden="true"><?= hopia_orders_icon('clock') ?></span>
-                <span class="orders-filter__label">IN PROGRESS</span>
-            </a>
-            <a class="orders-filter<?= $orderFilter === 'DELIVERED' ? ' is-active' : '' ?>"
-               href="?filter=delivered"<?= $orderFilter === 'DELIVERED' ? ' aria-current="true"' : '' ?>>
-                <span class="orders-filter__icon" aria-hidden="true"><?= hopia_orders_icon('check-circle') ?></span>
-                <span class="orders-filter__label">DELIVERED</span>
-            </a>
-            <a class="orders-filter<?= $orderFilter === 'CANCELLED' ? ' is-active' : '' ?>"
-               href="?filter=cancelled"<?= $orderFilter === 'CANCELLED' ? ' aria-current="true"' : '' ?>>
-                <span class="orders-filter__icon" aria-hidden="true"><?= hopia_orders_icon('x-circle') ?></span>
-                <span class="orders-filter__label">CANCELLED</span>
-            </a>
-        </div>
-    </nav>
+    <div class="orders-filtering">
+        <nav class="orders-fulfillment" aria-label="Order fulfillment">
+            <span class="orders-filtering__label">Fulfillment</span>
+            <div class="orders-fulfillment__options">
+                <a class="orders-fulfillment__option<?= $orderFulfillment === 'LOCAL_COURIER' ? ' is-active' : '' ?>"
+                   href="?fulfillment=local-courier&amp;filter=all"<?= $orderFulfillment === 'LOCAL_COURIER' ? ' aria-current="true"' : '' ?>>
+                    <span class="orders-fulfillment__icon" aria-hidden="true"><?= hopia_order_icon('truck') ?></span>
+                    <span>Local Courier</span>
+                </a>
+                <a class="orders-fulfillment__option<?= $orderFulfillment === 'STORE_PICKUP' ? ' is-active' : '' ?>"
+                   href="?fulfillment=store-pickup&amp;filter=all"<?= $orderFulfillment === 'STORE_PICKUP' ? ' aria-current="true"' : '' ?>>
+                    <span class="orders-fulfillment__icon" aria-hidden="true"><?= hopia_order_icon('location') ?></span>
+                    <span>Store Pickup</span>
+                </a>
+            </div>
+        </nav>
+
+        <nav class="orders-filters" aria-label="<?= $orderFulfillment === 'STORE_PICKUP' ? 'Store Pickup status filters' : 'Local Courier status filters' ?>">
+            <span class="orders-filtering__label">Status</span>
+            <div class="orders-filter-tabs" role="list">
+                <?php foreach ($orderFilterTabs as $filterTab): ?>
+                    <?php
+                    $isActiveFilter = $orderFilter === $filterTab['value'];
+                    $filterUrl = '?' . http_build_query([
+                        'fulfillment' => strtolower(str_replace('_', '-', $orderFulfillment)),
+                        'filter' => $filterTab['slug'],
+                    ]);
+                    ?>
+                    <a class="orders-filter<?= $isActiveFilter ? ' is-active' : '' ?>"
+                       href="<?= hopia_e($filterUrl) ?>"<?= $isActiveFilter ? ' aria-current="true"' : '' ?>>
+                        <span class="orders-filter__icon" aria-hidden="true"><?= hopia_orders_icon($filterTab['icon']) ?></span>
+                        <span class="orders-filter__label"><?= hopia_e($filterTab['label']) ?></span>
+                    </a>
+                <?php endforeach; ?>
+            </div>
+        </nav>
+    </div>
 
     <?php
 
@@ -268,44 +307,59 @@ require __DIR__ . '/../includes/ui.header.php';
         }
     }
 
-    $filteredOrders = array_filter($orders, function ($order) use ($orderFilter, $inProgressStatuses, $pickupProgressByOrder, $customerTimelinesByOrder) {
+    $filteredOrders = array_filter($orders, function ($order) use ($orderFulfillment, $orderFilter, $inProgressStatuses, $pickupProgressByOrder, $customerTimelinesByOrder) {
+        $pickup = $pickupProgressByOrder[(int) $order['id']] ?? null;
+        $isPickupOrder = $pickup !== null;
+        if (($orderFulfillment === 'STORE_PICKUP') !== $isPickupOrder) {
+            return false;
+        }
         if ($orderFilter === 'ALL') {
             return true;
         }
-        $pickup = $pickupProgressByOrder[(int) $order['id']] ?? null;
         $cancelled = $order['status'] === 'CANCELLED' || $order['cancellation_status'] === 'APPROVED';
         if ($cancelled) return $orderFilter === 'CANCELLED';
+
+        if ($isPickupOrder) {
+            return match ($orderFilter) {
+                'PREPARING FOR PICKUP' => in_array($pickup['stage'], ['ORDER_RECEIVED', 'PREPARING'], true),
+                'READY FOR PICKUP' => $pickup['stage'] === 'READY_FOR_PICKUP',
+                'PICKED UP' => $pickup['stage'] === 'PICKED_UP',
+                default => false,
+            };
+        }
+
         $timeline = $customerTimelinesByOrder[(int) $order['id']] ?? null;
         if ($orderFilter === 'IN PROGRESS') {
-            if ($pickup !== null) {
-                return $pickup['stage'] !== 'PICKED_UP' && !$pickup['cancelled'];
-            }
             return $timeline['closure'] !== 'RETURNED_TO_SHOP'
                 && in_array($timeline['stage'], $inProgressStatuses, true);
         }
         if ($orderFilter === 'DELIVERED') {
-            if ($pickup !== null) {
-                return $pickup['stage'] === 'PICKED_UP';
-            }
             return $timeline['stage'] === 'DELIVERED';
         }
         return false;
     });
+
+    $emptyMessage = $orderFulfillment === 'STORE_PICKUP'
+        ? match ($orderFilter) {
+            'PREPARING FOR PICKUP' => 'No Store Pickup orders are being prepared.',
+            'READY FOR PICKUP' => 'No orders are ready for pickup yet.',
+            'PICKED UP' => 'No orders have been picked up yet.',
+            'CANCELLED' => 'No cancelled Store Pickup orders.',
+            default => 'No Store Pickup orders yet.',
+        }
+        : match ($orderFilter) {
+            'IN PROGRESS' => 'No Local Courier orders in progress.',
+            'DELIVERED' => 'No delivered Local Courier orders yet.',
+            'CANCELLED' => 'No cancelled Local Courier orders.',
+            default => 'No Local Courier orders yet.',
+        };
 
     ?>
 
     <?php if (count($filteredOrders) === 0): ?>
 
         <div class="orders-empty">
-            <?php if ($orderFilter === 'ALL'): ?>
-                <p>No orders yet.</p>
-            <?php elseif ($orderFilter === 'IN PROGRESS'): ?>
-                <p>No orders in progress.</p>
-            <?php elseif ($orderFilter === 'DELIVERED'): ?>
-                <p>No delivered orders yet.</p>
-            <?php else: ?>
-                <p>No cancelled orders yet.</p>
-            <?php endif; ?>
+            <p><?= hopia_e($emptyMessage) ?></p>
             <a class="btn btn-primary" href="products.php">SHOP ALL FINDS</a>
         </div>
 

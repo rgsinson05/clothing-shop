@@ -15,7 +15,9 @@ $page_description = isset($page_description)
 <html lang="en"<?= ($ui_section ?? '') === 'admin' ? ' data-admin-theme="dark"' : '' ?>>
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="<?= ($ui_section ?? '') === 'admin'
+        ? 'width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=no'
+        : 'width=device-width, initial-scale=1.0' ?>">
     <meta name="theme-color" content="<?= ($ui_section ?? '') === 'admin' ? '#0b1120' : '#f5f4f1' ?>">
     <meta name="description" content="<?= hopia_e($page_description) ?>">
     <title><?= hopia_e($page_title) ?></title>

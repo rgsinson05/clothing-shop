@@ -572,6 +572,14 @@ pre {
   color: #a8a197;
 }
 
+.site-footer__credits {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  line-height: 1.4;
+  text-transform: none;
+}
+
 .btn {
   -webkit-appearance: none;
   appearance: none;
@@ -1746,6 +1754,11 @@ tbody tr:hover {
    login reads as part of the same brand surface. The card sits on top of the
    pattern and stays plain white. */
 body.admin-login-page {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  overflow-x: hidden;
+  overflow-x: clip;
   background-image: var(--bg-dot-pattern);
   background-repeat: repeat;
   background-size: var(--bg-dot-size);
@@ -5911,18 +5924,108 @@ body.is-modal-open {
     line-height: 1.55;
 }
 
-/* Filters — editorial text labels with bold-outline icons, kept on the
-   same underlined tab style as the previous design. */
+/* Fulfillment switch and status filters. */
+.orders-filtering {
+    min-width: 0;
+    margin-bottom: var(--sp-5);
+}
+
+.orders-filtering__label {
+    display: block;
+    margin-bottom: var(--sp-2);
+    color: var(--color-text-muted);
+    font-size: 0.6875rem;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    line-height: 1.3;
+    text-transform: uppercase;
+}
+
+.orders-fulfillment {
+    width: 100%;
+    min-width: 0;
+    margin-bottom: var(--sp-4);
+}
+
+.orders-fulfillment__options {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--sp-1);
+    width: 100%;
+    max-width: 31rem;
+    padding: var(--sp-1);
+    background: var(--color-bg-alt);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+}
+
+.orders-fulfillment__option {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--sp-2);
+    min-width: 0;
+    min-height: 44px;
+    padding: var(--sp-2) var(--sp-3);
+    border: 1px solid transparent;
+    border-radius: calc(var(--radius) - 4px);
+    color: var(--color-text-soft);
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.045em;
+    line-height: 1.2;
+    text-align: center;
+    text-decoration: none;
+    text-transform: uppercase;
+    transition: background-color var(--transition), border-color var(--transition), color var(--transition), box-shadow var(--transition);
+}
+
+.orders-fulfillment__option:hover {
+    background: var(--color-surface);
+    color: var(--color-text);
+}
+
+.orders-fulfillment__option.is-active,
+.orders-fulfillment__option.is-active:hover {
+    background: var(--color-primary);
+    border-color: var(--color-primary);
+    color: var(--color-on-primary);
+    box-shadow: var(--shadow-sm);
+}
+
+.orders-fulfillment__icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: none;
+}
+
+.orders-fulfillment__icon svg {
+    width: 18px;
+    height: 18px;
+}
+
+/* Status tabs retain the existing customer-side underlined style. */
 .orders-filters {
+    width: 100%;
+    min-width: 0;
     margin-bottom: var(--sp-5);
     border-bottom: 1px solid var(--color-border);
+}
+
+.orders-filtering .orders-filters {
+    margin-bottom: 0;
 }
 
 .orders-filter-tabs {
     display: flex;
     align-items: center;
     gap: 0;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
     overflow-x: auto;
+    overscroll-behavior-inline: contain;
     -webkit-overflow-scrolling: touch;
     scrollbar-width: none;
 }
@@ -5971,6 +6074,10 @@ body.is-modal-open {
     border-bottom-color: var(--color-primary);
     color: var(--color-primary);
     font-weight: 700;
+}
+
+.orders-filtering .orders-filter {
+    min-height: 44px;
 }
 
 /* Admin order-management filter tabs reuse the customer tab component,
@@ -6213,6 +6320,22 @@ body.is-modal-open {
 @media (min-width: 720px) {
     .orders-page {
         padding-top: var(--sp-4);
+    }
+
+    .orders-fulfillment {
+        display: grid;
+        grid-template-columns: auto minmax(0, 31rem);
+        align-items: center;
+        gap: var(--sp-3);
+    }
+
+    .orders-fulfillment .orders-filtering__label {
+        margin-bottom: 0;
+    }
+
+    .orders-filtering .orders-filter-tabs {
+        flex-wrap: wrap;
+        overflow-x: visible;
     }
 
     .order-card {
@@ -12816,6 +12939,11 @@ body.is-modal-open {
 
 body.ui-admin {
   background: var(--admin-content-bg);
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  overflow-x: hidden;
+  overflow-x: clip;
 }
 
 /* App shell: sidebar + main in a row; the sidebar is fixed on desktop
@@ -12824,6 +12952,8 @@ body.ui-admin {
   flex: 1 0 auto;
   display: flex;
   width: 100%;
+  max-width: 100%;
+  min-width: 0;
   min-height: 100vh;
   min-height: 100dvh;
 }
@@ -13028,6 +13158,8 @@ body.ui-admin {
 /* Main column */
 .admin-main {
   flex: 1 1 auto;
+  width: 100%;
+  max-width: 100%;
   min-width: 0;
   display: flex;
   flex-direction: column;
@@ -13037,12 +13169,16 @@ body.ui-admin {
 
 .admin-content {
   flex: 1 1 auto;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
   padding: clamp(1rem, 2.4vw, 1.9rem) 0 3rem;
 }
 
 .admin-content__inner {
   width: 100%;
   max-width: 1240px;
+  min-width: 0;
   margin-inline: auto;
   padding-inline: clamp(1rem, 3vw, 2rem);
 }
@@ -15157,6 +15293,16 @@ body.ui-admin {
 .sales-monitor__metric--profit-summary .dash-kpi__sub {
   grid-area: description;
   margin-top: 0;
+}
+
+.ui-admin .sales-monitor .sales-monitor__channel:first-child .dash-kpi--profit {
+  background: var(--color-primary-soft);
+  border-color: var(--color-primary);
+  border-left-width: 3px;
+}
+
+.sales-monitor__channel:first-child .dash-kpi--profit .dash-kpi__label {
+  color: var(--admin-accent-strong);
 }
 
 .sales-monitor__transactions {
